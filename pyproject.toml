@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "valopt"
+version = "0.1.0"
+description = "Validation module for optimizer benchmarking across modular training experiments"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "valopt" }]
+dependencies = [
+  "hydra-core>=1.3.2",
+  "omegaconf>=2.3.0",
+  "torch>=2.2.0",
+  "torchvision>=0.17.0",
+  "pytest>=8.0.0",
+]
+
+[project.optional-dependencies]
+audio = ["torchaudio>=2.2.0"]
+hf = ["datasets>=2.18.0", "transformers>=4.40.0"]
+lora = ["datasets>=2.18.0", "transformers>=4.40.0", "peft>=0.11.0", "bitsandbytes>=0.43.0"]
+evolve = ["openai>=1.40.0", "psutil>=5.9.8"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["valopt*", "experiments*", "src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

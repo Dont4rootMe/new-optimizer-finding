@@ -1,0 +1,38 @@
+# === FIXED: DO NOT MODIFY ===
+import torch
+import torch.nn as nn
+# === END FIXED ===
+
+# === EDITABLE: IMPORTS ===
+{imports}
+# === END EDITABLE ===
+
+# === FIXED ===
+OPTIMIZER_NAME = "{optimizer_name}"
+
+
+class {class_name}:
+    def __init__(self, model: nn.Module, max_steps: int) -> None:
+# === END FIXED ===
+        # === EDITABLE: INIT_BODY ===
+{init_body}
+        # === END EDITABLE ===
+
+# === FIXED ===
+    def step(self, weights, grads, activations, step_fn) -> None:
+# === END FIXED ===
+        # === EDITABLE: STEP_BODY ===
+{step_body}
+        # === END EDITABLE ===
+
+# === FIXED ===
+    def zero_grad(self, set_to_none: bool = True) -> None:
+# === END FIXED ===
+        # === EDITABLE: ZERO_GRAD_BODY ===
+{zero_grad_body}
+        # === END EDITABLE ===
+
+# === FIXED ===
+def build_optimizer(model: nn.Module, max_steps: int):
+    return {class_name}(model, max_steps)
+# === END FIXED ===

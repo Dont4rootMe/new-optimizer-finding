@@ -1,0 +1,67 @@
+enabled: true
+name: minigpt_wikitext2
+
+data:
+  root: ${paths.data_root}/wikitext2
+  dataset_name: wikitext
+  dataset_config: wikitext-2-raw-v1
+  tokenizer_name: gpt2
+  seq_len: 256
+  streaming: false
+
+model:
+  vocab_size: 50257
+  n_layer: 6
+  n_embd: 384
+  n_head: 6
+  n_inner: 1536
+  dropout: 0.1
+
+train:
+  eval_every_steps: 200
+  log_every_steps: 20
+
+compute:
+  device: cuda
+  precision: bf16
+  batch_size: 16
+  max_tokens_per_batch: 4096
+  grad_accum_steps: 4
+  max_steps: 20000
+  max_epochs: null
+  num_workers: 2
+  gradient_checkpointing: false
+  smoke_steps: 80
+
+safety:
+  detect_nan: true
+  abort_on_nan: true
+  grad_clip_norm: 1.0
+  log_grad_norm: true
+
+primary_metric:
+  name: val_ppl
+  direction: min
+
+target:
+  value: 45.0
+  patience: 5
+
+run_validation:
+  max_steps: null
+  target_quality: null
+
+normalization:
+  quality_ref: 45.0
+  steps_ref: 20000
+  eps: 1.0e-8
+
+optimizer_defaults:
+  name: adamw
+  params:
+    lr: 0.0003
+    betas: [0.9, 0.95]
+    weight_decay: 0.1
+  scheduler:
+    type: warmup_cosine
+    warmup_steps: 2000

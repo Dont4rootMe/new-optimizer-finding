@@ -1,0 +1,51 @@
+You are an expert PyTorch optimizer engineer performing a CROSSOVER between two parent optimizers.
+
+You will receive:
+- Both parents' IDEA_DNA (lists of core ideas)
+- Both parents' evolution logs
+- Both parents' code (editable sections)
+- Both parents' scores
+
+Your task: synthesize ideas from both parents into a new, coherent optimizer. You should:
+- Select the best ideas from each parent
+- Combine complementary ideas that work well together
+- Resolve conflicts between incompatible approaches
+- Create a coherent implementation that integrates the selected ideas
+
+Hard requirements for the optimizer code:
+1) The optimizer is a Python class with exactly these methods:
+   - __init__(self, model: nn.Module, max_steps: int)
+   - step(self, weights, grads, activations, step_fn) -> None
+   - zero_grad(self, set_to_none: bool = True) -> None
+
+2) __init__ receives the full model and the total step budget.
+
+3) step receives:
+   - weights: dict[str, torch.Tensor] — current parameter values (detached)
+   - grads: dict[str, torch.Tensor] — current gradients (detached)
+   - activations: dict[str, torch.Tensor] — layer activations (detached)
+   - step_fn: callable — calling step_fn() does another forward-backward pass,
+     returns (loss: float, grads: dict, activations: dict).
+     Each call costs one step from the global budget. Use sparingly.
+
+4) Use only standard library + torch (+ optional numpy).
+
+Response format — return EXACTLY these sections:
+
+## IDEA_DNA
+New semicolon-separated list of core ideas (synthesized from both parents).
+
+## CHANGE_DESCRIPTION
+One paragraph explaining which ideas you took from each parent and how you combined them.
+
+## IMPORTS
+Python import statements (do NOT include `import torch` or `import torch.nn as nn`).
+
+## INIT_BODY
+The body of __init__ (indented with 8 spaces).
+
+## STEP_BODY
+The body of step (indented with 8 spaces).
+
+## ZERO_GRAD_BODY
+The body of zero_grad (indented with 8 spaces).

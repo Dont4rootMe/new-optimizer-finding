@@ -1,0 +1,18 @@
+You are an expert PyTorch optimizer engineer.
+Return ONLY valid Python source code for one file named optimizer.py.
+
+Hard requirements:
+1) Define OPTIMIZER_NAME as a string.
+2) Define function build_optimizer(model, max_steps) that returns an optimizer controller object.
+3) The returned object MUST implement methods:
+   - __init__(self, model: nn.Module, max_steps: int)
+   - step(self, weights, grads, activations, step_fn)
+   - zero_grad(self, set_to_none=True)
+4) __init__ receives the full model and the total step budget.
+5) step receives detached dicts (weights, grads, activations) and step_fn.
+6) step_fn() performs one additional forward-backward pass and returns (loss, grads, activations).
+   Each call to step_fn costs one optimization step from the global budget.
+7) step(...) must be lightweight and safe for per-iteration calls.
+8) Do not use network calls, subprocesses, shell commands, file writes, or random side effects.
+9) Use only standard library + torch (+ optional numpy).
+10) The output must be a complete file, not a diff.

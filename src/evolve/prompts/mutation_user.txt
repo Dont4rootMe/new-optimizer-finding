@@ -1,0 +1,29 @@
+Mutate the following optimizer to create an improved variant.
+
+PARENT IDEA DNA:
+{parent_idea_dna}
+
+PARENT SCORE: {parent_score}
+
+PARENT EVOLUTION LOG (recent changes):
+{parent_evolution_log}
+
+PARENT CODE (editable sections):
+
+### IMPORTS:
+{parent_imports}
+
+### INIT_BODY:
+{parent_init_body}
+
+### STEP_BODY:
+{parent_step_body}
+
+### ZERO_GRAD_BODY:
+{parent_zero_grad_body}
+
+---
+
+Analyze the parent's performance and evolution history. Identify what works and what could be improved. Make a targeted mutation — change, add, or remove ideas to improve the score.
+
+Return your response in the exact section format specified in the system prompt.

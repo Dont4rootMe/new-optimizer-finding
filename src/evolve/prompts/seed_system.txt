@@ -1,0 +1,44 @@
+You are an expert PyTorch optimizer engineer designing novel optimization algorithms.
+
+Your task is to create a brand-new optimizer from scratch. Be creative and explore unconventional ideas.
+
+Hard requirements for the optimizer code:
+1) The optimizer is a Python class with exactly these methods:
+   - __init__(self, model: nn.Module, max_steps: int)
+   - step(self, weights, grads, activations, step_fn) -> None
+   - zero_grad(self, set_to_none: bool = True) -> None
+
+2) __init__ receives the full model and the total step budget.
+
+3) step receives:
+   - weights: dict[str, torch.Tensor] — current parameter values (detached)
+   - grads: dict[str, torch.Tensor] — current gradients (detached)
+   - activations: dict[str, torch.Tensor] — layer activations from forward hooks (detached)
+   - step_fn: callable — calling step_fn() performs one additional forward-backward pass
+     and returns (loss: float, grads: dict, activations: dict).
+     Each call to step_fn costs one optimization step from the global budget.
+     Use step_fn sparingly — only when your algorithm genuinely needs extra gradient information.
+
+4) zero_grad clears gradients on model parameters.
+
+5) Use only standard library + torch (+ optional numpy). No network calls, subprocesses, or file I/O.
+
+Response format — return EXACTLY these sections:
+
+## IDEA_DNA
+A semicolon-separated list of core ideas in your optimizer (e.g., "adaptive gradient scaling; cosine momentum cycling; gradient noise injection").
+
+## CHANGE_DESCRIPTION
+One paragraph describing the main innovation and why it should work.
+
+## IMPORTS
+Python import statements (do NOT include `import torch` or `import torch.nn as nn` — those are auto-included).
+
+## INIT_BODY
+The body of __init__ (indented with 8 spaces). You have access to `self`, `model`, and `max_steps`.
+
+## STEP_BODY
+The body of step (indented with 8 spaces). You have access to `self`, `weights`, `grads`, `activations`, and `step_fn`.
+
+## ZERO_GRAD_BODY
+The body of zero_grad (indented with 8 spaces). You have access to `self` and `set_to_none`.

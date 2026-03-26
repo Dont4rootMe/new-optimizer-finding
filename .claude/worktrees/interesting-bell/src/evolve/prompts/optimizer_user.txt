@@ -1,0 +1,28 @@
+Task: Generate a new optimizer implementation for single-GPU training experiments.
+
+Contract:
+- Implement build_optimizer(model, max_steps)
+- Return an object with:
+  - __init__(self, model: nn.Module, max_steps: int)
+  - step(self, weights, grads, activations, step_fn)
+  - zero_grad(self, set_to_none=True)
+- model is a torch.nn.Module with trainable parameters
+- max_steps is the total optimization step budget
+- step receives detached dicts:
+  - weights: dict[str, torch.Tensor]
+  - grads: dict[str, torch.Tensor]
+  - activations: dict[str, torch.Tensor] (from forward hooks)
+  - step_fn: callable that does another forward-backward pass,
+    returns (loss: float, grads: dict, activations: dict).
+    Each call costs one step from the global budget.
+
+Quality goals:
+- stable convergence
+- safe defaults
+- no expensive per-step logic
+- optimizer/scheduler hyperparameters are selected inside your optimizer implementation
+
+Context from previous candidates (may be empty):
+{context_block}
+
+Return only Python code.

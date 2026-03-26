@@ -1,0 +1,53 @@
+defaults:
+  - _self_
+  - evolver: default
+  - experiments@experiments.cifar_convnet: cifar_convnet
+  - experiments@experiments.audio_transformer: audio_transformer
+  - experiments@experiments.minigpt_wikitext2: minigpt_wikitext2
+  - experiments@experiments.ddpm_cifar10: ddpm_cifar10
+  - experiments@experiments.lora_sft: lora_sft
+  - experiments@experiments.synthetic_logreg: synthetic_logreg
+  - experiments@experiments.mnist_mlp: mnist_mlp
+  - experiments@experiments.poly_regression: poly_regression
+  - experiments@experiments.rosenbrock_net: rosenbrock_net
+  - experiments@experiments.xor_mlp: xor_mlp
+  - experiments@experiments.sin_regression: sin_regression
+  - experiments@experiments.matrix_factorization: matrix_factorization
+  - experiments@experiments.tiny_autoencoder: tiny_autoencoder
+  - experiments@experiments.two_spirals: two_spirals
+  - experiments@experiments.linear_denoiser: linear_denoiser
+  - experiments@experiments.conv1d_classify: conv1d_classify
+  - experiments@experiments.quadratic_bowl: quadratic_bowl
+
+mode: run
+optimizer_path: null
+seed: 42
+deterministic: false
+device: cuda
+precision: bf16
+num_workers: 4
+
+resources:
+  num_gpus: 1
+  gpu_ids: null
+
+safety:
+  detect_nan: true
+  abort_on_nan: true
+  grad_clip_norm: null
+  log_grad_norm: true
+
+paths:
+  data_root: ${oc.env:VALOPT_DATA_ROOT,./data}
+  stats_root: ${oc.env:VALOPT_STATS_ROOT,./stats}
+  runs_root: ${oc.env:VALOPT_RUNS_ROOT,./runs}
+  optimizer_guesses_root: ${oc.env:VALOPT_OPTIMIZER_GUESSES_ROOT,./optimizer_guesses}
+  optimizer_results_dirname: results
+  population_root: ${oc.env:POP_ROOT,./populations}
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  output_subdir: hydra
+  job:
+    chdir: false

@@ -1,0 +1,52 @@
+Implement an optimizer that realizes the following idea DNA (already determined by genetic crossover):
+
+TARGET IDEA DNA:
+{child_idea_dna}
+
+This DNA was produced by crossbreeding two parent optimizers. Your job is to write code that faithfully implements ALL of the ideas listed above.
+
+=== PARENT A (dominant, score={parent_a_score}) ===
+
+ORIGINAL IDEA DNA: {parent_a_idea_dna}
+
+EVOLUTION LOG (recent):
+{parent_a_evolution_log}
+
+CODE (editable sections):
+### IMPORTS:
+{parent_a_imports}
+
+### INIT_BODY:
+{parent_a_init_body}
+
+### STEP_BODY:
+{parent_a_step_body}
+
+### ZERO_GRAD_BODY:
+{parent_a_zero_grad_body}
+
+=== PARENT B (non-dominant, score={parent_b_score}) ===
+
+ORIGINAL IDEA DNA: {parent_b_idea_dna}
+
+EVOLUTION LOG (recent):
+{parent_b_evolution_log}
+
+CODE (editable sections):
+### IMPORTS:
+{parent_b_imports}
+
+### INIT_BODY:
+{parent_b_init_body}
+
+### STEP_BODY:
+{parent_b_step_body}
+
+### ZERO_GRAD_BODY:
+{parent_b_zero_grad_body}
+
+---
+
+Use code from both parents as reference. Combine the relevant parts to implement the TARGET IDEA DNA. Do NOT add ideas that are not in the target DNA.
+
+Return your response in the exact section format specified in the system prompt.
