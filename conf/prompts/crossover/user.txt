@@ -1,20 +1,25 @@
-Crossbreed these two organisms into one child.
+Combine these two parent organisms into one child through crossover.
 
-Inherited maternal-biased gene pool:
+=== INHERITED GENE POOL ===
+Maternal-biased selection of genes from both parents:
 {inherited_gene_pool}
 
-Mother genetic code:
+============================================================
+MOTHER (primary parent — preserve continuity with her approach)
+============================================================
+
+--- Mother genetic code ---
 {mother_genetic_code}
 
-Mother rewards:
+--- Mother performance scores ---
 - selection_reward: {mother_selection_reward}
 - simple_reward: {mother_simple_reward}
 - hard_reward: {mother_hard_reward}
 
-Mother lineage summary:
+--- Mother evolutionary history ---
 {mother_lineage_summary}
 
-Mother editable code sections:
+--- Mother implementation code ---
 ## IMPORTS
 {mother_imports}
 
@@ -27,18 +32,22 @@ Mother editable code sections:
 ## ZERO_GRAD_BODY
 {mother_zero_grad_body}
 
-Father genetic code:
+============================================================
+FATHER (secondary parent — contribute best complementary ideas)
+============================================================
+
+--- Father genetic code ---
 {father_genetic_code}
 
-Father rewards:
+--- Father performance scores ---
 - selection_reward: {father_selection_reward}
 - simple_reward: {father_simple_reward}
 - hard_reward: {father_hard_reward}
 
-Father lineage summary:
+--- Father evolutionary history ---
 {father_lineage_summary}
 
-Father editable code sections:
+--- Father implementation code ---
 ## IMPORTS
 {father_imports}
 
@@ -51,4 +60,6 @@ Father editable code sections:
 ## ZERO_GRAD_BODY
 {father_zero_grad_body}
 
-Return a final child genetic code and implementation that meaningfully combines both parents while keeping maternal continuity explicit.
+============================================================
+
+Analyze both parents' approaches, scores, and histories. Design a child that inherits the mother's core framework while incorporating the father's most valuable contributions. The child must be a unified, coherent implementation — not a patchwork of copied blocks.

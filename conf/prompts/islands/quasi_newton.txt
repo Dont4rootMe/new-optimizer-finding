@@ -1,0 +1,21 @@
+Explore quasi-Newton methods that explicitly try to satisfy a stochastic version of the secant idea: infer useful curvature from gradient differences without ever storing a full Hessian.
+
+Mathematical DNA to build from:
+- Secant structure: use pairs `(s_t, y_t)` with `s_t = x_{t+1} - x_t` and `y_t = g_{t+1} - g_t` to update an inverse-Hessian approximation.
+- Low-rank curvature updates: BFGS, L-BFGS, SR1, and damped variants are all structured rank-one/rank-two corrections to a metric.
+- Positive-definiteness and damping: when stochastic noise corrupts curvature pairs, enforce safeguards such as pair rejection, Powell damping, or clipped scaling.
+- Two-loop recursion and compact memory: the optimizer should exploit the low-memory representation mathematically, not emulate a dense second-order method badly.
+- Hybridization: use momentum, clipping, or robust averaging to make stochastic curvature pairs trustworthy enough to matter.
+
+Promising formal directions:
+- L-BFGS-like methods with aggressive curvature-pair filtering under mini-batch noise.
+- Damped BFGS or SR1-inspired updates adapted for nonconvex training.
+- Streaming / online quasi-Newton schemes with amortized pair refresh.
+- Layerwise or blockwise quasi-Newton preconditioners that reduce sensitivity to noisy global curvature estimates.
+- Occasional `step_fn()`-based curvature refinement only if it is rare and mathematically justified.
+
+Reality check:
+- Classical theory here is extremely strong.
+- But the assumptions behind textbook quasi-Newton updates are violated hard in deep-learning mini-batch training. This island is therefore theory-rich but practically fragile: organisms must explicitly defend themselves against noisy `y_t`, bad `y_t^T s_t`, and stale curvature memory.
+
+Memory must remain `O(m * parameters)` rather than quadratic. Keep the quasi-Newton structure recognizable and explicit; do not collapse into a generic momentum method with decorative `(s, y)` bookkeeping.

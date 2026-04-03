@@ -7,7 +7,7 @@ This file applies to `conf/` and its subdirectories unless a deeper `AGENTS.md` 
 - `config.yaml` is the root Hydra composition file.
 - `evolver/default.yaml` is the canonical schema for organism-first evolution.
 - `experiments/*.yaml` are per-experiment runtime configs.
-- `prompts/` stores prompt assets consumed by canonical and legacy generation paths.
+- `prompts/` stores prompt assets consumed by the canonical generation paths.
 
 ## Rules
 

@@ -1,19 +1,37 @@
-Return a structured organism proposal for a brand-new optimizer.
+You are designing a brand-new optimizer from scratch. Your goal is to create an original, well-reasoned optimizer that reflects a specific research direction while being practically robust across diverse ML tasks.
 
-You must return the exact sections below:
-- ## CORE_GENES
-- ## INTERACTION_NOTES
-- ## COMPUTE_NOTES
-- ## CHANGE_DESCRIPTION
-- ## IMPORTS
-- ## INIT_BODY
-- ## STEP_BODY
-- ## ZERO_GRAD_BODY
+Before writing code, reason through your design:
+- What core update mechanism will drive learning? (momentum variant, adaptive LR, curvature estimate, hybrid)
+- What makes your approach genuinely different from standard Adam or SGD?
+- How will you manage the learning rate over the training budget? (warmup, decay, cosine annealing, cyclical)
+- What per-parameter state will you maintain, and what is the memory cost?
+- How will you ensure numerical stability across different scales and architectures?
 
-Requirements:
-- CORE_GENES must contain multiple rich gene lines, one per bullet.
-- INIT_BODY, STEP_BODY, and ZERO_GRAD_BODY must fit the fixed runtime contract.
-- The implementation must be valid for build_optimizer(model, max_steps).
-- step(...) receives weights, grads, activations, and step_fn.
-- zero_grad(...) must accept set_to_none.
-- Return only the sectioned content, not Markdown fences.
+## Response format
+
+Return the following sections, each starting with a markdown header "## SECTION_NAME".
+Do NOT wrap your response in markdown code fences.
+
+## CORE_GENES
+At least 3 bullet points (each line starting with "- "). Each gene is a specific, descriptive statement about one key algorithmic idea. Avoid vague labels like "adaptive learning" — instead write something like "Per-parameter trust ratio clamped to [0.1, 10] that scales the base learning rate based on the ratio of parameter norm to update norm."
+
+## INTERACTION_NOTES
+How this optimizer interacts with different model architectures and training scenarios. What types of models or tasks is it likely to excel at? Where might it struggle? Any assumptions about gradient scale or model size?
+
+## COMPUTE_NOTES
+Computational and memory overhead. What state is stored per parameter? How does per-step cost compare to Adam? Any operations that scale super-linearly?
+
+## CHANGE_DESCRIPTION
+Since this is a new seed organism, describe the overall design philosophy and what makes this optimizer interesting or novel.
+
+## IMPORTS
+Additional Python imports beyond torch and torch.nn (which are already provided in the fixed template). If none needed, write a comment like "# no additional imports".
+
+## INIT_BODY
+Body of __init__(self, model, max_steps). You MUST store self.model and self.max_steps yourself — they are not stored automatically. Create parameter groups, initialize moment buffers, define LR schedules, etc.
+
+## STEP_BODY
+Body of step(self, weights, grads, activations, step_fn). Your core update logic. Iterate over self.model.parameters(), compute and apply updates. The weights/grads/activations dicts are read-only snapshots — to modify parameters, use self.model.parameters() directly.
+
+## ZERO_GRAD_BODY
+Body of zero_grad(self, set_to_none). Standard pattern: iterate self.model.parameters(), set .grad = None if set_to_none, else zero it.

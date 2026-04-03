@@ -1,0 +1,21 @@
+Explore mirror descent, FTRL, dual averaging, and proximal methods where the optimizer is defined by an explicit geometry, potential, or divergence, not just by a hand-tuned update rule.
+
+Mathematical DNA to build from:
+- Mirror descent update: think in dual coordinates, e.g. `x_{t+1} = ∇phi* (∇phi(x_t) - eta g_t)`, where `phi` defines the geometry.
+- Bregman divergences: replace Euclidean trust regions with `D_phi(x, y)` so different parameter classes can move under different notions of distance.
+- FTRL / dual averaging equivalence: cumulative gradients plus regularization can define the update implicitly, often giving scale-adaptive or sparse solutions.
+- KL / entropy / p-norm potentials: multiplicative or exponentiated updates are special cases of a deeper geometry choice.
+- Natural-gradient and trust-region connections: use local geometry of the model outputs or parameterization as the metric, even if only approximately.
+
+Promising formal directions:
+- Non-Euclidean mirror maps for different tensor types or layer families.
+- FTRL-style cumulative-gradient updates with composite penalties or adaptive regularizers.
+- KL-proximal or entropy-like updates for parameters that naturally behave multiplicatively or scale-sensitively.
+- Mahalanobis-style mirror maps with cheap adaptive diagonal or block-diagonal metrics.
+- RL-inspired trust-region logic applied to generic optimization: conservative updates measured in model-space geometry instead of raw parameter-space Euclidean norm.
+
+Reality check:
+- This island is extremely rich mathematically.
+- But many beautiful mirror-descent constructions become impractical in large neural networks if the mirror map or its inverse is expensive. Strong candidates here should preserve the formal geometry while remaining cheap and numerically stable.
+
+The conceptual goal is to make “what counts as a small update” a mathematically designed object. Avoid vague analogies; the best organisms on this island should have a clearly identifiable potential, divergence, or dual-space interpretation.

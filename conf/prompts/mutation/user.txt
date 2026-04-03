@@ -1,23 +1,30 @@
-Mutate this organism into a stronger child.
+Mutate this parent organism into an improved child.
 
-Inherited gene pool:
+=== INHERITED GENE POOL ===
+These genes were selected to carry forward into the child:
 {inherited_gene_pool}
 
-Removed genes:
+=== REMOVED GENES ===
+These genes were deliberately dropped. Do not reintroduce without strong justification:
 {removed_gene_pool}
 
-Parent genetic code:
+=== PARENT GENETIC CODE ===
+Structured description of the parent's algorithmic design:
 {parent_genetic_code}
 
-Parent rewards:
-- selection_reward: {parent_selection_reward}
-- simple_reward: {parent_simple_reward}
-- hard_reward: {parent_hard_reward}
+=== PARENT PERFORMANCE SCORES ===
+Higher = better. Near 0 = baseline-level. Positive = outperforms baseline.
+- selection_reward: {parent_selection_reward} (score used for survival selection)
+- simple_reward: {parent_simple_reward} (score on quick benchmark tasks)
+- hard_reward: {parent_hard_reward} (score on expensive benchmarks; None = not yet evaluated)
 
-Parent lineage summary:
+=== PARENT EVOLUTIONARY HISTORY ===
+Recent lineage entries, most recent last:
 {parent_lineage_summary}
 
-Parent editable code sections:
+=== PARENT IMPLEMENTATION CODE ===
+Study these code sections carefully before making changes.
+
 ## IMPORTS
 {parent_imports}
 
@@ -30,4 +37,6 @@ Parent editable code sections:
 ## ZERO_GRAD_BODY
 {parent_zero_grad_body}
 
-Return a final child genetic code and implementation. Keep what works, remove weak ideas, and make the mutation concrete.
+===
+
+Analyze the parent's strengths and weaknesses based on scores, history, and code. Produce a child that addresses the most impactful weakness or amplifies the strongest trait.

@@ -1,0 +1,21 @@
+Explore sharpness-aware minimization methods that explicitly optimize a local min-max or flatness-seeking objective rather than only the unperturbed loss.
+
+Mathematical DNA to build from:
+- Robust local objective: think in terms of `min_w max_{||eps|| <= rho} L(w + eps)` or a first-order approximation to this adversarial neighborhood objective.
+- Perturbation geometry: define clearly whether the neighborhood is Euclidean, layerwise scaled, or weight-magnitude normalized.
+- Gradient decomposition: distinguish the base optimization direction from the sharpness-penalizing component rather than mixing them opaquely.
+- Flatness surrogates: use Hessian trace, spectral proxies, or perturbation-based upper bounds only if their relationship to sharpness is explicit.
+- Periodic / amortized adversarial probing: if the method uses a perturbed gradient, decide mathematically when that extra probe is worth the cost.
+
+Promising formal directions:
+- Core SAM and ASAM variants with explicit perturbation geometry.
+- GSAM-style decompositions that separately weight optimization and flatness-seeking components.
+- Periodic sharpness probing where `step_fn()` is used sparsely rather than every step.
+- One-pass or surrogate sharpness estimators derived from gradient history or cheap curvature statistics.
+- Layerwise or blockwise adaptive `rho` rules tied to gradient norm, parameter norm, or local curvature proxies.
+
+Reality check:
+- This island has a clean variational framing, but the practical story is more empirical than the theory behind matrix methods, high-probability methods, or mirror descent.
+- Many successful sharpness-aware methods are really about finding a good compute/generalization compromise, not about enjoying universally strong convergence guarantees.
+
+The tension is central: canonical SAM doubles gradient-work by using `step_fn()` every step. Favor organisms that retain the min-max spirit while making the extra computation mathematically selective and budget-aware.

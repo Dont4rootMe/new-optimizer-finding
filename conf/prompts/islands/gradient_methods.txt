@@ -1,1 +1,21 @@
-Focus on reliable first-order gradient methods. Favor stable momentum handling, robust scheduling, clipping or normalization when justified, and budget-aware improvements that help on noisy tasks without expensive inner loops.
+Focus on first-order gradient methods whose strength comes from mathematically principled filtering, normalization, or stabilization of the raw stochastic gradient.
+
+Mathematical DNA to build from:
+- Momentum as a temporal filter over noisy gradients: heavy-ball, Nesterov, Polyak-style, or damped momentum can be viewed as shaping the spectrum of stochastic gradient noise.
+- Normalized or sign-based updates: replace magnitude-sensitive steps with direction-only information such as `sign(g)` or `g / ||g||`, especially when noise is heavy-tailed or coordinate scales are unreliable.
+- Clipping as a bounded-influence transform: apply `clip(g)` before the step so that one bad mini-batch cannot dominate the trajectory.
+- Learning-rate schedules as stability-control devices: cosine decay, polynomial decay, restarts, and warmup should be treated as explicit ways to manage transient vs asymptotic behavior.
+- Exponential averaging and accumulation as variance-reduction tools, not just engineering conveniences.
+
+Promising formal directions:
+- SignSGD, normalized SGD, or smoothed-sign methods with better variance control.
+- Momentum methods with explicit damping schedules tied to gradient noise level or training phase.
+- Clipped momentum / clipped normalized-gradient methods for robust mini-batch training.
+- Layerwise or blockwise normalization rules that preserve the simplicity of first-order methods while improving scale behavior.
+- Schedule-aware first-order methods where warmup and decay are part of the optimizer logic rather than an external wrapper.
+
+Reality check:
+- This island mixes serious theory with a lot of empirical craft.
+- Momentum and sign-based methods have strong mathematical interpretations, but schedule design and many “small improvements” are often engineering-heavy rather than theorem-driven.
+
+Favor methods that are simple, stable, and cheap. Avoid expensive inner loops or curvature machinery: every `step_fn()` call consumes real budget and should almost never be needed on this island.

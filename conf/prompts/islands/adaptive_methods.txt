@@ -1,1 +1,21 @@
-Explore adaptive optimizers with per-parameter or blockwise state, bias correction, trust heuristics, and dynamic rescaling. Aim for strong early learning without sacrificing long-horizon stability or numerical safety.
+Explore adaptive optimization methods whose core DNA is a mathematically explicit adaptive metric, preconditioner, or rescaling rule.
+
+Mathematical DNA to build from:
+- Diagonal preconditioning: scale each coordinate by a statistic such as `1 / sqrt(G_t + eps)` or `1 / sqrt(v_t + eps)`, where `G_t` is cumulative squared gradients and `v_t` is an EMA of squared gradients.
+- Online geometry / mirror-descent view: interpret adaptive methods as gradient descent in a time-varying diagonal metric chosen from past gradients.
+- First-moment and second-moment estimation: use `m_t` and `v_t` as explicit stochastic estimators, not just heuristics; reason about bias correction, lag, and estimator variance.
+- Decoupled regularization: separate weight decay from the adaptive gradient transform instead of hiding it inside the preconditioned update.
+- Trust-ratio scaling: normalize the step using parameter norm or block norm so the method behaves consistently across layers with different scales.
+
+Promising formal directions:
+- AdaGrad-family methods where cumulative curvature estimates naturally shrink aggressive coordinates.
+- Adam / AdamW / RMSprop variants with better control of estimator drift, bias correction, or heavy-tailed noise.
+- Adaptive methods with explicit clipping or norm control before the adaptive rescaling.
+- Blockwise or layerwise adaptive metrics that approximate richer geometry while staying cheaper than full matrix methods.
+- Adaptive epsilon, adaptive decay rates, or signal-to-noise-aware rescaling rules justified by the statistics being tracked.
+
+Reality check:
+- This island has real theory behind it, especially for AdaGrad-style geometry and convergence of carefully defined Adam variants.
+- But many successful practical tricks here are still partly empirical: warmup design, beta schedules, and many Adam-family tweaks often work because they stabilize training, not because there is a clean theorem behind every choice.
+
+Aim for methods that get the fast early progress adaptive optimizers are known for without sacrificing long-horizon stability, numerical safety, or robustness to sparse gradients and wildly different layer scales.

@@ -1,0 +1,21 @@
+Explore optimization methods that update only a random, sketched, or learned low-dimensional subspace of the full parameter space.
+
+Mathematical DNA to build from:
+- Randomized coordinate descent: only a subset of coordinates or blocks moves each step, with convergence depending on coverage and expected smoothness.
+- Johnson-Lindenstrauss / sketching logic: compress high-dimensional gradient information into a smaller subspace while approximately preserving useful geometry.
+- Intrinsic-dimension intuition: many optimization trajectories may effectively live in a low-dimensional manifold even when the parameter count is huge.
+- Streaming subspace estimation: use Oja-style or low-rank tracking ideas to maintain a moving basis for dominant gradient directions.
+- Random perturbation as regularization: stochastic masking or projection can reduce alignment with mini-batch noise at the cost of biased updates.
+
+Promising formal directions:
+- Random block-coordinate descent with principled block selection.
+- Sparse or structured random sketches that are cheap enough to use per step.
+- Adaptive low-rank gradient subspaces whose dimension grows only when the search appears underfit.
+- Hybrid methods that blend a full cheap update with an occasional richer subspace correction.
+- Layerwise subspace methods where large matrices get projected but tiny parameters use full updates.
+
+Reality check:
+- There is real mathematics here, but it is less central to modern optimizer breakthroughs than the theory behind matrix methods, mirror descent, or parameter-free optimization.
+- This island is partly exploratory: many promising ideas are better understood as regularization or compute-tradeoff mechanisms than as dominant convergence-improving principles with broad deep-learning evidence.
+
+The core question for this island is not “can random projections be analyzed?” but “when does a lower-dimensional update preserve enough optimization signal to beat a full noisy step?” Strong organisms should make that tradeoff explicit.

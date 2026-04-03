@@ -9,7 +9,6 @@ This file applies to `conf/prompts/` unless a deeper `AGENTS.md` overrides it.
 - `mutation/`: paired prompts for mutating an organism
 - `crossover/`: paired prompts for crossbreeding two organisms
 - `islands/`: plain-text research directions, one file per island
-- `legacy_candidate/`: explicit legacy raw-code prompt pair
 
 ## Canonical Prompt Rules
 
@@ -32,8 +31,3 @@ If you change prompt wording that affects structure, also review:
 - `tests/test_prompt_bundle.py`
 - `tests/test_optimizer_generator.py`
 - `tests/test_organism_contract.py`
-
-## Legacy Boundary
-
-- `legacy_candidate/` is for the explicit legacy candidate-first path only.
-- Canonical organism generation must never depend on `legacy_candidate/`.

@@ -1,8 +1,11 @@
-Create a seed organism for this research island.
+Design a seed optimizer for the following research island.
 
 Island id: {island_id}
 Island name: {island_name}
-Island description:
+
+Island research direction:
 {island_description}
 
-Produce an optimizer whose genetic code clearly reflects this island's school of thought while remaining robust and computationally disciplined.
+Your optimizer should clearly embody this island's school of thought. Be creative and original — do not just recreate Adam or SGD with minor tweaks. Think about what novel combination of ideas from this research direction could produce a genuinely competitive optimizer.
+
+The optimizer must work out of the box on any PyTorch model, any parameter count, and any step budget.

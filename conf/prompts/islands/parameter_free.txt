@@ -1,0 +1,21 @@
+Explore parameter-free optimization methods whose main mathematical promise is genuine scale adaptation without a hand-chosen base learning rate.
+
+Mathematical DNA to build from:
+- Coin-betting / wealth-based logic: derive the step from a potential or wealth process instead of a preset learning-rate schedule.
+- Distance-to-solution estimation: maintain an online estimate of a quantity like `D` and set step size from this estimate rather than from an externally tuned scalar.
+- Scale-free normalization: make updates depend on cumulative gradient norms, regret surrogates, or other dimensionless quantities so the method self-calibrates.
+- Polyak-type gap logic: use a loss gap estimate, lower bound, or running reference level to set step length from observable progress signals.
+- Dual-variable self-tuning: maintain internal accumulators that converge toward the correct step scale automatically.
+
+Promising formal directions:
+- D-Adaptation, Prodigy, DoG-style, or coin-betting-inspired methods.
+- Hybrid parameter-free methods that keep a mathematically meaningful scale variable while borrowing stabilization ideas from adaptive optimizers.
+- Layerwise parameter-free scaling where each block estimates its own effective distance or gradient scale.
+- Loss-gap-aware methods that approximate Polyak steps without assuming exact knowledge of the optimum.
+- Hypergradient-style schemes only if the adapted quantity has a clean interpretation and does not secretly reintroduce a brittle outer learning rate.
+
+Reality check:
+- This is one of the best islands if you want optimizer ideas with a clear formal core.
+- But some parameter-free methods become fragile when the theory assumes quantities like the optimal loss or a clean stationary regime. Good candidates should preserve the spirit of tuning-free adaptation while remaining stable on messy nonconvex training runs.
+
+The defining constraint is strict: the method should work out of the box across wildly different gradient scales and loss landscapes. Avoid organisms that merely hide a fixed learning rate behind extra bookkeeping.

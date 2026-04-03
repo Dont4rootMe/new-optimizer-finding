@@ -1,0 +1,21 @@
+Explore optimization methods designed around high-probability robustness under heavy-tailed gradient noise, outlier mini-batches, and adversarial stochastic conditions.
+
+Mathematical DNA to build from:
+- Replace in-expectation reasoning with concentration-aware reasoning: design updates that can plausibly satisfy bounds of the form “with probability at least `1 - delta`, progress is controlled.”
+- Bounded-influence gradient transforms: clipping, normalization, or sign extraction should prevent any single gradient sample from causing an arbitrarily large update.
+- Robust estimation: median-of-means, geometric median, trimmed means, or coordinatewise robustification should be used only if they can be approximated cheaply enough.
+- Heavy-tail-aware adaptive statistics: if you track gradient moments, do so in a way that does not explode under rare extreme gradients.
+- Confidence-aware step sizing: tie step magnitude to uncertainty, gradient dispersion, or robust scale estimates rather than assuming sub-Gaussian noise.
+
+Promising formal directions:
+- Clip-SGD, clipped normalized SGD, clipped AdaGrad, or clipped Adam-style methods with principled thresholds.
+- Sign-based methods whose main justification is robustness, not compression alone.
+- Robust blockwise aggregation where each layer or tensor has its own outlier-resistant scale estimate.
+- Delayed or amortized robust statistics that preserve O(parameters) memory and near-linear time.
+- Heavy-tail-aware adaptive methods that combine clipping with per-coordinate or per-block preconditioning.
+
+Reality check:
+- This is one of the most theory-heavy islands in the whole repository.
+- But exact robust estimators can be too expensive; in practice the strongest candidates here will usually be cheap approximations to robust statistics, not textbook geometric-median procedures run exactly.
+
+The central premise is that ordinary SGD and Adam often behave as if gradient noise were light-tailed, while real deep-learning gradients can be highly skewed and heavy-tailed. Methods on this island should keep training alive and productive even when the noise model is hostile.

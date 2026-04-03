@@ -1,0 +1,22 @@
+Explore matrix-valued or tensor-structured preconditioning methods that explicitly use the geometry of layer-shaped parameters instead of flattening everything into independent coordinates.
+
+Mathematical DNA to build from:
+- Matrix preconditioning: accumulate structured curvature surrogates such as `G G^T` and `G^T G` and update with matrix powers like `L^{-1/4} G R^{-1/4}` rather than diagonal `1 / sqrt(v)`.
+- Kronecker factorization: approximate large curvature objects by products of smaller factors so inversion or matrix-power application becomes tractable.
+- Invariance to linear reparameterization: good matrix methods often preserve behavior better than diagonal methods under changes of basis within a layer.
+- Orthogonalization / whitening interpretations: treat the optimizer as trying to decorrelate update directions, not merely rescale coordinates.
+- Approximate matrix-function computation: eigendecomposition, Newton-Schulz, low-rank sketches, or periodic refresh of matrix powers are first-class design choices.
+
+Promising formal directions:
+- Shampoo and scalable Shampoo-style variants.
+- Full-matrix AdaGrad within layers or within carefully chosen blocks.
+- K-FAC-style Fisher approximations for layers where input and output statistics are available cheaply enough.
+- Grafting strategies that use matrix-preconditioned directions with simpler step-size norms.
+- Muon-like or orthogonalized hidden-layer updates where the mathematical object being optimized is explicitly matrix-shaped.
+- Blockwise matrix methods for attention heads, MLP projections, or convolution reshapes.
+
+Reality check:
+- This is one of the strongest “deep math” islands in the repo.
+- The main failure mode is not conceptual weakness but computational excess: the best candidates here must amortize expensive matrix operations, cache preconditioners, and fall back gracefully for 1D tensors.
+
+The power of this island is capturing cross-parameter correlations that diagonal adaptive methods fundamentally miss. The challenge is to keep that richer geometry while respecting real runtime and memory constraints.

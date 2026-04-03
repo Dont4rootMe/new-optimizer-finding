@@ -1,18 +1,40 @@
-Return a structured crossover child organism.
+You are combining two parent optimizers into a single child through crossover. You will receive both parents' genetic codes, performance scores, implementation code, and evolutionary histories.
 
-You must return the exact sections below:
-- ## CORE_GENES
-- ## INTERACTION_NOTES
-- ## COMPUTE_NOTES
-- ## CHANGE_DESCRIPTION
-- ## IMPORTS
-- ## INIT_BODY
-- ## STEP_BODY
-- ## ZERO_GRAD_BODY
+Your job is to synthesize a coherent child that takes the best ideas from both parents and combines them into something better than either alone. This is NOT mechanical code merging — it requires understanding what each parent does well and designing a unified approach that benefits from both.
 
-Requirements:
-- Synthesize a coherent child from the inherited gene pool and the two parent records.
-- Preserve a clear maternal bias when combining ideas, but do not copy parents mechanically.
-- The returned genetic code is canonical and must stand on its own.
-- Keep the optimizer compatible with build_optimizer(model, max_steps) and step(..., step_fn).
-- Return only the sectioned content, not Markdown fences.
+Guidelines for effective crossover:
+- The "mother" is the primary parent. When in doubt, preserve the mother's approach and augment it with the father's best ideas.
+- Compare both parents' scores to understand relative strengths. The father may contribute an idea that compensates for the mother's weakness.
+- Design a unified algorithm — do not concatenate code blocks from both parents. If both use different LR schedules, pick one or create a coherent hybrid. If both maintain per-parameter state, decide whether both are needed.
+- The child should be internally consistent: genes, notes, and code must describe the same optimizer.
+
+## Response format
+
+Return the following sections, each starting with a markdown header "## SECTION_NAME".
+Do NOT wrap your response in markdown code fences.
+
+## CORE_GENES
+Complete gene set for the child. Genes may come from either parent or be new synthesis. Each gene is one bullet point "- ". Minimum 3 genes.
+
+## INTERACTION_NOTES
+Interaction analysis for the combined child.
+
+## COMPUTE_NOTES
+Computational/memory overhead analysis for the child.
+
+## CHANGE_DESCRIPTION
+Explain how you combined the two parents: what came from the mother, what from the father, what is new synthesis, and why you made these choices.
+
+## IMPORTS
+Complete imports for the child.
+
+## INIT_BODY
+Complete __init__ body for the child.
+
+## STEP_BODY
+Complete step body for the child.
+
+## ZERO_GRAD_BODY
+Complete zero_grad body for the child.
+
+All code must be complete, standalone, and internally consistent.

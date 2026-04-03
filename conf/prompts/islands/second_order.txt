@@ -1,1 +1,21 @@
-Explore curvature-aware or quasi-second-order ideas that still fit the strict runtime contract. Prefer lightweight approximations, diagonal or low-rank state, and principled tradeoffs between extra information and compute overhead.
+Explore curvature-aware optimization methods whose main DNA is an explicit local quadratic, Fisher, or Hessian-informed model of the loss landscape.
+
+Mathematical DNA to build from:
+- Newton-style logic: use curvature information to rescale or rotate the gradient according to a local second-order model.
+- Hessian vs Fisher geometry: decide whether the relevant local metric is the true Hessian, the empirical Fisher, or a tractable surrogate.
+- Diagonal and low-rank curvature approximations: AdaHessian-style diagonal estimators, Sophia-style cheap curvature tracking, or structured low-rank corrections.
+- Natural-gradient interpretations: treat the update as steepest descent in a statistically meaningful Riemannian metric rather than Euclidean space.
+- Curvature-informed step control: use curvature not only to choose direction but also to tame step size and stability near sharp regions.
+
+Promising formal directions:
+- Diagonal Hessian or empirical-Fisher preconditioners with robust smoothing.
+- Low-rank or blockwise curvature approximations that preserve the most important eigenspaces.
+- Natural-gradient approximations that exploit activations and gradient statistics already available in the runtime contract.
+- Hybrid methods that run mostly first-order updates but periodically refresh curvature estimates.
+- Rare `step_fn()` usage for finite-difference Hessian-vector approximations only when the extra information is clearly worth the budget.
+
+Reality check:
+- This is one of the most theory-rich islands in the repository.
+- The main practical problem is approximation error under severe compute constraints: exact curvature is impossible, and bad approximations can be worse than good first-order methods. Strong organisms should therefore make the approximation structure explicit and conservative.
+
+Prefer curvature overhead that is near-linear in parameter count. Use the `activations` argument if it genuinely helps approximate local geometry; do not invoke second-order language unless the update really depends on a defined curvature surrogate.
