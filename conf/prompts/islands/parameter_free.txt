@@ -19,3 +19,22 @@ Reality check:
 - But some parameter-free methods become fragile when the theory assumes quantities like the optimal loss or a clean stationary regime. Good candidates should preserve the spirit of tuning-free adaptation while remaining stable on messy nonconvex training runs.
 
 The defining constraint is strict: the method should work out of the box across wildly different gradient scales and loss landscapes. Avoid organisms that merely hide a fixed learning rate behind extra bookkeeping.
+
+Formal principles and highlights:
+- Polyak step-size prototype:
+  `eta_t = (f(x_t) - f_star) / (||g_t||^2 + eps)`
+  The catch is that `f_star` is unknown, so practical methods need a lower bound, a moving proxy, or a conservative estimate.
+- Coin-betting template:
+  maintain a scalar "wealth" process and choose the update as a fraction of current wealth.
+  The theory converts regret guarantees into tuning-free step-size behavior without choosing a base learning rate in advance.
+- Scale-free normalization idea:
+  `x_{t+1} = x_t - D_t * g_t / sqrt(sum_{i=1}^t ||g_i||^2 + eps)`
+  where `D_t` is itself estimated online.
+- D-Adaptation insight:
+  the central object is an online estimate of a distance-to-solution scale `D`; once `D` is estimated well enough, the optimizer can self-calibrate its effective step size.
+- DoG-style insight:
+  use "distance over gradients" logic so the step-size scale grows or shrinks with accumulated gradient energy instead of a hand-tuned scalar schedule.
+- Coin-betting theorem highlight: the main formal win is parameter-free regret bounds that adapt to unknown comparator norms or gradient scales.
+- Polyak insight: when the loss gap estimate is accurate, the step is nearly the largest one compatible with local first-order descent, which is why Polyak-type rules can be surprisingly aggressive.
+- Prodigy / hybrid insight: some modern parameter-free methods mix distance-estimation logic with Adam-like stabilization; the real question is whether the scale variable still has a clean mathematical meaning.
+- Design prompt: organisms on this island should specify exactly which hidden scale is being estimated -- distance to optimum, wealth, cumulative gradient energy, or loss gap -- and how that estimate enters the update.

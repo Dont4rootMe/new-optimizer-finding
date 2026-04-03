@@ -19,3 +19,25 @@ Reality check:
 - But many successful practical tricks here are still partly empirical: warmup design, beta schedules, and many Adam-family tweaks often work because they stabilize training, not because there is a clean theorem behind every choice.
 
 Aim for methods that get the fast early progress adaptive optimizers are known for without sacrificing long-horizon stability, numerical safety, or robustness to sparse gradients and wildly different layer scales.
+
+Formal principles and highlights:
+- Canonical AdaGrad update:
+  `G_t = sum_{i=1}^t g_i \odot g_i`
+  `x_{t+1} = x_t - eta * g_t / sqrt(G_t + eps)`
+  The key insight is coordinate-wise self-normalization: coordinates that have seen large gradients get smaller future steps.
+- Canonical Adam / AdamW update:
+  `m_t = beta1 * m_{t-1} + (1 - beta1) * g_t`
+  `v_t = beta2 * v_{t-1} + (1 - beta2) * (g_t \odot g_t)`
+  `mhat_t = m_t / (1 - beta1^t)`
+  `vhat_t = v_t / (1 - beta2^t)`
+  `x_{t+1} = x_t - eta * mhat_t / (sqrt(vhat_t) + eps)`
+  AdamW adds decoupled decay: `x_{t+1} <- x_{t+1} - eta * lambda * x_t`.
+- AdaGrad highlight: the original adaptive-subgradient regret bound is coordinate-aware; the algorithm competes with a comparator measured in a data-dependent diagonal geometry rather than a single global step size.
+- AMSGrad / Adam-convergence highlight: the core fix is to enforce a nondecreasing second-moment denominator, typically via `vhat_t = max(vhat_{t-1}, v_t)`, to avoid pathological oscillations in the effective learning rate.
+- Mirror-descent insight: many adaptive methods can be re-read as online mirror descent with a time-varying quadratic regularizer `R_t(x) = 1/2 * x^T H_t x`, where `H_t` is diagonal or block-diagonal and learned from gradient history.
+- Trust-ratio insight from LARS / LAMB-style methods:
+  `Delta x_t = -eta * trust_ratio_t * p_t`
+  `trust_ratio_t = ||x_t|| / (||p_t|| + eps)`
+  This explicitly separates direction quality from magnitude calibration across layers.
+- Heavy-tail insight: one strong modern explanation for why Adam-family methods can outperform vanilla SGD on language-model-style problems is that diagonal adaptivity can partially compensate for class- or coordinate-wise heavy-tailed gradient imbalance.
+- Design prompt: when inventing a new method, be explicit about which statistic is being estimated, what bias/variance tradeoff that estimator has, and why the resulting metric should be better than a plain diagonal EMA.

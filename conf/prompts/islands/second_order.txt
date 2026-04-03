@@ -19,3 +19,29 @@ Reality check:
 - The main practical problem is approximation error under severe compute constraints: exact curvature is impossible, and bad approximations can be worse than good first-order methods. Strong organisms should therefore make the approximation structure explicit and conservative.
 
 Prefer curvature overhead that is near-linear in parameter count. Use the `activations` argument if it genuinely helps approximate local geometry; do not invoke second-order language unless the update really depends on a defined curvature surrogate.
+
+Formal principles and highlights:
+- Newton step:
+  `x_{t+1} = x_t - eta_t * H_t^{-1} g_t`
+  where `H_t` is the Hessian or a surrogate.
+  This is the gold standard local-quadratic update, but exact `H_t^{-1}` is almost never affordable.
+- Natural-gradient step:
+  `x_{t+1} = x_t - eta_t * F_t^{-1} g_t`
+  where `F_t` is the Fisher information or empirical Fisher.
+  The geometric insight is that this is steepest descent in the Fisher-Rao metric, not in Euclidean parameter space.
+- Diagonal-Hessian approximation:
+  `diag(H_t) approx E_z [ z \odot (H_t z) ]`
+  using Hutchinson-type probes with Rademacher `z`.
+  This is one of the cleanest ways to estimate curvature diagonals without materializing the Hessian.
+- Gauss-Newton / Fisher insight:
+  replacing the Hessian by a positive-semidefinite surrogate avoids some nonconvex pathologies and makes preconditioning numerically safer.
+- Sophia-style insight:
+  a cheap diagonal curvature tracker can be used to clip or rescale update magnitudes coordinatewise, effectively turning curvature into a stability controller rather than a full direction rotator.
+- Newton decrement insight:
+  in classical second-order analysis, `lambda_t^2 = g_t^T H_t^{-1} g_t` measures local suboptimality.
+  Even if you cannot compute it exactly, this quantity gives intuition for when large second-order steps are justified.
+- Natural-gradient / K-FAC highlight:
+  the practical theorem-level message is that approximating `F_t^{-1}` well enough can capture geometry that plain Euclidean gradient descent ignores, especially in overparameterized networks.
+- AdaHessian insight:
+  even diagonal curvature can matter a lot when it distinguishes coordinates that are sharp from coordinates that are flat.
+- Design prompt: organisms on this island should say exactly which curvature object they estimate -- Hessian diagonal, empirical Fisher, Gauss-Newton block, low-rank eigenspace, etc. -- and why that surrogate should be trustworthy enough to drive updates.

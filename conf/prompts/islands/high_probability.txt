@@ -19,3 +19,28 @@ Reality check:
 - But exact robust estimators can be too expensive; in practice the strongest candidates here will usually be cheap approximations to robust statistics, not textbook geometric-median procedures run exactly.
 
 The central premise is that ordinary SGD and Adam often behave as if gradient noise were light-tailed, while real deep-learning gradients can be highly skewed and heavy-tailed. Methods on this island should keep training alive and productive even when the noise model is hostile.
+
+Formal principles and highlights:
+- High-probability target form:
+  `P( forall t <= T: bad_event_t does not happen ) >= 1 - delta`
+  The point is not only good expected behavior, but controlled tail risk over the whole run.
+- Clipped SGD template:
+  `gtilde_t = g_t * min(1, tau_t / ||g_t||)`
+  `x_{t+1} = x_t - eta_t * gtilde_t`
+  Here `tau_t` is the key object: fixed, scheduled, or estimated from robust scale statistics.
+- Median-of-means idea:
+  split samples into groups, average within each group, then take a median across groups.
+  The theorem-level takeaway is that MoM can recover sub-Gaussian-style concentration under much weaker tail assumptions than the plain sample mean.
+- Geometric-median insight:
+  `gtilde_t = argmin_u sum_j ||u - g_j||`
+  This is robust but often too expensive; practical organisms should prefer cheap approximations unless robustness is dramatically improved.
+- Concentration-tool highlights:
+  Azuma-Hoeffding, Bernstein, and Freedman inequalities are the canonical proof tools for turning noisy incremental updates into high-probability progress bounds.
+- Heavy-tail theorem insight: in heavy-tailed stochastic optimization, clipping can improve both stability and statistical rates because it trades a small amount of bias for a large reduction in variance and tail explosion.
+- Adaptive robustification idea:
+  `tau_t ~ robust_scale(g_1, ..., g_t)`
+  or
+  `eta_t ~ 1 / robust_scale_t`
+  This is often better than fixed thresholds because the noise regime changes sharply across training phases.
+- Sign-based robustness insight: `sign(g_t)` effectively caps coordinate influence at unit magnitude, which can be interpreted as an extreme form of robustification.
+- Design prompt: organisms on this island should explicitly identify the random variable they are trying to make concentrate -- gradient norm, coordinatewise error, update size, or progress per step -- and then design the update around that goal.

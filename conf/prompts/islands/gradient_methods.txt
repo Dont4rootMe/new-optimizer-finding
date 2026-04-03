@@ -19,3 +19,26 @@ Reality check:
 - Momentum and sign-based methods have strong mathematical interpretations, but schedule design and many “small improvements” are often engineering-heavy rather than theorem-driven.
 
 Favor methods that are simple, stable, and cheap. Avoid expensive inner loops or curvature machinery: every `step_fn()` call consumes real budget and should almost never be needed on this island.
+
+Formal principles and highlights:
+- Heavy-ball momentum:
+  `v_{t+1} = mu * v_t + g_t`
+  `x_{t+1} = x_t - eta * v_{t+1}`
+  On quadratic objectives, this acts like a polynomial filter over past gradients and can suppress high-frequency stochastic noise while preserving low-frequency signal.
+- Nesterov-style momentum:
+  `v_{t+1} = mu * v_t + g_t`
+  `x_{t+1} = x_t - eta * (g_t + mu * v_{t+1})`
+  The acceleration story comes from better use of local linearization, though in deep learning the practical benefit is often stability-plus-speed rather than textbook convex acceleration alone.
+- Sign / normalized updates:
+  `x_{t+1} = x_t - eta * sign(g_t)`
+  or
+  `x_{t+1} = x_t - eta * g_t / (||g_t|| + eps)`
+  These replace magnitude-sensitive steps with robust direction-only moves.
+- Clipping as bounded influence:
+  `clip(g_t, tau) = g_t * min(1, tau / ||g_t||)`
+  This can be interpreted as protecting the update map against rare extreme gradients.
+- SignSGD highlight: the majority-vote analysis explains why sign-based methods can be robust both to communication noise and to certain forms of stochastic-gradient variance, provided coordinate-wise signal dominates noise often enough.
+- Momentum-on-quadratics insight: classical spectral analyses show that the useful regime for momentum is a tradeoff between damping oscillatory eigendirections and not overshooting low-curvature modes.
+- Scheduling insight: cosine or polynomial decay can be viewed as homotopy-like control of optimization aggressiveness, while warmup prevents unstable early transients when gradient statistics are badly calibrated.
+- Smoothed-sign insight: replacing `sign(g)` by a filtered or momentum-smoothed sign can preserve robustness while reducing the brittleness of fully discontinuous updates.
+- Design prompt: good organisms on this island should say exactly which part of the raw stochastic gradient they trust -- its sign, its norm, its moving average, or its clipped version -- and why that choice should improve stability.

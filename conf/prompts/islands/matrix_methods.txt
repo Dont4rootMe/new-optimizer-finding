@@ -20,3 +20,27 @@ Reality check:
 - The main failure mode is not conceptual weakness but computational excess: the best candidates here must amortize expensive matrix operations, cache preconditioners, and fall back gracefully for 1D tensors.
 
 The power of this island is capturing cross-parameter correlations that diagonal adaptive methods fundamentally miss. The challenge is to keep that richer geometry while respecting real runtime and memory constraints.
+
+Formal principles and highlights:
+- Full-matrix AdaGrad template:
+  `H_t = eps * I + sum_{i=1}^t g_i g_i^T`
+  `x_{t+1} = x_t - eta * H_t^{-1/2} g_t`
+  The core insight is that the preconditioner now respects correlations between coordinates, not only their individual variances.
+- Shampoo-style layer update for matrix-shaped weights:
+  `L_t = eps * I + sum_{i=1}^t G_i G_i^T`
+  `R_t = eps * I + sum_{i=1}^t G_i^T G_i`
+  `Delta W_t = -eta * L_t^{-1/4} G_t R_t^{-1/4}`
+  The two-sided matrix power is the defining mathematical object here.
+- K-FAC / natural-gradient template:
+  `F_t approx A_t \otimes B_t`
+  `vec(Delta W_t) = -eta * (A_t^{-1} \otimes B_t^{-1}) vec(G_t)`
+  The Kronecker factorization is what makes Fisher-like geometry tractable at layer scale.
+- Newton-Schulz matrix inverse-square-root iteration:
+  `Y_{k+1} = 1/2 * Y_k * (3I - Z_k Y_k)`
+  `Z_{k+1} = 1/2 * (3I - Z_k Y_k) * Z_k`
+  This is one of the canonical ways to approximate matrix inverse powers without an eigendecomposition every step.
+- Whitening / decorrelation insight: matrix preconditioning is often best understood as making gradient coordinates more isotropic before the update, so one scalar step size becomes meaningful again.
+- Invariance highlight: matrix methods often enjoy stronger invariance to linear reparameterizations inside a layer than diagonal methods, which is a deep reason they can outperform Adam-like updates on large structured tensors.
+- Shampoo-style regret insight: the theory is valuable because it shows that respecting tensor structure can improve the comparator geometry, not merely engineering efficiency.
+- Orthogonalization / Muon-like insight: for hidden-layer matrices, the useful object may be the update's singular directions rather than just per-coordinate scale.
+- Design prompt: good organisms on this island should state what matrix statistic they maintain, how often it is refreshed, how matrix powers are approximated, and exactly where the method falls back to diagonal behavior.

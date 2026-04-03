@@ -19,3 +19,25 @@ Reality check:
 - This island is partly exploratory: many promising ideas are better understood as regularization or compute-tradeoff mechanisms than as dominant convergence-improving principles with broad deep-learning evidence.
 
 The core question for this island is not “can random projections be analyzed?” but “when does a lower-dimensional update preserve enough optimization signal to beat a full noisy step?” Strong organisms should make that tradeoff explicit.
+
+Formal principles and highlights:
+- Random projected-gradient step:
+  `x_{t+1} = x_t - eta_t * P_t g_t`
+  where `P_t = Q_t Q_t^T` projects onto a `k`-dimensional subspace.
+- Coordinate-descent special case:
+  `P_t = e_{i_t} e_{i_t}^T`
+  which means only one coordinate or one block is updated at step `t`.
+- Johnson-Lindenstrauss insight:
+  a random sketch can preserve pairwise geometry up to small distortion using only `k = O(log n / eps^2)` dimensions.
+  This is the main theorem-level reason random projections are plausible at all.
+- Oja / streaming-PCA idea:
+  use a running low-rank estimate of dominant gradient directions instead of resampling a fresh random subspace every step.
+- Expected-smoothness insight from randomized coordinate descent:
+  convergence rates depend on how often important blocks are visited and on coordinate/block Lipschitz constants, not only on total dimension.
+- Intrinsic-dimension insight:
+  if optimization trajectories lie near a much lower-dimensional manifold than parameter count suggests, then subspace updates can regularize without discarding much useful signal.
+- Bias-variance tradeoff:
+  smaller subspaces reduce variance and compute but introduce projection bias; larger subspaces reduce bias but approach full-gradient cost.
+- Sketching highlight:
+  sparse Rademacher or structured transforms can be much cheaper than dense Gaussian projections while retaining much of the same geometric guarantee.
+- Design prompt: organisms on this island should state whether the subspace is random, blockwise, or learned; how its dimension is chosen; and why that choice should improve optimization rather than merely save compute.

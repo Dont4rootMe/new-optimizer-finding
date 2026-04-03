@@ -19,3 +19,30 @@ Reality check:
 - But the assumptions behind textbook quasi-Newton updates are violated hard in deep-learning mini-batch training. This island is therefore theory-rich but practically fragile: organisms must explicitly defend themselves against noisy `y_t`, bad `y_t^T s_t`, and stale curvature memory.
 
 Memory must remain `O(m * parameters)` rather than quadratic. Keep the quasi-Newton structure recognizable and explicit; do not collapse into a generic momentum method with decorative `(s, y)` bookkeeping.
+
+Formal principles and highlights:
+- Secant condition:
+  `B_{t+1} s_t = y_t`
+  where
+  `s_t = x_{t+1} - x_t`
+  `y_t = g_{t+1} - g_t`
+  This is the defining equation that quasi-Newton methods try to satisfy approximately.
+- Inverse-BFGS update:
+  `H_{t+1} = (I - rho_t s_t y_t^T) H_t (I - rho_t y_t s_t^T) + rho_t s_t s_t^T`
+  with
+  `rho_t = 1 / (y_t^T s_t)`
+  This is the canonical low-rank correction formula.
+- Positive-definiteness condition:
+  `y_t^T s_t > 0`
+  If this fails, the method usually damps, clips, or rejects the pair.
+- L-BFGS insight:
+  only the last `m` curvature pairs are stored, and the two-loop recursion applies the approximate inverse Hessian in `O(m d)` time instead of `O(d^2)`.
+- SR1 insight:
+  rank-one updates can capture curvature missed by BFGS, but they are more fragile because positive-definiteness is not automatically preserved.
+- Dennis-More-style highlight: classical quasi-Newton superlinear convergence comes from satisfying the secant condition well enough near the solution, but that theory assumes much cleaner gradients than deep-learning mini-batches provide.
+- Stochastic insight:
+  if `y_t = g_{t+1} - g_t` is too noisy, then the method is really updating on noise curvature, not objective curvature.
+  Good organisms must therefore filter pairs, average gradients, or use blockwise structure.
+- Damping highlight:
+  Powell-type damping replaces `y_t` by a convex combination of `y_t` and `B_t s_t` to preserve positive-definiteness when curvature evidence is weak.
+- Design prompt: organisms on this island should be explicit about how curvature pairs are formed, filtered, stored, and reused, and what happens when the secant signal is unreliable.

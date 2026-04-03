@@ -19,3 +19,31 @@ Reality check:
 - But many beautiful mirror-descent constructions become impractical in large neural networks if the mirror map or its inverse is expensive. Strong candidates here should preserve the formal geometry while remaining cheap and numerically stable.
 
 The conceptual goal is to make “what counts as a small update” a mathematically designed object. Avoid vague analogies; the best organisms on this island should have a clearly identifiable potential, divergence, or dual-space interpretation.
+
+Formal principles and highlights:
+- Mirror descent primal form:
+  `x_{t+1} = argmin_x { eta_t * <g_t, x> + D_phi(x, x_t) }`
+- Bregman divergence definition:
+  `D_phi(x, y) = phi(x) - phi(y) - <grad phi(y), x - y>`
+  Choosing `phi` is the main design decision: it defines what "nearby" means.
+- Dual-space form:
+  `grad phi(x_{t+1}) = grad phi(x_t) - eta_t * g_t`
+  so
+  `x_{t+1} = grad phi^{-1}(grad phi(x_t) - eta_t * g_t)`
+  This is the cleanest way to understand non-Euclidean geometry in optimization.
+- FTRL form:
+  `x_{t+1} = argmin_x { <g_{1:t}, x> + (1/eta_t) * R_t(x) }`
+  A major theoretical highlight is that mirror descent and FTRL are often equivalent up to the choice of regularizer and linearization point.
+- Entropic mirror map:
+  `phi(x) = sum_i x_i log x_i`
+  leading to multiplicative / exponentiated-gradient-style updates.
+- Quadratic adaptive mirror map:
+  `phi_t(x) = 1/2 * x^T H_t x`
+  which connects this island directly to AdaGrad-style adaptive geometry.
+- Theorem-level highlights:
+  AdaGrad can be viewed as online mirror descent with a data-dependent quadratic regularizer.
+  FTRL-mirror-descent equivalence theorems explain why cumulative-gradient methods and proximal updates often look different but behave as members of the same family.
+  TRPO-style monotonic-improvement arguments come from KL trust-region control, which is a mirror-descent idea in model space.
+- Natural-gradient bridge:
+  if `phi` induces the Fisher metric locally, then steepest descent in `D_phi` becomes a natural-gradient-like method.
+- Design prompt: organisms on this island should name the potential `phi`, the induced divergence `D_phi`, and the computationally cheap approximation used to evaluate `grad phi` and `grad phi^{-1}`.

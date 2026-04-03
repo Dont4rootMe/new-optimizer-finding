@@ -19,3 +19,28 @@ Reality check:
 - Many successful sharpness-aware methods are really about finding a good compute/generalization compromise, not about enjoying universally strong convergence guarantees.
 
 The tension is central: canonical SAM doubles gradient-work by using `step_fn()` every step. Favor organisms that retain the min-max spirit while making the extra computation mathematically selective and budget-aware.
+
+Formal principles and highlights:
+- SAM objective:
+  `min_w max_{||eps|| <= rho} L(w + eps)`
+  This reframes training as local robust optimization against worst-case perturbations in parameter space.
+- First-order local-max approximation:
+  `max_{||eps|| <= rho} L(w + eps) approx L(w) + rho * ||grad L(w)||_*`
+  so the method implicitly penalizes large local gradient norms under the chosen dual norm.
+- Canonical SAM perturbation:
+  `eps_t = rho * g_t / (||g_t|| + eps)`
+  then evaluate the gradient at `w_t + eps_t`.
+- ASAM perturbation idea:
+  `eps_t proportional (|w_t| \odot g_t) / (|| |w_t| \odot g_t || + eps)`
+  which makes the neighborhood scale-sensitive and closer to scale-invariant.
+- Danskin's-theorem insight:
+  the gradient of a max objective is governed by the gradient evaluated at a maximizing perturbation, which is the conceptual reason perturbed-gradient training is sensible here.
+- GSAM-style decomposition:
+  split the sharpness-aware gradient into components parallel and orthogonal to the base gradient, then control the tradeoff explicitly.
+- Flatness proxy insight:
+  Hessian trace, spectral norm, and local perturbation loss increase are all trying to measure "sharpness," but they are not identical.
+  Good organisms should know which proxy they are using.
+- Generalization highlight:
+  the main hope is not always faster optimization, but bias toward flatter basins that can improve out-of-sample behavior.
+- Budget-aware design prompt:
+  organisms on this island should state when `step_fn()` is used, what perturbation geometry defines sharpness, and what cheaper proxy is used when a full SAM probe is too expensive.
