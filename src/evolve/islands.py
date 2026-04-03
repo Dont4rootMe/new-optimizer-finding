@@ -33,16 +33,3 @@ def load_islands(islands_dir: str | Path) -> list[Island]:
         raise ValueError(f"No island descriptions found in {root}")
 
     return islands
-
-
-def legacy_flat_population_island() -> Island:
-    """Compatibility island for pre-island population artifacts."""
-
-    return Island(
-        island_id="legacy_flat_population",
-        name="legacy flat population",
-        description_path="",
-        description_text=(
-            "Compatibility island for organisms imported from the pre-island flat population layout."
-        ),
-    )

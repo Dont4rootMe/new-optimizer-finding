@@ -20,7 +20,7 @@ def _validate_signature(
     expected_params: list[str],
     label: str,
     module_path: Path,
-    legacy_hint: str | None = None,
+    contract_hint: str | None = None,
 ) -> None:
     try:
         signature = inspect.signature(fn)
@@ -39,7 +39,7 @@ def _validate_signature(
     ]
     actual = [param.name for param in positional]
     if actual != expected_params:
-        suffix = f" {legacy_hint}" if legacy_hint else ""
+        suffix = f" {contract_hint}" if contract_hint else ""
         raise TypeError(
             f"Optimizer module '{module_path}' must define {label}"
             f" with signature ({', '.join(expected_params)}); got ({', '.join(actual)})."
@@ -72,7 +72,7 @@ def _validate_controller(controller: Any, module_path: Path) -> None:
         expected_params=["weights", "grads", "activations", "step_fn"],
         label="controller.step",
         module_path=module_path,
-        legacy_hint="Legacy step(weights, grads, activations) is not supported.",
+        contract_hint="step(weights, grads, activations, step_fn) is required.",
     )
     _validate_signature(
         controller.zero_grad,
@@ -110,7 +110,7 @@ def load_optimizer_builder(path: str) -> tuple[OptimizerBuilder, Path, str]:
         expected_params=["model", "max_steps"],
         label="build_optimizer",
         module_path=module_path,
-        legacy_hint="Legacy build_optimizer(cfg) / initialize(...) is not supported.",
+        contract_hint="build_optimizer(model, max_steps) is required.",
     )
 
     optimizer_name_obj = getattr(module, "OPTIMIZER_NAME", module_path.stem)

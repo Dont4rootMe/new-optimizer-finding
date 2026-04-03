@@ -16,7 +16,7 @@ def test_load_prompt_bundle_from_default_conf_assets() -> None:
 
     bundle = load_prompt_bundle(cfg)
 
-    assert "island-based optimizer discovery program" in bundle.project_context
+    assert "automated evolutionary search for novel optimizers" in bundle.project_context
     assert "## CORE_GENES" in bundle.seed_system
     assert "{island_description}" in bundle.seed_user
 

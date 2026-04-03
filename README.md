@@ -85,8 +85,8 @@ python -m src.main mode=evolve \
   evolver.phases.simple.allocation.sample_size=1
 ```
 
-`mode=evolve` always runs the multi-generation organism-first `EvolutionLoop`. It does not auto-fallback to the legacy candidate-first path.
-The canonical loop reads only the canonical `evolver.*` schema from `conf/evolver/default.yaml`; legacy `evaluation.*` / `evolution.*` shapes are accepted only by explicit legacy surfaces.
+`mode=evolve` always runs the multi-generation organism-first `EvolutionLoop`.
+The canonical loop reads only the `evolver.*` schema from `conf/evolver/default.yaml`.
 
 ## Useful Hydra overrides
 
@@ -148,8 +148,8 @@ class OptimizerController:
 
 ## Evolve outputs
 
-The canonical evolution pipeline is organism-first, island-aware, prompt-driven from `conf/prompts/`, and restore-driven from `population_manifest.json`. Prompt pairs are grouped by task under `conf/prompts/<task>/`, island descriptions live in `conf/prompts/islands/`, and legacy candidate-first templates live in `conf/prompts/legacy_candidate/`.
-Canonical resume is strict: missing `population_manifest.json`, `genetic_code.md`, or `lineage.json` is treated as corruption and fails fast instead of silently falling back to legacy artifacts.
+The canonical evolution pipeline is organism-first, island-aware, prompt-driven from `conf/prompts/`, and restore-driven from `population_manifest.json`. Prompt pairs are grouped by task under `conf/prompts/<task>/`, and island descriptions live in `conf/prompts/islands/`.
+Canonical resume is strict: missing `population_manifest.json`, `genetic_code.md`, or `lineage.json` is treated as corruption and fails fast.
 
 Phase defaults in the canonical path:
 - simple phase: `eval_mode=smoke`
@@ -189,8 +189,6 @@ Canonical organism artifacts are written to:
 - `selection_reward`
 - `phase_results.simple`
 - `phase_results.hard`
-
-The legacy candidate-first mode is quarantined behind explicit legacy-only surfaces (`run_legacy_single_generation(...)`, `LegacyCandidateOrchestrator`, `LegacyCandidateGenerator`). It still uses `cand_*` directories when invoked explicitly, but it is not the canonical evolution layout and is never auto-selected by `mode=evolve`.
 
 ## Single-GPU constraint
 

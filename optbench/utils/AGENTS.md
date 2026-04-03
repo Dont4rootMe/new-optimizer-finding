@@ -17,7 +17,7 @@ This directory contains low-level helpers shared by the train loops and runtime:
 
 ## Important Invariants
 
-- `import_utils.py` is intentionally strict and rejects legacy optimizer signatures.
+- `import_utils.py` is intentionally strict and rejects outdated optimizer signatures.
 - `optimizer_runtime.py` owns honest step accounting for `step_fn()` calls. Do not break `StepBudget`, activation capture, or named-parameter collection semantics.
 - `objective_tracking.py` and `baselines.py` feed evolve-side scoring and normalization. Field names and meanings must stay consistent.
 - Helpers should remain deterministic, side-effect-light, and easy to reuse from both runtime and evolve paths.

@@ -210,7 +210,7 @@ class EvolutionLoop:
                 raise FileNotFoundError(
                     f"Active population manifest points to missing organism dir: {organism_dir_path}"
                 )
-            organism = read_organism_meta(organism_dir_path, allow_legacy_artifacts=False)
+            organism = read_organism_meta(organism_dir_path)
             organism.current_generation_active = int(entry.get("current_generation_active", self.generation))
             organisms.append(organism)
         return organisms

@@ -196,8 +196,8 @@ def test_mutation_operator_produce_persists_artifacts_and_semantic_lineage(tmp_p
     )
 
     _, user_prompt, _ = generator.calls[0]
-    assert "Inherited gene pool" in user_prompt
-    assert "Removed genes" in user_prompt
+    assert "=== INHERITED GENE POOL ===" in user_prompt
+    assert "=== REMOVED GENES ===" in user_prompt
     assert child.island_id == parent.island_id
     assert child.mother_id == parent.organism_id
     assert (org_dir / "genetic_code.md").exists()
@@ -259,7 +259,9 @@ def test_crossover_operator_produce_records_cross_island_lineage(tmp_path: Path)
     )
 
     _, user_prompt, _ = generator.calls[0]
-    assert "Inherited maternal-biased gene pool" in user_prompt
+    assert "=== INHERITED GENE POOL ===" in user_prompt
+    assert "MOTHER (primary parent" in user_prompt
+    assert "FATHER (secondary parent" in user_prompt
     assert child.island_id == mother.island_id
     assert child.mother_id == mother.organism_id
     assert child.father_id == father.organism_id

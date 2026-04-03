@@ -139,7 +139,6 @@ class EvolverOrchestrator:
             allocation_cfg=allocation_cfg,
             seed=int(self.cfg.seed),
             entity_id=organism_id,
-            history_source="organism",
         )
 
     async def evaluate_organisms(

@@ -29,11 +29,11 @@ def test_import_optimizer_factory() -> None:
     assert optimizer_name == "SGDBaselineController"
 
 
-def test_import_optimizer_rejects_legacy_builder_contract(tmp_path: Path) -> None:
-    optimizer_path = tmp_path / "legacy_optimizer.py"
+def test_import_optimizer_rejects_invalid_builder_signature(tmp_path: Path) -> None:
+    optimizer_path = tmp_path / "invalid_builder.py"
     optimizer_path.write_text(
         (
-            "class LegacyController:\n"
+            "class InvalidBuilderController:\n"
             "    def __init__(self, cfg):\n"
             "        self.cfg = cfg\n\n"
             "    def step(self, weights, grads, activations, step_fn):\n"
@@ -41,7 +41,7 @@ def test_import_optimizer_rejects_legacy_builder_contract(tmp_path: Path) -> Non
             "    def zero_grad(self, set_to_none=True):\n"
             "        del set_to_none\n\n"
             "def build_optimizer(cfg):\n"
-            "    return LegacyController(cfg)\n"
+            "    return InvalidBuilderController(cfg)\n"
         ),
         encoding="utf-8",
     )

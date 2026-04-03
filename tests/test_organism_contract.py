@@ -66,10 +66,10 @@ def test_build_organism_rejects_missing_sections(tmp_path: Path) -> None:
         _build(tmp_path, parsed)
 
 
-def test_build_organism_rejects_idea_dna_only_response(tmp_path: Path) -> None:
+def test_build_organism_rejects_noncanonical_gene_section_response(tmp_path: Path) -> None:
     parsed = {
-        "IDEA_DNA": "momentum; warmup; clipping",
-        "CHANGE_DESCRIPTION": "legacy response",
+        "GENE_POOL": "momentum; warmup; clipping",
+        "CHANGE_DESCRIPTION": "noncanonical response",
         "IMPORTS": "import math",
         "INIT_BODY": "self.model = model",
         "STEP_BODY": "pass",
@@ -120,8 +120,8 @@ def test_old_lineage_with_aggregate_score_still_loads(tmp_path: Path) -> None:
                     "operator": "seed",
                     "mother_id": None,
                     "father_id": None,
-                    "change_description": "legacy",
-                    "gene_diff_summary": "legacy",
+                    "change_description": "historical",
+                    "gene_diff_summary": "historical",
                     "aggregate_score": 1.0,
                 }
             ]
@@ -159,51 +159,6 @@ def test_canonical_lineage_read_requires_lineage_json(tmp_path: Path) -> None:
         read_lineage(org_dir / "lineage.json")
 
 
-def test_legacy_compatible_genetic_code_reader_is_explicit(tmp_path: Path) -> None:
-    org_dir = tmp_path / "org_legacy_genes"
-    org_dir.mkdir(parents=True, exist_ok=True)
-    (org_dir / "idea_dna.txt").write_text(
-        "adaptive momentum; warmup schedule; gradient clipping",
-        encoding="utf-8",
-    )
-
-    genetic_code = read_genetic_code(
-        org_dir / "genetic_code.md",
-        allow_legacy_fallback=True,
-    )
-
-    assert genetic_code["core_genes"] == [
-        "adaptive momentum",
-        "warmup schedule",
-        "gradient clipping",
-    ]
-
-
-def test_legacy_compatible_lineage_reader_is_explicit(tmp_path: Path) -> None:
-    org_dir = tmp_path / "org_legacy_lineage"
-    org_dir.mkdir(parents=True, exist_ok=True)
-    write_json(
-        org_dir / "evolution_log.json",
-        [
-            {
-                "generation": 0,
-                "operator": "seed",
-                "mother_id": None,
-                "father_id": None,
-                "change_description": "legacy lineage",
-                "gene_diff_summary": "legacy genes",
-            }
-        ],
-    )
-
-    lineage = read_lineage(
-        org_dir / "lineage.json",
-        allow_legacy_fallback=True,
-    )
-
-    assert lineage[0]["change_description"] == "legacy lineage"
-
-
 def test_canonical_organism_meta_read_rejects_missing_canonical_artifacts(tmp_path: Path) -> None:
     org_dir = tmp_path / "org_meta"
     org_dir.mkdir(parents=True, exist_ok=True)
@@ -231,17 +186,17 @@ def test_canonical_organism_meta_read_rejects_missing_canonical_artifacts(tmp_pa
     )
 
     with pytest.raises(FileNotFoundError, match="genetic code"):
-        read_organism_meta(org_dir, allow_legacy_artifacts=False)
+        read_organism_meta(org_dir)
 
 
-def test_canonical_organism_meta_read_rejects_legacy_meta_shape(tmp_path: Path) -> None:
-    org_dir = tmp_path / "org_legacy_meta"
+def test_canonical_organism_meta_read_rejects_noncanonical_meta_shape(tmp_path: Path) -> None:
+    org_dir = tmp_path / "org_noncanonical_meta"
     org_dir.mkdir(parents=True, exist_ok=True)
     (org_dir / "optimizer.py").write_text("def build_optimizer(model, max_steps):\n    return None\n", encoding="utf-8")
     write_json(
         org_dir / "organism.json",
         {
-            "organism_id": "org_legacy_meta",
+            "organism_id": "org_noncanonical_meta",
             "generation": 0,
             "current_generation_active": 0,
             "timestamp": "2026-01-01T00:00:00Z",
@@ -258,4 +213,4 @@ def test_canonical_organism_meta_read_rejects_legacy_meta_shape(tmp_path: Path) 
     )
 
     with pytest.raises(ValueError, match="generation_created|island_id"):
-        read_organism_meta(org_dir, allow_legacy_artifacts=False)
+        read_organism_meta(org_dir)

@@ -99,7 +99,6 @@ def test_full_evaluation_snapshot_is_explicit() -> None:
         allocation_cfg={"enabled": False},
         seed=1,
         entity_id="org_full",
-        history_source="organism",
     )
 
     assert snapshot["sampling_design"] == "full_evaluation"
@@ -131,7 +130,7 @@ def test_compute_experiment_stats_costs_normalized() -> None:
     assert abs(total_cost - 1.0) < 1.0e-9
 
 
-def test_canonical_allocation_history_ignores_candidate_summaries(tmp_path: Path) -> None:
+def test_allocation_history_ignores_noncanonical_candidate_dirs(tmp_path: Path) -> None:
     pop_root = tmp_path / "populations"
     candidate_dir = pop_root / "gen_0000" / "cand_deadbeef"
     candidate_dir.mkdir(parents=True, exist_ok=True)
@@ -182,72 +181,19 @@ def test_canonical_allocation_history_ignores_candidate_summaries(tmp_path: Path
         },
         seed=7,
         entity_id="org_alive",
-        history_source="organism",
     )
 
     assert "pi" not in snapshot
     assert snapshot["sampling_design"] == "conditional_poisson_nonempty"
     assert "base_inclusion_prob" in snapshot
     assert "prob_nonempty" in snapshot
-    assert snapshot["inclusion_prob"]["exp_a"] == snapshot["base_inclusion_prob"]["exp_a"] / snapshot["prob_nonempty"]
-    assert snapshot["inclusion_prob"]["exp_b"] == snapshot["base_inclusion_prob"]["exp_b"] / snapshot["prob_nonempty"]
+    assert (
+        snapshot["inclusion_prob"]["exp_a"]
+        == snapshot["base_inclusion_prob"]["exp_a"] / snapshot["prob_nonempty"]
+    )
+    assert (
+        snapshot["inclusion_prob"]["exp_b"]
+        == snapshot["base_inclusion_prob"]["exp_b"] / snapshot["prob_nonempty"]
+    )
     assert snapshot["stats"]["exp_a"]["mean"] == 1.0
     assert snapshot["stats"]["exp_b"]["mean"] == 3.0
-
-
-def test_legacy_candidate_allocation_history_ignores_organism_summaries(tmp_path: Path) -> None:
-    pop_root = tmp_path / "populations"
-    candidate_dir = pop_root / "gen_0000" / "cand_deadbeef"
-    candidate_dir.mkdir(parents=True, exist_ok=True)
-    (candidate_dir / "summary.json").write_text(
-        json.dumps(
-            {
-                "candidate_id": "deadbeef",
-                "aggregate_score": 9.9,
-                "experiments": {
-                    "exp_a": {"status": "ok", "exp_score": 5.0},
-                    "exp_b": {"status": "ok", "exp_score": 7.0},
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    organism_dir = pop_root / "gen_0001" / "island_gradient_methods" / "org_alive"
-    organism_dir.mkdir(parents=True, exist_ok=True)
-    (organism_dir / "summary.json").write_text(
-        json.dumps(
-            {
-                "phase_results": {
-                    "simple": {
-                        "experiments": {
-                            "exp_a": {"status": "ok", "exp_score": 1.0},
-                            "exp_b": {"status": "ok", "exp_score": 3.0},
-                        }
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    snapshot = build_allocation_snapshot(
-        population_root=str(pop_root),
-        experiments=["exp_a", "exp_b"],
-        allocation_cfg={
-            "enabled": True,
-            "method": "neyman",
-            "history_window": 10,
-            "sample_size": 1,
-            "min_history_for_variance": 1,
-            "std_floor": 1.0e-6,
-            "fallback": "uniform",
-            "costs": {"exp_a": 1.0, "exp_b": 1.0},
-        },
-        seed=7,
-        entity_id="cand_deadbeef",
-        history_source="legacy_candidate",
-    )
-
-    assert snapshot["stats"]["exp_a"]["mean"] == 5.0
-    assert snapshot["stats"]["exp_b"]["mean"] == 7.0

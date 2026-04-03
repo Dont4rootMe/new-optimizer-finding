@@ -23,12 +23,12 @@ from src.organisms.organism import (
 LOGGER = logging.getLogger(__name__)
 
 
-def mutate_idea_dna(
-    dna: list[str],
-    q: float = 0.2,
+def prune_gene_pool(
+    genes: list[str],
+    delete_probability: float = 0.2,
     rng: random.Random | None = None,
 ) -> tuple[list[str], list[str]]:
-    """Delete genes from a genetic pool with probability `q`."""
+    """Delete genes from a pool with probability `delete_probability`."""
 
     if rng is None:
         rng = random.Random()
@@ -36,14 +36,14 @@ def mutate_idea_dna(
     surviving: list[str] = []
     removed: list[str] = []
 
-    for trait in dna:
-        if rng.random() < q:
+    for trait in genes:
+        if rng.random() < delete_probability:
             removed.append(trait.strip())
         else:
             surviving.append(trait.strip())
 
-    if not surviving and dna:
-        rescued = rng.choice(dna).strip()
+    if not surviving and genes:
+        rescued = rng.choice(genes).strip()
         surviving.append(rescued)
         if rescued in removed:
             removed.remove(rescued)
@@ -98,7 +98,7 @@ class MutationOperator:
 
         parent_genetic_code = read_organism_genetic_code(parent)
         parent_genes = list(parent_genetic_code.get("core_genes", []))
-        inherited_genes, removed_genes = mutate_idea_dna(parent_genes, self.q, self.rng)
+        inherited_genes, removed_genes = prune_gene_pool(parent_genes, self.q, self.rng)
         LOGGER.info(
             "Mutate %s: kept %d/%d genes, removed: %s",
             parent.organism_id[:8],

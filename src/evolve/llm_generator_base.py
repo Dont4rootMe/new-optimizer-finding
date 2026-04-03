@@ -1,4 +1,4 @@
-"""Shared LLM/code-validation utilities for canonical and legacy generators."""
+"""Shared LLM/code-validation utilities for canonical generators."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Hydra entrypoints for canonical evolve mode and explicit legacy mode."""
+"""Hydra entrypoints for canonical organism-first evolution."""
 
 from __future__ import annotations
 
@@ -9,22 +9,6 @@ import hydra
 from omegaconf import DictConfig
 
 LOGGER = logging.getLogger(__name__)
-
-
-def run_legacy_single_generation(cfg: DictConfig) -> dict:
-    """LEGACY: run one candidate-first generation via the explicit legacy entry."""
-
-    if not bool(cfg.evolver.enabled):
-        LOGGER.info("evolver.enabled=false, skipping evolve run")
-        return {}
-
-    from src.evolve.legacy_orchestrator import LegacyCandidateOrchestrator
-
-    orchestrator = LegacyCandidateOrchestrator(cfg)
-    result = asyncio.run(orchestrator.run())
-    LOGGER.info("Legacy single-generation evolution finished: %s", result)
-    return result
-
 
 def run_evolution(cfg: DictConfig) -> dict:
     """Run canonical organism-first multi-generation evolution loop."""

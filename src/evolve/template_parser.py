@@ -106,7 +106,7 @@ def validate_rendered_code(code: str) -> tuple[bool, str | None]:
         return (
             False,
             "build_optimizer must accept exactly (model, max_steps); "
-            "legacy build_optimizer(cfg) is not supported",
+            "build_optimizer(cfg) is not supported",
         )
 
     for node in tree.body:
@@ -142,9 +142,8 @@ def validate_rendered_code(code: str) -> tuple[bool, str | None]:
 def parse_llm_response(text: str) -> dict[str, str]:
     """Parse structured LLM response into sections.
 
-    The parser is generic on purpose so explicit legacy callers can still parse
-    old section names, while the canonical organism validator decides which
-    sections are required for the organism-first path.
+    The parser is generic on purpose while the canonical organism validator
+    decides which sections are required for the organism-first path.
     """
     result: dict[str, str] = {}
     current_key: str | None = None

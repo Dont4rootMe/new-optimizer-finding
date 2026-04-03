@@ -7,23 +7,6 @@ from typing import Any, TypedDict
 
 
 @dataclass(slots=True)
-class CandidateMeta:
-    """Metadata for a generated optimizer candidate."""
-
-    candidate_id: str
-    generation: int
-    timestamp: str
-    model_name: str
-    prompt_hash: str
-    seed: int
-    candidate_dir: str
-    optimizer_path: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(slots=True)
 class Island:
     """Canonical research-island definition."""
 
@@ -117,17 +100,6 @@ class OrganismMeta:
         parents = [parent_id for parent_id in (self.mother_id, self.father_id) if parent_id]
         return parents
 
-    @property
-    def idea_dna(self) -> list[str]:
-        genes = self.genetic_code.get("core_genes", [])
-        if not isinstance(genes, list):
-            return []
-        return [str(gene) for gene in genes]
-
-    @property
-    def evolution_log(self) -> list[dict[str, Any]]:
-        return list(self.lineage)
-
 
 class ManifestEntry(TypedDict):
     organism_id: str
@@ -181,44 +153,6 @@ class EvalTaskResult:
     worker_gpu: int
     return_code: int | None = None
     error_msg: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(slots=True)
-class CandidateSummary:
-    """Aggregated summary across all experiment evaluations for one candidate."""
-
-    candidate_id: str
-    generation: int
-    aggregate_score: float | None
-    experiments: dict[str, dict[str, Any]]
-    selected_experiments: list[str]
-    allocation: dict[str, Any]
-    status: str
-    created_at: str
-    eval_finished_at: str
-    seed: int
-    error_msg: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(slots=True)
-class GenerationSummary:
-    """High-level generation run summary."""
-
-    generation: int
-    requested_candidates: int
-    generated_candidates: int
-    completed_candidates: int
-    ok_candidates: int
-    partial_candidates: int
-    failed_candidates: int
-    output_dir: str
-    candidate_summaries: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

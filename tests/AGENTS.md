@@ -4,7 +4,7 @@ This file applies to `tests/`.
 
 ## Purpose
 
-The suite protects strict contracts across runtime, prompt loading, organism artifacts, selection logic, and canonical-vs-legacy boundaries.
+The suite protects strict contracts across runtime, prompt loading, organism artifacts, selection logic, and canonical-only boundaries.
 
 ## What The Tests Intentionally Enforce
 
@@ -13,7 +13,7 @@ The suite protects strict contracts across runtime, prompt loading, organism art
 - prompt bundle layout and placeholder wiring
 - canonical organism artifact structure and lineage semantics
 - canonical evolution entrypoints and resume behavior
-- explicit separation between canonical and legacy paths
+- explicit rejection of outdated config and artifact shapes
 
 ## Editing Rules
 
@@ -24,7 +24,7 @@ The suite protects strict contracts across runtime, prompt loading, organism art
   - optimizer contract: update import/schema/template tests
   - prompt layout: update prompt bundle and generator tests
   - organism artifacts: update organism contract and evolution resume tests
-  - canonical-vs-legacy routing: update run-evolution and legacy integration tests
+  - outdated config rejection: update evolve-loop and entrypoint tests
 
 ## Useful Test Targets
 

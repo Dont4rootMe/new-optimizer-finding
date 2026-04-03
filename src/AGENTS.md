@@ -5,7 +5,7 @@ This file applies to `src/` unless a deeper `AGENTS.md` overrides it.
 ## Purpose
 
 - `main.py` is the top-level dispatch entrypoint.
-- `evolve/` contains the canonical organism-first evolution engine and explicit legacy surfaces.
+- `evolve/` contains the canonical organism-first evolution engine.
 - `organisms/` contains canonical organism parsing, persistence, and prompt-driven mutation/crossover logic.
 - `validate/` contains the subprocess worker used by evolution-time evaluation.
 

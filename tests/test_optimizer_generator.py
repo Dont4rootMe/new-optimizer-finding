@@ -8,7 +8,6 @@ from omegaconf import OmegaConf
 
 import src.evolve.operators as canonical_seed_operators
 from src.evolve.generator import OptimizerGenerator
-from src.evolve.legacy_generator import LegacyCandidateGenerator
 from src.evolve.types import Island
 
 
@@ -110,10 +109,10 @@ def build_optimizer(model, max_steps):
     assert error is not None
 
 
-def test_validate_code_rejects_legacy_builder_contract() -> None:
+def test_validate_code_rejects_invalid_builder_signature() -> None:
     generator = OptimizerGenerator(_cfg())
     code = """
-class LegacyController:
+class InvalidBuilderController:
     def __init__(self, cfg):
         self.cfg = cfg
 
@@ -125,7 +124,7 @@ class LegacyController:
 
 
 def build_optimizer(cfg):
-    return LegacyController(cfg)
+    return InvalidBuilderController(cfg)
 """
     ok, error = generator._validate_code(code)
     assert not ok
@@ -155,33 +154,24 @@ def build_optimizer(model, max_steps):
     assert "step(self, weights, grads, activations, step_fn)" in str(error)
 
 
-def test_legacy_mock_candidate_code_does_not_expect_framework_hparams() -> None:
-    generator = LegacyCandidateGenerator(_cfg())
-    code = generator._mock_candidate_code(candidate_id="abcdef12", generation=0)
-
-    assert "optimizer_kwargs" not in code
-    assert "scheduler_cfg" not in code
-    assert "max_steps" in code
-
-
-def test_canonical_generator_initializes_without_legacy_candidate_prompt_assets(monkeypatch) -> None:
+def test_generator_loads_only_current_prompt_bundle_assets(monkeypatch) -> None:
     original_read_text = Path.read_text
+    seen_paths: list[Path] = []
 
     def guarded_read_text(self: Path, *args, **kwargs):  # type: ignore[override]
-        if self.parent.name == "legacy_candidate" and self.name in {"system.txt", "user.txt"}:
-            raise AssertionError("canonical organism generator must not read legacy candidate prompts")
+        seen_paths.append(self)
         return original_read_text(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "read_text", guarded_read_text)
 
     generator = OptimizerGenerator(_cfg())
 
-    assert "## CORE_GENES" in generator.prompt_bundle.seed_system
-
-
-def test_legacy_generator_initializes_without_canonical_prompt_bundle_assets(monkeypatch) -> None:
-    original_read_text = Path.read_text
-    forbidden = {
+    observed = {
+        tuple(path.parts[-2:])
+        for path in seen_paths
+        if len(path.parts) >= 2 and "prompts" in path.parts
+    }
+    assert observed == {
         ("shared", "project_context.txt"),
         ("seed", "system.txt"),
         ("seed", "user.txt"),
@@ -190,17 +180,7 @@ def test_legacy_generator_initializes_without_canonical_prompt_bundle_assets(mon
         ("crossover", "system.txt"),
         ("crossover", "user.txt"),
     }
-
-    def guarded_read_text(self: Path, *args, **kwargs):  # type: ignore[override]
-        if len(self.parts) >= 2 and tuple(self.parts[-2:]) in forbidden:
-            raise AssertionError("legacy candidate generator must not read canonical organism prompt assets")
-        return original_read_text(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "read_text", guarded_read_text)
-
-    generator = LegacyCandidateGenerator(_cfg())
-
-    assert "{context_block}" in generator.user_template
+    assert "## CORE_GENES" in generator.prompt_bundle.seed_system
 
 
 def test_canonical_generator_seeds_real_island_organism(tmp_path: Path) -> None:
@@ -223,7 +203,6 @@ def test_canonical_generator_seeds_real_island_organism(tmp_path: Path) -> None:
 
     assert organism.operator == "seed"
     assert organism.island_id == "gradient_methods"
-    assert organism.island_id != "legacy_flat_population"
     assert (organism_dir / "optimizer.py").exists()
     assert (organism_dir / "genetic_code.md").exists()
     assert (organism_dir / "lineage.json").exists()

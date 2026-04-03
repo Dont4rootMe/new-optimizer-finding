@@ -7,10 +7,7 @@ import random
 from statistics import mean, stdev
 from typing import Any
 
-from src.evolve.storage import (
-    load_recent_legacy_candidate_experiment_scores,
-    load_recent_organism_experiment_scores,
-)
+from src.evolve.storage import load_recent_organism_experiment_scores
 
 
 def _safe_float(value: Any, default: float) -> float:
@@ -146,21 +143,12 @@ def sample_experiments_poisson(
             return selected
 
 
-def _history_loader(history_source: str):
-    if history_source == "organism":
-        return load_recent_organism_experiment_scores
-    if history_source == "legacy_candidate":
-        return load_recent_legacy_candidate_experiment_scores
-    raise ValueError(f"Unsupported allocation history source '{history_source}'")
-
-
 def build_allocation_snapshot(
     population_root: str,
     experiments: list[str],
     allocation_cfg: Any,
     seed: int,
     entity_id: str,
-    history_source: str = "organism",
 ) -> dict[str, Any]:
     """Build an allocation snapshot with explicit Neyman weights and inclusion probabilities."""
 
@@ -181,7 +169,7 @@ def build_allocation_snapshot(
     if not isinstance(costs, dict):
         costs = {}
 
-    history = _history_loader(history_source)(
+    history = load_recent_organism_experiment_scores(
         population_root=population_root,
         experiments=experiments,
         history_window=history_window,

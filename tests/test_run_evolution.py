@@ -1,12 +1,10 @@
-"""Runtime entrypoint tests for canonical evolve mode and explicit legacy mode."""
+"""Runtime entrypoint tests for canonical evolve mode."""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 from omegaconf import OmegaConf
 
-from src.evolve.run import run_evolution, run_legacy_single_generation
+from src.evolve.run import run_evolution
 
 
 def _cfg() -> object:
@@ -53,35 +51,8 @@ def test_run_evolution_always_uses_evolution_loop(monkeypatch) -> None:
     assert result == {"mode": "canonical"}
 
 
-def test_legacy_mode_requires_explicit_call(monkeypatch) -> None:
+def test_run_evolution_skips_when_disabled() -> None:
     cfg = _cfg()
-    state = {"legacy_called": False}
+    cfg.evolver.enabled = False
 
-    class DummyLegacy:
-        def __init__(self, received_cfg):
-            assert received_cfg is cfg
-
-        async def run(self):
-            state["legacy_called"] = True
-            return {"mode": "legacy"}
-
-    monkeypatch.setattr("src.evolve.legacy_orchestrator.LegacyCandidateOrchestrator", DummyLegacy)
-    monkeypatch.setattr(
-        "src.evolve.evolution_loop.EvolutionLoop",
-        lambda received_cfg: SimpleNamespace(run=lambda: DummyCanonical(received_cfg).run()),
-    )
-
-    class DummyCanonical:
-        def __init__(self, received_cfg):
-            assert received_cfg is cfg
-
-        async def run(self):
-            return {"mode": "canonical"}
-
-    result = run_evolution(cfg)
-    assert result == {"mode": "canonical"}
-    assert state["legacy_called"] is False
-
-    legacy_result = run_legacy_single_generation(cfg)
-    assert legacy_result == {"mode": "legacy"}
-    assert state["legacy_called"] is True
+    assert run_evolution(cfg) == {}

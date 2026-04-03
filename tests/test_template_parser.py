@@ -46,9 +46,9 @@ def test_validate_rendered_code_syntax_error() -> None:
     assert "Syntax error" in error
 
 
-def test_validate_rendered_code_rejects_legacy_builder_contract() -> None:
+def test_validate_rendered_code_rejects_invalid_builder_signature() -> None:
     code = """
-class LegacyOpt:
+class InvalidBuilderOpt:
     def __init__(self, cfg):
         self.cfg = cfg
 
@@ -60,7 +60,7 @@ class LegacyOpt:
 
 
 def build_optimizer(cfg):
-    return LegacyOpt(cfg)
+    return InvalidBuilderOpt(cfg)
 """
     ok, error = validate_rendered_code(code)
     assert not ok

@@ -23,13 +23,13 @@ from src.organisms.organism import (
 LOGGER = logging.getLogger(__name__)
 
 
-def crossbreed_idea_dna(
-    mother_dna: list[str],
-    father_dna: list[str],
-    p: float = 0.7,
+def merge_gene_pools(
+    mother_genes: list[str],
+    father_genes: list[str],
+    inherit_probability: float = 0.7,
     rng: random.Random | None = None,
 ) -> list[str]:
-    """Recombine gene pools with maternal inheritance probability `p`."""
+    """Recombine maternal and paternal gene pools with maternal bias."""
 
     if rng is None:
         rng = random.Random()
@@ -37,22 +37,22 @@ def crossbreed_idea_dna(
     seen_lower: set[str] = set()
     child: list[str] = []
 
-    for trait in mother_dna:
-        if rng.random() < p:
+    for trait in mother_genes:
+        if rng.random() < inherit_probability:
             key = trait.strip().lower()
             if key not in seen_lower:
                 seen_lower.add(key)
                 child.append(trait.strip())
 
-    for trait in father_dna:
-        if rng.random() < (1.0 - p):
+    for trait in father_genes:
+        if rng.random() < (1.0 - inherit_probability):
             key = trait.strip().lower()
             if key not in seen_lower:
                 seen_lower.add(key)
                 child.append(trait.strip())
 
     if not child:
-        fallback = mother_dna if mother_dna else father_dna
+        fallback = mother_genes if mother_genes else father_genes
         if fallback:
             child.append(rng.choice(fallback).strip())
 
@@ -115,7 +115,7 @@ class CrossbreedingOperator:
 
         mother_genes = read_organism_genetic_code(mother).get("core_genes", [])
         father_genes = read_organism_genetic_code(father).get("core_genes", [])
-        child_dna = crossbreed_idea_dna(
+        child_dna = merge_gene_pools(
             mother_genes,
             father_genes,
             self.p,

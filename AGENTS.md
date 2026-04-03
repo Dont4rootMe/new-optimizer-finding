@@ -16,12 +16,11 @@ This file applies to the whole repository unless a deeper `AGENTS.md` overrides 
 - External optimizers must implement `build_optimizer(model, max_steps)` and return a controller with:
   - `step(weights, grads, activations, step_fn)`
   - `zero_grad(set_to_none=True)`
-- Canonical evolution is organism-first and island-aware. `run_evolution(...)` must not silently fall back to legacy candidate-first behavior.
+- Canonical evolution is organism-first and island-aware. `run_evolution(...)` must remain wired to the current `EvolutionLoop`.
 - Canonical prompt assets live under `conf/prompts/`:
   - `shared/` for shared system context
   - `seed/`, `mutation/`, `crossover/` for paired task prompts
   - `islands/` for research directions
-  - `legacy_candidate/` for explicit legacy-only raw-code prompts
 - Canonical organism artifacts are first-class data. Keep these filenames and meanings stable:
   - `optimizer.py`
   - `genetic_code.md`
@@ -35,7 +34,6 @@ This file applies to the whole repository unless a deeper `AGENTS.md` overrides 
 
 - Keep config, code, and tests in sync. This repo relies heavily on strict contracts.
 - Prefer extending existing shared helpers before adding one-off implementations.
-- Preserve the explicit quarantine around legacy code. Legacy compatibility is allowed only through clearly named legacy surfaces.
 - If you add a new experiment, update all of:
   - `conf/config.yaml`
   - `conf/experiments/<name>.yaml`

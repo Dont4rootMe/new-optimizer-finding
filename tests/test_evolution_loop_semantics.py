@@ -294,7 +294,7 @@ def test_canonical_loop_requires_islands_dir(tmp_path: Path) -> None:
         EvolutionLoop(cfg)
 
 
-def test_canonical_loop_rejects_legacy_operator_fallbacks(tmp_path: Path) -> None:
+def test_canonical_loop_rejects_outdated_operator_fallbacks(tmp_path: Path) -> None:
     cfg = _cfg(tmp_path)
     del cfg.evolver.operators.mutation["probability"]
     cfg.evolution = {"mutation_rate": 0.9, "mutation_q": 0.1, "crossover_p": 0.3}
@@ -303,7 +303,7 @@ def test_canonical_loop_rejects_legacy_operator_fallbacks(tmp_path: Path) -> Non
         EvolutionLoop(cfg)
 
 
-def test_canonical_loop_rejects_legacy_phase_fallbacks(tmp_path: Path) -> None:
+def test_canonical_loop_rejects_outdated_phase_fallbacks(tmp_path: Path) -> None:
     cfg = _cfg(tmp_path)
     del cfg.evolver.phases["simple"]
     del cfg.evolver.phases["great_filter"]
@@ -328,7 +328,7 @@ def test_canonical_loop_rejects_top_level_timeout_fallback(tmp_path: Path) -> No
         loop._phase_timeout_sec("simple")
 
 
-def test_canonical_run_rejects_legacy_max_generations_fallback(tmp_path: Path) -> None:
+def test_canonical_run_rejects_outdated_max_generations_fallback(tmp_path: Path) -> None:
     cfg = _cfg(tmp_path)
     del cfg.evolver["max_generations"]
     cfg["evolution"] = {"max_generations": 2}
