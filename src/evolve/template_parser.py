@@ -18,6 +18,30 @@ _EDITABLE_RE = re.compile(
 SECTION_NAMES = ("IMPORTS", "INIT_BODY", "STEP_BODY", "ZERO_GRAD_BODY")
 
 
+def _positional_arg_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+    """Return positional argument names, including positional-only args."""
+
+    args = list(node.args.posonlyargs) + list(node.args.args)
+    return [arg.arg for arg in args]
+
+
+def _match_signature(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    expected: list[str],
+) -> bool:
+    return _positional_arg_names(node) == expected
+
+
+def _find_function(
+    body: list[ast.stmt],
+    name: str,
+) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+    for child in body:
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == name:
+            return child
+    return None
+
+
 def _load_template() -> str:
     return _TEMPLATE_PATH.read_text(encoding="utf-8")
 
@@ -67,49 +91,60 @@ def validate_rendered_code(code: str) -> tuple[bool, str | None]:
     except SyntaxError as exc:
         return False, f"Syntax error: {exc}"
 
-    has_builder = any(
-        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name == "build_optimizer"
-        for node in ast.walk(tree)
+    build_optimizer = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "build_optimizer"
+        ),
+        None,
     )
-    if not has_builder:
-        return False, "Missing required function: build_optimizer"
+    if build_optimizer is None:
+        return False, "Missing required function: build_optimizer(model, max_steps)"
+    if not _match_signature(build_optimizer, ["model", "max_steps"]):
+        return (
+            False,
+            "build_optimizer must accept exactly (model, max_steps); "
+            "legacy build_optimizer(cfg) is not supported",
+        )
 
-    has_controller_class = False
-    for node in ast.walk(tree):
+    for node in tree.body:
         if not isinstance(node, ast.ClassDef):
             continue
-        method_names = {
-            child.name
-            for child in node.body
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
-        }
-        if {"step", "zero_grad", "__init__"}.issubset(method_names):
-            has_controller_class = True
-            break
 
-    if not has_controller_class:
-        return False, "Missing controller class with __init__/step/zero_grad"
+        init_method = _find_function(node.body, "__init__")
+        step_method = _find_function(node.body, "step")
+        zero_grad_method = _find_function(node.body, "zero_grad")
+        if init_method is None or step_method is None or zero_grad_method is None:
+            continue
 
-    return True, None
+        if not _match_signature(init_method, ["self", "model", "max_steps"]):
+            return False, (
+                f"Controller class '{node.name}' must define "
+                "__init__(self, model, max_steps)"
+            )
+        if not _match_signature(step_method, ["self", "weights", "grads", "activations", "step_fn"]):
+            return False, (
+                f"Controller class '{node.name}' must define "
+                "step(self, weights, grads, activations, step_fn)"
+            )
+        if not _match_signature(zero_grad_method, ["self", "set_to_none"]):
+            return False, (
+                f"Controller class '{node.name}' must define "
+                "zero_grad(self, set_to_none=True)"
+            )
+        return True, None
+
+    return False, "Missing controller class with __init__/step/zero_grad"
 
 
 def parse_llm_response(text: str) -> dict[str, str]:
     """Parse structured LLM response into sections.
 
-    Expected format:
-    ## IDEA_DNA
-    ...
-    ## CHANGE_DESCRIPTION
-    ...
-    ## IMPORTS
-    ...
-    ## INIT_BODY
-    ...
-    ## STEP_BODY
-    ...
-    ## ZERO_GRAD_BODY
-    ...
+    The parser is generic on purpose so explicit legacy callers can still parse
+    old section names, while the canonical organism validator decides which
+    sections are required for the organism-first path.
     """
     result: dict[str, str] = {}
     current_key: str | None = None

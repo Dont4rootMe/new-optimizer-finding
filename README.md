@@ -1,4 +1,4 @@
-# valopt
+# optbench
 
 Hydra-centric validation scaffold for benchmarking optimizers across modular ML training experiments.
 
@@ -6,14 +6,14 @@ Hydra-centric validation scaffold for benchmarking optimizers across modular ML 
 
 - Single-GPU design (`1x NVIDIA A100` target) with explicit per-experiment compute limits.
 - Unified experiment interface (`build_datamodule`, `build_model`, `train`, `evaluate`).
-- Dynamic optimizer loading from external Python file (`build_optimizer(cfg)` returning a controller object).
+- Dynamic optimizer loading from external Python file (`build_optimizer(model, max_steps)` returning a controller object).
 - Reproducibility defaults (seed control, deterministic toggle, resolved config snapshots).
 - Safety defaults (NaN detection, optional abort-on-NaN, grad-norm logging, grad clipping).
 
 ## Project structure
 
-- `conf/` Hydra configs
-- `valopt/` runner, schemas, registry, utils
+- `conf/` Hydra configs and prompt assets
+- `optbench/` runner, schemas, registry, utils
 - `experiments/` per-experiment modules
 - `optimizer_guesses/examples/` external optimizer examples
 - `tests/` minimal tests
@@ -38,29 +38,29 @@ pip install -e .[evolve]
 Smoke run for all enabled experiments:
 
 ```bash
-python -m valopt.main mode=smoke
+python -m optbench.main mode=smoke
 ```
 
 Baseline stats with each experiment's default optimizer:
 
 ```bash
-python -m valopt.main mode=stats
+python -m optbench.main mode=stats
 ```
 
 Run with external optimizer file:
 
 ```bash
-python -m valopt.main mode=run optimizer_path=optimizer_guesses/examples/sgd_baseline.py
+python -m optbench.main mode=run optimizer_path=optimizer_guesses/examples/sgd_baseline.py
 ```
 
-Run async evolution pipeline:
+Run the canonical organism-first evolution pipeline:
 
 ```bash
 export OPENAI_API_KEY=...
 python -m src.main mode=evolve
 ```
 
-Standalone evolve entrypoint:
+Standalone canonical evolve entrypoint:
 
 ```bash
 python -m src.evolve.run mode=evolve
@@ -77,38 +77,41 @@ You can also use model alias:
 python -m src.main mode=evolve evolver.llm.model=latest_pro_thinking
 ```
 
-Run evolve with partial benchmark evaluation (Neyman allocation):
+Run evolve with simple-phase partial benchmark evaluation (Neyman allocation):
 
 ```bash
 python -m src.main mode=evolve \
-  evolver.allocation.enabled=true \
-  evolver.allocation.sample_size=1
+  evolver.phases.simple.allocation.enabled=true \
+  evolver.phases.simple.allocation.sample_size=1
 ```
+
+`mode=evolve` always runs the multi-generation organism-first `EvolutionLoop`. It does not auto-fallback to the legacy candidate-first path.
+The canonical loop reads only the canonical `evolver.*` schema from `conf/evolver/default.yaml`; legacy `evaluation.*` / `evolution.*` shapes are accepted only by explicit legacy surfaces.
 
 ## Useful Hydra overrides
 
 Disable a specific experiment:
 
 ```bash
-python -m valopt.main mode=smoke experiments.audio_transformer.enabled=false
+python -m optbench.main mode=smoke experiments.audio_transformer.enabled=false
 ```
 
 Force CPU / fp32:
 
 ```bash
-python -m valopt.main mode=smoke device=cpu precision=fp32
+python -m optbench.main mode=smoke device=cpu precision=fp32
 ```
 
 Override experiment budget:
 
 ```bash
-python -m valopt.main mode=smoke experiments.cifar_convnet.compute.smoke_steps=50
+python -m optbench.main mode=smoke experiments.cifar_convnet.compute.smoke_steps=50
 ```
 
 Run-only validation cutoffs for candidate optimizer:
 
 ```bash
-python -m valopt.main mode=run \
+python -m optbench.main mode=run \
   optimizer_path=optimizer_guesses/examples/sgd_baseline.py \
   experiments.cifar_convnet.run_validation.max_steps=100 \
   experiments.cifar_convnet.run_validation.target_quality=0.85
@@ -128,7 +131,7 @@ python -m valopt.main mode=run \
 External optimizers must provide:
 
 ```python
-def build_optimizer(cfg):
+def build_optimizer(model, max_steps):
     ...
 ```
 
@@ -136,39 +139,58 @@ The returned object must implement:
 
 ```python
 class OptimizerController:
-    def initialize(self, named_parameters, cfg): ...
-    def step(self, weights, grads, activations): ...
+    def step(self, weights, grads, activations, step_fn): ...
     def zero_grad(self, set_to_none=True): ...
 ```
 
-Framework runtime passes only `cfg["max_steps"]` during `initialize(...)`.
+`model` is the full `torch.nn.Module`. `max_steps` is the total optimization budget for the run.
+`step_fn()` is an optional extra forward-backward closure; each call consumes one optimization step from the same global budget.
 
 ## Evolve outputs
 
-The evolution pipeline writes candidates to:
+The canonical evolution pipeline is organism-first, island-aware, prompt-driven from `conf/prompts/`, and restore-driven from `population_manifest.json`. Prompt pairs are grouped by task under `conf/prompts/<task>/`, island descriptions live in `conf/prompts/islands/`, and legacy candidate-first templates live in `conf/prompts/legacy_candidate/`.
+Canonical resume is strict: missing `population_manifest.json`, `genetic_code.md`, or `lineage.json` is treated as corruption and fails fast instead of silently falling back to legacy artifacts.
+
+Phase defaults in the canonical path:
+- simple phase: `eval_mode=smoke`
+- Great Filter: `eval_mode=full`
+
+The Great Filter evaluates only its configured hard experiment list. `simple_reward` remains persisted on the organism; `hard_reward` is stored separately; `selection_reward` switches to the hard score only for the hard-phase selection step.
+
+Canonical organism artifacts are written to:
 
 ```text
-<population_root>/gen_<G>/cand_<UUID>/
-  optimizer.py
-  llm_request.json
-  llm_response.json
-  meta.json
-  results/<experiment>.json
-  logs/<experiment>.out
-  logs/<experiment>.err
-  summary.json
+<population_root>/
+  evolution_state.json
+  population_manifest.json
+  gen_<G>/
+    island_<island_id>/
+      org_<UUID>/
+        optimizer.py
+        genetic_code.md
+        lineage.json
+        organism.json
+        summary.json
+        llm_request.json
+        llm_response.json
+        results/
+          simple/<experiment>.json
+          hard/<experiment>.json
+        logs/
+          simple_<experiment>.out
+          simple_<experiment>.err
+          hard_<experiment>.out
+          hard_<experiment>.err
 ```
 
-Generation events are appended to `index.jsonl` in `gen_<G>/`.
+`summary.json` stores phase-specific evaluation results, including:
+- `simple_reward`
+- `hard_reward`
+- `selection_reward`
+- `phase_results.simple`
+- `phase_results.hard`
 
-Each candidate `summary.json` includes:
-- `selected_experiments`
-- `allocation` snapshot (`pi`, `stats`, `history_window`, `sample_size`)
-- per-experiment normalized fields: `raw_metric`, `quality_ratio`, `steps_ratio`, `exp_score`
-
-Experiment-level normalization references are configured in:
-- `conf/experiments/*.yaml`
-  `normalization.quality_ref`, `normalization.steps_ref`, `normalization.eps`
+The legacy candidate-first mode is quarantined behind explicit legacy-only surfaces (`run_legacy_single_generation(...)`, `LegacyCandidateOrchestrator`, `LegacyCandidateGenerator`). It still uses `cand_*` directories when invoked explicitly, but it is not the canonical evolution layout and is never auto-selected by `mode=evolve`.
 
 ## Single-GPU constraint
 

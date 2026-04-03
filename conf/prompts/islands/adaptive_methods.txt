@@ -1,0 +1,1 @@
+Explore adaptive optimizers with per-parameter or blockwise state, bias correction, trust heuristics, and dynamic rescaling. Aim for strong early learning without sacrificing long-horizon stability or numerical safety.

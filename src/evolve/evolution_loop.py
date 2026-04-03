@@ -1,9 +1,7 @@
-"""Multi-generation evolution loop with genetic operators and Great Filter."""
+"""Multi-generation organism-first evolution loop with island-aware selection."""
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 import random
 import uuid
@@ -13,347 +11,499 @@ from typing import Any
 from omegaconf import DictConfig, OmegaConf
 
 from src.evolve.generator import OptimizerGenerator
-from src.evolve.operators import SeedOperator
-from src.evolve.selection import elite_select, select_parents_for_reproduction
-from src.organisms.crossbreeding import CrossbreedingOperator
-from src.organisms.mutation import MutationOperator as ProbMutationOperator
+from src.evolve.islands import load_islands
+from src.evolve.orchestrator import EvolverOrchestrator
+from src.evolve.selection import (
+    select_top_h_per_island,
+    select_top_k_per_island,
+    softmax_select_organisms,
+    uniform_select_organisms,
+)
 from src.evolve.storage import (
     generation_dir,
-    load_population,
     organism_dir,
-    organism_meta_path,
     read_json,
+    read_organism_meta,
+    read_organism_summary,
+    read_population_manifest,
     utc_now_iso,
     write_json,
+    write_organism_meta,
+    write_organism_summary,
+    write_population_manifest,
 )
-from src.evolve.types import OrganismMeta
+from src.evolve.types import Island, OrganismEvaluationRequest, OrganismMeta
+from src.organisms.crossbreeding import CrossbreedingOperator
+from src.organisms.mutation import MutationOperator
+from src.organisms.organism import save_organism_artifacts, update_latest_lineage_entry
 
 LOGGER = logging.getLogger(__name__)
 
 _STATE_FILE = "evolution_state.json"
-
-
-def _dict_to_organism(d: dict[str, Any]) -> OrganismMeta:
-    """Reconstruct OrganismMeta from a dict (loaded from JSON)."""
-    return OrganismMeta(
-        organism_id=d["organism_id"],
-        generation=d["generation"],
-        timestamp=d["timestamp"],
-        parent_ids=d.get("parent_ids", []),
-        operator=d.get("operator", "seed"),
-        idea_dna=d.get("idea_dna", []),
-        evolution_log=d.get("evolution_log", []),
-        model_name=d.get("model_name", ""),
-        prompt_hash=d.get("prompt_hash", ""),
-        seed=d.get("seed", 0),
-        organism_dir=d.get("organism_dir", ""),
-        optimizer_path=d.get("optimizer_path", ""),
-        score=d.get("score"),
-        simple_score=d.get("simple_score"),
-        hard_score=d.get("hard_score"),
-        status=d.get("status", "pending"),
-    )
+_MISSING = object()
 
 
 class EvolutionLoop:
-    """Runs multi-generation evolutionary optimization."""
+    """Runs multi-generation island-aware optimizer evolution."""
 
     def __init__(self, cfg: DictConfig) -> None:
         self.cfg = cfg
         self.evolver_cfg = cfg.evolver
-        self.evo_cfg = cfg.evolver.evolution
-        self.eval_cfg = cfg.evolver.evaluation
-
         self.population_root = Path(str(cfg.paths.population_root)).expanduser().resolve()
         self.population: list[OrganismMeta] = []
         self.generation = 0
 
         self.generator = OptimizerGenerator(cfg)
-
-        self.simple_experiments: list[str] = list(self.eval_cfg.simple_experiments)
-        self.hard_experiments: list[str] = list(self.eval_cfg.hard_experiments)
-
         self.rng = random.Random(int(cfg.seed))
+
+        self.islands = self._load_islands()
+        self.islands_by_id = {island.island_id: island for island in self.islands}
+
+        self.organisms_per_island = self._organisms_per_island()
+        self.inter_island_crossover_rate = self._inter_island_crossover_rate()
+        self.mutation_probability = self._mutation_probability()
+        self.gene_delete_probability = self._gene_delete_probability()
+        self.inherit_gene_probability = self._inherit_gene_probability()
+        self.softmax_temperature = self._softmax_temperature()
+        self._validate_phase_selection_bounds()
+
+    def _require_cfg_value(self, path: str) -> Any:
+        value = OmegaConf.select(self.cfg, path)
+        if value is None:
+            raise ValueError(f"Canonical evolve config must define {path}")
+        return value
+
+    def _load_islands(self) -> list[Island]:
+        islands_dir = str(self._require_cfg_value("evolver.islands.dir")).strip()
+        if not islands_dir:
+            raise ValueError("Canonical evolve config must define evolver.islands.dir")
+        return load_islands(islands_dir)
+
+    def _organisms_per_island(self) -> int:
+        return int(self._require_cfg_value("evolver.islands.organisms_per_island"))
+
+    def _inter_island_crossover_rate(self) -> float:
+        return float(self._require_cfg_value("evolver.islands.inter_island_crossover_rate"))
+
+    def _mutation_probability(self) -> float:
+        return float(self._require_cfg_value("evolver.operators.mutation.probability"))
+
+    def _gene_delete_probability(self) -> float:
+        return float(self._require_cfg_value("evolver.operators.mutation.gene_delete_probability"))
+
+    def _inherit_gene_probability(self) -> float:
+        return float(self._require_cfg_value("evolver.operators.crossover.inherit_gene_probability_from_mother"))
+
+    def _softmax_temperature(self) -> float:
+        return float(self._require_cfg_value("evolver.operators.crossover.softmax_temperature"))
+
+    def _phase_cfg(self, phase: str) -> dict[str, Any]:
+        payload = OmegaConf.select(self.cfg, f"evolver.phases.{phase}")
+        if payload is None:
+            raise ValueError(f"Canonical evolve config must define evolver.phases.{phase}")
+        resolved = OmegaConf.to_container(payload, resolve=True)
+        if not isinstance(resolved, dict):
+            raise ValueError(f"Canonical evolve config block evolver.phases.{phase} must be a mapping")
+        return resolved
+
+    def _phase_value(self, phase: str, key: str, default: Any = _MISSING) -> Any:
+        cfg = self._phase_cfg("great_filter" if phase == "hard" else phase)
+        if key in cfg and cfg[key] is not None:
+            return cfg[key]
+        if default is not _MISSING:
+            return default
+        phase_name = "great_filter" if phase == "hard" else phase
+        raise ValueError(f"Canonical evolve config must define evolver.phases.{phase_name}.{key}")
+
+    def _phase_experiments(self, phase: str) -> list[str]:
+        return [str(name) for name in self._phase_value(phase, "experiments")]
+
+    def _phase_allocation_cfg(self, phase: str) -> dict[str, Any]:
+        allocation = self._phase_value(phase, "allocation")
+        return allocation if isinstance(allocation, dict) else {}
+
+    def _phase_eval_mode(self, phase: str) -> str:
+        return str(self._phase_value(phase, "eval_mode"))
+
+    def _phase_timeout_sec(self, phase: str) -> int:
+        return int(self._phase_value(phase, "timeout_sec_per_eval"))
+
+    def _simple_top_k(self) -> int:
+        return int(self._phase_value("simple", "top_k_per_island"))
+
+    def _great_filter_top_h(self) -> int:
+        return int(self._phase_value("hard", "top_h_per_island"))
+
+    def _great_filter_enabled(self) -> bool:
+        return bool(self._phase_value("hard", "enabled"))
+
+    def _great_filter_interval(self) -> int:
+        return max(1, int(self._phase_value("hard", "interval_generations")))
+
+    def _validate_phase_selection_bounds(self) -> None:
+        top_k = self._simple_top_k()
+        top_h = self._great_filter_top_h()
+        if top_h > top_k:
+            raise ValueError(
+                "Invalid evolve config: evolver.phases.great_filter.top_h_per_island "
+                "must be <= evolver.phases.simple.top_k_per_island"
+            )
+
+    def _should_run_great_filter(self, generation: int) -> bool:
+        return self._great_filter_enabled() and generation > 0 and generation % self._great_filter_interval() == 0
 
     def _state_path(self) -> Path:
         return self.population_root / _STATE_FILE
 
+    def _best_active_organism(self) -> OrganismMeta | None:
+        if not self.population:
+            return None
+        return max(
+            self.population,
+            key=lambda organism: organism.selection_reward if organism.selection_reward is not None else -float("inf"),
+        )
+
     def _save_state(self) -> None:
-        """Persist evolution state for resume."""
+        for organism in self.population:
+            organism.current_generation_active = self.generation
+            write_organism_meta(organism)
+
+        best = self._best_active_organism()
         state = {
             "current_generation": self.generation,
-            "population_organism_ids": [org.organism_id for org in self.population],
-            "best_score": max(
-                (org.score for org in self.population if org.score is not None),
-                default=None,
-            ),
-            "best_organism_id": max(
-                self.population,
-                key=lambda o: o.score if o.score is not None else -float("inf"),
-            ).organism_id if self.population else None,
+            "active_population_size": len(self.population),
+            "best_organism_id": best.organism_id if best is not None else None,
+            "best_selection_reward": best.selection_reward if best is not None else None,
             "timestamp": utc_now_iso(),
         }
         write_json(self._state_path(), state)
+        write_population_manifest(self.population_root, self.generation, self.population)
 
     def _load_state(self) -> dict[str, Any] | None:
-        """Load evolution state if exists."""
-        path = self._state_path()
-        if path.exists():
-            return read_json(path)
+        if self._state_path().exists():
+            payload = read_json(self._state_path())
+            if isinstance(payload, dict):
+                return payload
         return None
 
-    async def _seed_population(self, count: int) -> list[OrganismMeta]:
-        """Create initial population from scratch."""
+    def _restore_population_from_manifest(self, generation: int) -> list[OrganismMeta]:
+        manifest = read_population_manifest(self.population_root)
+        if manifest is None:
+            raise FileNotFoundError("Population manifest is required for canonical resume.")
+
+        manifest_generation = int(manifest.get("generation", generation))
+        if manifest_generation != generation:
+            LOGGER.warning(
+                "Evolution state points to generation %d but manifest points to generation %d. "
+                "Using manifest generation.",
+                generation,
+                manifest_generation,
+            )
+            self.generation = manifest_generation
+
         organisms: list[OrganismMeta] = []
-        seed_op = SeedOperator()
-        gen_dir = generation_dir(self.population_root, self.generation)
-
-        for i in range(count):
-            org_id = uuid.uuid4().hex
-            org_dir = organism_dir(gen_dir, org_id)
-            try:
-                org = self.generator.generate_organism(
-                    operator=seed_op,
-                    parents=[],
-                    organism_id=org_id,
-                    generation=self.generation,
-                    organism_dir=org_dir,
+        for entry in manifest.get("active_organisms", []):
+            organism_dir_path = Path(str(entry["organism_dir"]))
+            if not organism_dir_path.is_absolute():
+                organism_dir_path = (self.population_root / organism_dir_path).resolve()
+            if not organism_dir_path.exists():
+                raise FileNotFoundError(
+                    f"Active population manifest points to missing organism dir: {organism_dir_path}"
                 )
-                organisms.append(org)
-                LOGGER.info("Seeded organism %s (%d/%d)", org_id[:8], i + 1, count)
-            except Exception as exc:
-                LOGGER.error("Failed to seed organism %d: %s", i, exc)
-
+            organism = read_organism_meta(organism_dir_path, allow_legacy_artifacts=False)
+            organism.current_generation_active = int(entry.get("current_generation_active", self.generation))
+            organisms.append(organism)
         return organisms
 
-    async def _reproduce(
-        self, plan: list[tuple[str, list[OrganismMeta]]]
+    async def _seed_island(self, island: Island, count: int) -> list[OrganismMeta]:
+        organisms: list[OrganismMeta] = []
+        if count <= 0:
+            return organisms
+
+        gen_dir = generation_dir(self.population_root, self.generation)
+        for _ in range(count):
+            organism_id = uuid.uuid4().hex
+            org_dir = organism_dir(gen_dir, organism_id, island_id=island.island_id)
+            organism = self.generator.generate_seed_organism(
+                island=island,
+                organism_id=organism_id,
+                generation=self.generation,
+                organism_dir=org_dir,
+            )
+            organisms.append(organism)
+        return organisms
+
+    async def _seed_initial_population(self) -> list[OrganismMeta]:
+        newborns: list[OrganismMeta] = []
+        for island in self.islands:
+            newborns.extend(await self._seed_island(island, self.organisms_per_island))
+        return newborns
+
+    def _group_by_island(self, organisms: list[OrganismMeta]) -> dict[str, list[OrganismMeta]]:
+        grouped: dict[str, list[OrganismMeta]] = {island.island_id: [] for island in self.islands}
+        for organism in organisms:
+            grouped.setdefault(organism.island_id, []).append(organism)
+        return grouped
+
+    def _select_father_pool(
+        self,
+        *,
+        mother: OrganismMeta,
+        active_by_island: dict[str, list[OrganismMeta]],
     ) -> list[OrganismMeta]:
-        """Execute reproduction plan using probabilistic genetic operators."""
+        local_candidates = [
+            organism
+            for organism in active_by_island.get(mother.island_id, [])
+            if organism.organism_id != mother.organism_id
+        ]
+        foreign_candidates = [
+            organism
+            for island_id, pool in active_by_island.items()
+            if island_id != mother.island_id
+            for organism in pool
+        ]
+
+        if local_candidates and foreign_candidates:
+            use_foreign = self.rng.random() < self.inter_island_crossover_rate
+            return foreign_candidates if use_foreign else local_candidates
+        if local_candidates:
+            return local_candidates
+        if foreign_candidates:
+            return foreign_candidates
+        return []
+
+    async def _reproduce_for_island(
+        self,
+        island: Island,
+        active_by_island: dict[str, list[OrganismMeta]],
+    ) -> list[OrganismMeta]:
+        current_active = active_by_island.get(island.island_id, [])
+        gap = max(0, self.organisms_per_island - len(current_active))
+        if gap <= 0:
+            return []
+
         offspring: list[OrganismMeta] = []
         gen_dir = generation_dir(self.population_root, self.generation)
+        mutation_operator = MutationOperator(
+            q=self.gene_delete_probability,
+            seed=self.rng.randint(0, 2**31 - 1),
+        )
+        crossover_operator = CrossbreedingOperator(
+            p=self.inherit_gene_probability,
+            seed=self.rng.randint(0, 2**31 - 1),
+        )
 
-        crossover_p = float(self.evo_cfg.get("crossover_p", 0.7))
-        mutation_q = float(self.evo_cfg.get("mutation_q", 0.2))
+        while len(offspring) < gap:
+            if not current_active:
+                offspring.extend(await self._seed_island(island, 1))
+                continue
 
-        mutation_op = ProbMutationOperator(q=mutation_q, seed=self.rng.randint(0, 2**31))
-        crossover_op = CrossbreedingOperator(p=crossover_p, seed=self.rng.randint(0, 2**31))
+            use_crossover = (
+                len(current_active) >= 2
+                and self.rng.random() >= self.mutation_probability
+            )
+            organism_id = uuid.uuid4().hex
+            org_dir = organism_dir(gen_dir, organism_id, island_id=island.island_id)
 
-        for op_name, parents in plan:
-            org_id = uuid.uuid4().hex
-            org_dir = organism_dir(gen_dir, org_id)
-
-            try:
-                if op_name == "mutation":
-                    org = mutation_op.produce(
-                        parent=parents[0],
-                        organism_id=org_id,
-                        generation=self.generation,
-                        org_dir=org_dir,
-                        generator=self.generator,
-                        prompts_dir=self.generator.prompts_dir,
+            if use_crossover:
+                mother = softmax_select_organisms(
+                    current_active,
+                    score_field="selection_reward",
+                    temperature=self.softmax_temperature,
+                    k=1,
+                    rng=self.rng,
+                )[0]
+                father_pool = self._select_father_pool(mother=mother, active_by_island=active_by_island)
+                if father_pool:
+                    father = softmax_select_organisms(
+                        father_pool,
+                        score_field="selection_reward",
+                        temperature=self.softmax_temperature,
+                        k=1,
+                        rng=self.rng,
+                    )[0]
+                    offspring.append(
+                        crossover_operator.produce(
+                            mother=mother,
+                            father=father,
+                            organism_id=organism_id,
+                            generation=self.generation,
+                            org_dir=org_dir,
+                            generator=self.generator,
+                        )
                     )
-                elif op_name == "crossover":
-                    # First parent is dominant (higher score)
-                    dominant, non_dominant = parents[0], parents[1]
-                    if (non_dominant.score or 0) > (dominant.score or 0):
-                        dominant, non_dominant = non_dominant, dominant
-                    org = crossover_op.produce(
-                        dominant=dominant,
-                        non_dominant=non_dominant,
-                        organism_id=org_id,
-                        generation=self.generation,
-                        org_dir=org_dir,
-                        generator=self.generator,
-                        prompts_dir=self.generator.prompts_dir,
-                    )
-                else:
-                    raise ValueError(f"Unknown operator: {op_name}")
+                    continue
 
-                offspring.append(org)
-                LOGGER.info(
-                    "%s -> organism %s (parents: %s)",
-                    op_name,
-                    org_id[:8],
-                    [p.organism_id[:8] for p in parents],
+            parent = uniform_select_organisms(current_active, k=1, rng=self.rng)[0]
+            offspring.append(
+                mutation_operator.produce(
+                    parent=parent,
+                    organism_id=organism_id,
+                    generation=self.generation,
+                    org_dir=org_dir,
+                    generator=self.generator,
                 )
-            except Exception as exc:
-                LOGGER.error("Failed %s: %s", op_name, exc)
+            )
 
-        return offspring
+        return offspring[:gap]
 
-    async def _evaluate_organisms(
+    async def _evaluate_phase(
         self,
         organisms: list[OrganismMeta],
-        experiments: list[str],
-        score_key: str = "simple_score",
+        *,
+        phase: str,
     ) -> None:
-        """Evaluate organisms using the orchestrator.
+        if not organisms:
+            return
 
-        This delegates to EvolverOrchestrator for GPU-based evaluation.
-        For now, organisms get placeholder scores; the full integration
-        with the orchestrator's eval pipeline happens in Phase 6.2.
-        """
-        from src.evolve.orchestrator import EvolverOrchestrator
+        experiments = self._phase_experiments(phase)
+        if not experiments:
+            return
 
-        # Build a temporary config with the right eval_experiments
-        cfg_override = OmegaConf.create({
-            "evolver": {
-                "eval_experiments": experiments,
-                "num_candidates": 0,  # no new generation, just eval
-            }
-        })
-        eval_cfg = OmegaConf.merge(self.cfg, cfg_override)
-
-        orchestrator = EvolverOrchestrator(eval_cfg)
-
-        # Submit organisms as candidates for evaluation
-        for org in organisms:
-            cand_dir = Path(org.organism_dir)
-            allocation_snapshot = orchestrator._build_candidate_allocation(org.organism_id)
-            selected = list(allocation_snapshot.get("selected_experiments", experiments))
-
-            orchestrator._register_candidate(
-                candidate_id=org.organism_id,
-                candidate_dir_path=cand_dir,
-                created_at=org.timestamp,
-                selected_experiments=selected,
-                allocation_snapshot=allocation_snapshot,
+        allocation_cfg = self._phase_allocation_cfg(phase)
+        orchestrator = EvolverOrchestrator(self.cfg)
+        requests = [
+            OrganismEvaluationRequest(
+                organism_id=organism.organism_id,
+                organism_dir=organism.organism_dir,
+                phase=phase,
+                experiments=experiments,
+                allocation_cfg=allocation_cfg,
+                eval_mode=self._phase_eval_mode(phase),
+                timeout_sec=self._phase_timeout_sec(phase),
+                created_at=organism.timestamp,
             )
+            for organism in organisms
+        ]
+        summaries = await orchestrator.evaluate_organisms(requests)
+        summary_by_id = {summary.organism_id: summary for summary in summaries}
 
-        result = await orchestrator.run()
+        for organism in organisms:
+            summary = summary_by_id.get(organism.organism_id)
+            if summary is None:
+                continue
 
-        # Map scores back to organisms
-        for summary in result.get("candidate_summaries", []):
-            cand_id = summary.get("candidate_id")
-            score = summary.get("aggregate_score")
-            for org in organisms:
-                if org.organism_id == cand_id:
-                    setattr(org, score_key, score)
-                    if org.score is None or (score is not None and score > org.score):
-                        org.score = score
-                    org.status = "evaluated"
-                    # Update on disk
-                    write_json(
-                        organism_meta_path(Path(org.organism_dir)),
-                        org.to_dict(),
-                    )
-                    break
+            if phase == "simple":
+                organism.simple_reward = summary.aggregate_score
+                organism.selection_reward = organism.simple_reward
+            elif phase == "hard":
+                organism.hard_reward = summary.aggregate_score
+                organism.selection_reward = organism.hard_reward
+            else:
+                raise ValueError(f"Unsupported phase '{phase}'")
+
+            organism.status = "evaluated" if summary.status in {"ok", "partial"} else "pending"
+            update_latest_lineage_entry(
+                organism,
+                phase=phase,
+                phase_score=summary.aggregate_score,
+                selected_experiments=summary.selected_experiments,
+            )
+            save_organism_artifacts(organism)
+            write_organism_meta(organism)
+            self._write_phase_summary(organism, summary)
+
+    def _write_phase_summary(
+        self,
+        organism: OrganismMeta,
+        summary: Any,
+    ) -> None:
+        existing = read_organism_summary(organism.organism_dir) or {}
+        phase_results = existing.get("phase_results", {})
+        if not isinstance(phase_results, dict):
+            phase_results = {}
+
+        phase_results[summary.phase] = {
+            "aggregate_score": summary.aggregate_score,
+            "experiments": summary.per_experiment,
+            "selected_experiments": summary.selected_experiments,
+            "allocation_snapshot": summary.allocation_snapshot,
+            "status": summary.status,
+            "created_at": summary.created_at,
+            "eval_finished_at": summary.eval_finished_at,
+            "error_msg": summary.error_msg,
+        }
+
+        payload = {
+            "organism_id": organism.organism_id,
+            "island_id": organism.island_id,
+            "generation_created": organism.generation_created,
+            "current_generation_active": organism.current_generation_active,
+            "operator": organism.operator,
+            "status": organism.status,
+            "simple_reward": organism.simple_reward,
+            "hard_reward": organism.hard_reward,
+            "selection_reward": organism.selection_reward,
+            "phase_results": phase_results,
+        }
+        write_organism_summary(organism.organism_dir, payload)
+
+    def _mark_eliminated(
+        self,
+        pool: list[OrganismMeta],
+        survivors: list[OrganismMeta],
+    ) -> None:
+        survivor_ids = {organism.organism_id for organism in survivors}
+        for organism in pool:
+            if organism.organism_id in survivor_ids:
+                continue
+            organism.status = "eliminated"
+            write_organism_meta(organism)
 
     async def run(self) -> dict[str, Any]:
-        """Execute the full multi-generation evolution."""
-        max_generations = int(self.evo_cfg.max_generations)
-        population_size = int(self.evo_cfg.population_size)
-        elite_count = int(self.evo_cfg.elite_count)
-        mutation_rate = float(self.evo_cfg.mutation_rate)
-        tournament_size = int(self.evo_cfg.tournament_size)
-        great_filter_interval = int(self.evo_cfg.great_filter_interval)
+        max_generations = int(self._require_cfg_value("evolver.max_generations"))
 
-        # Check for resume
         state = self._load_state()
-        if state is not None:
-            self.generation = state["current_generation"]
-            LOGGER.info("Resuming from generation %d", self.generation)
-            pop_dicts = load_population(self.population_root, self.generation)
-            self.population = [_dict_to_organism(d) for d in pop_dicts]
+        if state is not None and bool(self.evolver_cfg.get("resume", True)):
+            self.generation = int(state.get("current_generation", 0))
+            self.population = self._restore_population_from_manifest(self.generation)
         else:
-            # Generation 0: seed
-            LOGGER.info("Starting evolution: seeding %d organisms", population_size)
-            self.population = await self._seed_population(population_size)
-            await self._evaluate_organisms(
-                self.population, self.simple_experiments, score_key="simple_score"
-            )
+            self.generation = 0
+            newborns = await self._seed_initial_population()
+            await self._evaluate_phase(newborns, phase="simple")
+            self.population = select_top_k_per_island(newborns, self._simple_top_k(), score_field="simple_reward")
+            self._mark_eliminated(newborns, self.population)
             self._save_state()
 
-        for gen in range(self.generation + 1, max_generations + 1):
-            self.generation = gen
-            is_great_filter = (gen % great_filter_interval == 0)
+        for generation in range(self.generation + 1, max_generations + 1):
+            self.generation = generation
+            active_by_island = self._group_by_island(self.population)
 
-            LOGGER.info(
-                "=== Generation %d%s ===",
-                gen,
-                " [GREAT FILTER]" if is_great_filter else "",
-            )
+            offspring: list[OrganismMeta] = []
+            for island in self.islands:
+                offspring.extend(await self._reproduce_for_island(island, active_by_island))
 
-            # 1. Elitist selection
-            survivors = elite_select(
-                self.population, elite_count, score_key="simple_score"
+            await self._evaluate_phase(offspring, phase="simple")
+            candidate_pool = list(self.population) + offspring
+            simple_survivors = select_top_k_per_island(
+                candidate_pool,
+                self._simple_top_k(),
+                score_field="simple_reward",
             )
-            LOGGER.info(
-                "Selected %d elites (best score: %s)",
-                len(survivors),
-                survivors[0].score if survivors else "N/A",
-            )
+            self._mark_eliminated(candidate_pool, simple_survivors)
 
-            # 2. Reproduction
-            num_offspring = population_size - len(survivors)
-            if num_offspring > 0 and survivors:
-                reproduction_plan = select_parents_for_reproduction(
-                    survivors,
-                    num_offspring=num_offspring,
-                    mutation_rate=mutation_rate,
-                    tournament_size=tournament_size,
-                    rng=self.rng,
+            if self._should_run_great_filter(generation):
+                await self._evaluate_phase(simple_survivors, phase="hard")
+                self.population = select_top_h_per_island(
+                    simple_survivors,
+                    self._great_filter_top_h(),
+                    score_field="hard_reward",
                 )
-                offspring = await self._reproduce(reproduction_plan)
+                self._mark_eliminated(simple_survivors, self.population)
             else:
-                offspring = []
+                for organism in simple_survivors:
+                    organism.selection_reward = organism.simple_reward
+                    organism.current_generation_active = self.generation
+                    write_organism_meta(organism)
+                self.population = simple_survivors
 
-            # 3. New population
-            self.population = list(survivors) + offspring
-
-            # Fill gaps if some offspring failed
-            if len(self.population) < population_size:
-                gap = population_size - len(self.population)
-                LOGGER.info("Filling %d gaps with seed organisms", gap)
-                seeds = await self._seed_population(gap)
-                self.population.extend(seeds)
-
-            # 4. Evaluate on simple tasks
-            unevaluated = [o for o in self.population if o.simple_score is None]
-            if unevaluated:
-                await self._evaluate_organisms(
-                    unevaluated, self.simple_experiments, score_key="simple_score"
-                )
-
-            # 5. Great Filter
-            if is_great_filter:
-                LOGGER.info("Running Great Filter on %d organisms", len(self.population))
-                all_experiments = self.simple_experiments + self.hard_experiments
-                await self._evaluate_organisms(
-                    self.population, all_experiments, score_key="hard_score"
-                )
-
-                # Strict selection by hard_score
-                self.population = elite_select(
-                    self.population, elite_count, score_key="hard_score"
-                )
-                LOGGER.info(
-                    "Great Filter: %d survivors",
-                    len(self.population),
-                )
-
-                # Replenish with seeds
-                if len(self.population) < population_size:
-                    gap = population_size - len(self.population)
-                    new_seeds = await self._seed_population(gap)
-                    self.population.extend(new_seeds)
-
-            # 6. Save state
             self._save_state()
 
-        # Final summary
-        best = max(
-            self.population,
-            key=lambda o: o.score if o.score is not None else -float("inf"),
-        ) if self.population else None
-
-        summary = {
+        best = self._best_active_organism()
+        return {
             "total_generations": self.generation,
-            "final_population_size": len(self.population),
-            "best_organism_id": best.organism_id if best else None,
-            "best_score": best.score if best else None,
-            "best_optimizer_path": best.optimizer_path if best else None,
+            "active_population_size": len(self.population),
+            "best_organism_id": best.organism_id if best is not None else None,
+            "best_selection_reward": best.selection_reward if best is not None else None,
+            "best_optimizer_path": best.optimizer_path if best is not None else None,
         }
-        LOGGER.info("Evolution complete: %s", summary)
-        return summary

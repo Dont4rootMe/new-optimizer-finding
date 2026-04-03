@@ -1,4 +1,4 @@
-"""Light integration test for evolve pipeline with fake evaluator."""
+"""Canonical organism-first integration tests with the fake evaluator."""
 
 from __future__ import annotations
 
@@ -8,28 +8,38 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from src.evolve.orchestrator import EvolverOrchestrator
+from src.evolve.evolution_loop import EvolutionLoop
+from src.evolve.storage import read_json
 
 
-def test_evolve_pipeline_fake(tmp_path: Path) -> None:
+def _write_baseline(stats_root: Path, exp_name: str, objective_last: float = 1.0, steps: int = 10) -> None:
+    exp_dir = stats_root / exp_name
+    exp_dir.mkdir(parents=True, exist_ok=True)
+    (exp_dir / "baseline.json").write_text(
+        json.dumps(
+            {
+                "objective_name": "train_loss",
+                "objective_direction": "min",
+                "objective_last": objective_last,
+                "steps": steps,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> object:
     pop_root = tmp_path / "populations"
     stats_root = tmp_path / "stats"
-    for exp_name, objective_last, steps in (("exp_a", 1.0, 10), ("exp_b", 1.0, 10)):
-        exp_dir = stats_root / exp_name
-        exp_dir.mkdir(parents=True, exist_ok=True)
-        (exp_dir / "baseline.json").write_text(
-            json.dumps(
-                {
-                    "objective_name": "train_loss",
-                    "objective_direction": "min",
-                    "objective_last": objective_last,
-                    "steps": steps,
-                }
-            ),
-            encoding="utf-8",
-        )
+    islands_dir = tmp_path / "islands"
+    islands_dir.mkdir(parents=True, exist_ok=True)
+    (islands_dir / "gradient_methods.txt").write_text("Favor robust first-order methods.", encoding="utf-8")
+    (islands_dir / "second_order.txt").write_text("Favor curvature-aware preconditioning.", encoding="utf-8")
 
-    cfg = OmegaConf.create(
+    for exp_name in ("simple_a", "hard_b"):
+        _write_baseline(stats_root, exp_name)
+
+    return OmegaConf.create(
         {
             "mode": "evolve",
             "seed": 7,
@@ -52,45 +62,61 @@ def test_evolve_pipeline_fake(tmp_path: Path) -> None:
                 "optimizer_results_dirname": "results",
             },
             "experiments": {
-                "exp_a": {
+                "simple_a": {
                     "enabled": True,
-                    "primary_metric": {"direction": "max"},
-                    "normalization": {"quality_ref": 1.0, "steps_ref": 5.0, "eps": 1.0e-8},
+                    "primary_metric": {"direction": "min"},
+                    "normalization": {"eps": 1.0e-8},
                 },
-                "exp_b": {
+                "hard_b": {
                     "enabled": True,
-                    "primary_metric": {"direction": "max"},
-                    "normalization": {"quality_ref": 1.0, "steps_ref": 5.0, "eps": 1.0e-8},
+                    "primary_metric": {"direction": "min"},
+                    "normalization": {"eps": 1.0e-8},
                 },
             },
             "evolver": {
                 "enabled": True,
                 "generation": 0,
-                "num_candidates": 2,
-                "selection_strategy": "uniform",
-                "eval_experiments": ["exp_a", "exp_b"],
-                "eval_mode": "smoke",
-                "timeout_sec_per_eval": 60,
-                "max_retries_per_eval": 0,
+                "resume": resume,
+                "max_generations": max_generations,
                 "fail_fast": False,
-                "resume": False,
-                "force": False,
-                "max_proposal_jobs": 2,
-                "max_evaluation_jobs": None,
                 "max_generation_attempts": 1,
                 "eval_entrypoint_module": "tests.fixtures.fake_eval",
-                "allocation": {
-                    "enabled": True,
-                    "method": "neyman",
-                    "history_window": 10,
-                    "sample_size": 1,
-                    "min_history_for_variance": 2,
-                    "std_floor": 1.0e-6,
-                    "fallback": "uniform",
-                    "costs": {"exp_a": 1.0, "exp_b": 1.0},
+                "timeout_sec_per_eval": 60,
+                "max_retries_per_eval": 0,
+                "max_evaluation_jobs": 1,
+                "islands": {
+                    "dir": str(islands_dir),
+                    "organisms_per_island": 1,
+                    "inter_island_crossover_rate": 1.0,
                 },
-                "novelty_filter": {"enabled": False},
-                "bandit_llm_selection": {"enabled": False},
+                "operators": {
+                    "mutation": {
+                        "probability": 0.0,
+                        "gene_delete_probability": 0.2,
+                    },
+                    "crossover": {
+                        "inherit_gene_probability_from_mother": 0.7,
+                        "softmax_temperature": 1.0,
+                    },
+                },
+                "phases": {
+                    "simple": {
+                        "eval_mode": "smoke",
+                        "timeout_sec_per_eval": 60,
+                        "top_k_per_island": 1,
+                        "experiments": ["simple_a"],
+                        "allocation": {"enabled": False},
+                    },
+                    "great_filter": {
+                        "enabled": True,
+                        "interval_generations": 1,
+                        "eval_mode": "full",
+                        "timeout_sec_per_eval": 60,
+                        "top_h_per_island": 1,
+                        "experiments": ["hard_b"],
+                        "allocation": {"enabled": False},
+                    },
+                },
                 "llm": {
                     "provider": "mock",
                     "model": "mock-model",
@@ -104,38 +130,54 @@ def test_evolve_pipeline_fake(tmp_path: Path) -> None:
         }
     )
 
-    summary = asyncio.run(EvolverOrchestrator(cfg).run())
 
-    assert summary["requested_candidates"] == 2
-    assert summary["completed_candidates"] >= 2
+def test_canonical_organism_first_pipeline_fake(tmp_path: Path) -> None:
+    cfg = _canonical_cfg(tmp_path, max_generations=1, resume=False)
 
-    gen_dir = pop_root / "gen_0"
-    assert gen_dir.exists()
+    summary = asyncio.run(EvolutionLoop(cfg).run())
 
-    candidate_dirs = sorted(gen_dir.glob("cand_*"))
-    assert len(candidate_dirs) >= 2
+    assert summary["total_generations"] == 1
+    assert summary["active_population_size"] == 2
 
-    for cand_dir in candidate_dirs[:2]:
-        assert (cand_dir / "optimizer.py").exists()
-        assert (cand_dir / "summary.json").exists()
+    pop_root = Path(str(cfg.paths.population_root))
+    manifest = read_json(pop_root / "population_manifest.json")
+    assert manifest["generation"] == 1
+    assert len(manifest["active_organisms"]) == 2
 
-        result_files = sorted((cand_dir / "results").glob("*.json"))
-        assert len(result_files) == 1
+    active_dirs = [Path(entry["organism_dir"]) for entry in manifest["active_organisms"]]
+    for org_dir in active_dirs:
+        assert org_dir.exists()
+        assert (org_dir / "optimizer.py").exists()
+        assert (org_dir / "genetic_code.md").exists()
+        assert (org_dir / "lineage.json").exists()
+        assert (org_dir / "summary.json").exists()
 
-        summary_payload = json.loads((cand_dir / "summary.json").read_text(encoding="utf-8"))
-        selected = summary_payload.get("selected_experiments")
-        assert isinstance(selected, list)
-        assert len(selected) == 1
-        assert selected[0] in {"exp_a", "exp_b"}
-        assert summary_payload.get("status") == "ok"
+        summary_payload = read_json(org_dir / "summary.json")
+        phase_results = summary_payload["phase_results"]
+        assert list(phase_results["simple"]["selected_experiments"]) == ["simple_a"]
+        assert list(phase_results["hard"]["selected_experiments"]) == ["hard_b"]
+        assert phase_results["simple"]["allocation_snapshot"]["inclusion_prob"]["simple_a"] == 1.0
+        assert phase_results["hard"]["allocation_snapshot"]["inclusion_prob"]["hard_b"] == 1.0
+        assert summary_payload["simple_reward"] is not None
+        assert summary_payload["hard_reward"] is not None
+        assert summary_payload["selection_reward"] == summary_payload["hard_reward"]
 
-        allocation = summary_payload.get("allocation")
-        assert isinstance(allocation, dict)
-        pi = allocation.get("pi")
-        assert isinstance(pi, dict)
-        assert set(pi.keys()) == {"exp_a", "exp_b"}
 
-        exp_payload = summary_payload["experiments"][selected[0]]
-        assert exp_payload["quality_ratio"] is not None
-        assert exp_payload["steps_ratio"] is not None
-        assert exp_payload["exp_score"] is not None
+def test_canonical_multigeneration_resume_keeps_manifest_and_island_boundaries(tmp_path: Path) -> None:
+    cfg_first = _canonical_cfg(tmp_path, max_generations=1, resume=False)
+    asyncio.run(EvolutionLoop(cfg_first).run())
+
+    cfg_resume = _canonical_cfg(tmp_path, max_generations=2, resume=True)
+    summary = asyncio.run(EvolutionLoop(cfg_resume).run())
+
+    assert summary["total_generations"] == 2
+
+    pop_root = Path(str(cfg_resume.paths.population_root))
+    manifest = read_json(pop_root / "population_manifest.json")
+    assert manifest["generation"] == 2
+    assert {entry["island_id"] for entry in manifest["active_organisms"]} == {
+        "gradient_methods",
+        "second_order",
+    }
+    for entry in manifest["active_organisms"]:
+        assert "/island_" in entry["organism_dir"]

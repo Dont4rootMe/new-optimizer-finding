@@ -1,0 +1,54 @@
+Crossbreed these two organisms into one child.
+
+Inherited maternal-biased gene pool:
+{inherited_gene_pool}
+
+Mother genetic code:
+{mother_genetic_code}
+
+Mother rewards:
+- selection_reward: {mother_selection_reward}
+- simple_reward: {mother_simple_reward}
+- hard_reward: {mother_hard_reward}
+
+Mother lineage summary:
+{mother_lineage_summary}
+
+Mother editable code sections:
+## IMPORTS
+{mother_imports}
+
+## INIT_BODY
+{mother_init_body}
+
+## STEP_BODY
+{mother_step_body}
+
+## ZERO_GRAD_BODY
+{mother_zero_grad_body}
+
+Father genetic code:
+{father_genetic_code}
+
+Father rewards:
+- selection_reward: {father_selection_reward}
+- simple_reward: {father_simple_reward}
+- hard_reward: {father_hard_reward}
+
+Father lineage summary:
+{father_lineage_summary}
+
+Father editable code sections:
+## IMPORTS
+{father_imports}
+
+## INIT_BODY
+{father_init_body}
+
+## STEP_BODY
+{father_step_body}
+
+## ZERO_GRAD_BODY
+{father_zero_grad_body}
+
+Return a final child genetic code and implementation that meaningfully combines both parents while keeping maternal continuity explicit.

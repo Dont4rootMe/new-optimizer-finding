@@ -1,0 +1,33 @@
+Mutate this organism into a stronger child.
+
+Inherited gene pool:
+{inherited_gene_pool}
+
+Removed genes:
+{removed_gene_pool}
+
+Parent genetic code:
+{parent_genetic_code}
+
+Parent rewards:
+- selection_reward: {parent_selection_reward}
+- simple_reward: {parent_simple_reward}
+- hard_reward: {parent_hard_reward}
+
+Parent lineage summary:
+{parent_lineage_summary}
+
+Parent editable code sections:
+## IMPORTS
+{parent_imports}
+
+## INIT_BODY
+{parent_init_body}
+
+## STEP_BODY
+{parent_step_body}
+
+## ZERO_GRAD_BODY
+{parent_zero_grad_body}
+
+Return a final child genetic code and implementation. Keep what works, remove weak ideas, and make the mutation concrete.

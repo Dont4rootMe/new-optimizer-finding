@@ -1,66 +1,78 @@
 enabled: true
 generation: 0
-num_candidates: 8
-selection_strategy: uniform
-eval_experiments: [cifar_convnet, minigpt_wikitext2]
-eval_mode: smoke
-timeout_sec_per_eval: 7200
-max_retries_per_eval: 0
-fail_fast: false
 resume: true
-force: false
-max_proposal_jobs: 4
-max_evaluation_jobs: null
+fail_fast: false
+max_generations: 100
 max_generation_attempts: 3
 
 eval_entrypoint_module: src.validate.run_one
+timeout_sec_per_eval: 7200
+max_retries_per_eval: 0
+max_proposal_jobs: 4
+max_evaluation_jobs: null
 
-evolution:
-  max_generations: 100
-  population_size: 20
-  elite_count: 5
-  mutation_rate: 0.7
-  crossover_rate: 0.3
-  tournament_size: 3
-  great_filter_interval: 5
-  crossover_p: 0.7
-  mutation_q: 0.2
+prompts:
+  project_context: conf/prompts/shared/project_context.txt
+  seed_system: conf/prompts/seed/system.txt
+  seed_user: conf/prompts/seed/user.txt
+  mutation_system: conf/prompts/mutation/system.txt
+  mutation_user: conf/prompts/mutation/user.txt
+  crossover_system: conf/prompts/crossover/system.txt
+  crossover_user: conf/prompts/crossover/user.txt
 
-evaluation:
-  simple_experiments: [synthetic_logreg, mnist_mlp, poly_regression, rosenbrock_net, xor_mlp, sin_regression, matrix_factorization, tiny_autoencoder, two_spirals, linear_denoiser, conv1d_classify, quadratic_bowl]
-  hard_experiments: [cifar_convnet, audio_transformer, minigpt_wikitext2, ddpm_cifar10, lora_sft]
+islands:
+  dir: conf/prompts/islands
+  organisms_per_island: 5
+  inter_island_crossover_rate: 0.1
 
-  simple_allocation:
+operators:
+  mutation:
+    probability: 0.5
+    gene_delete_probability: 0.2
+  crossover:
+    inherit_gene_probability_from_mother: 0.7
+    softmax_temperature: 1.0
+
+phases:
+  simple:
+    eval_mode: smoke
+    timeout_sec_per_eval: 7200
+    top_k_per_island: 5
+    experiments:
+      - synthetic_logreg
+      - mnist_mlp
+      - poly_regression
+      - rosenbrock_net
+      - xor_mlp
+      - sin_regression
+      - matrix_factorization
+      - tiny_autoencoder
+      - two_spirals
+      - linear_denoiser
+      - conv1d_classify
+      - quadratic_bowl
+    allocation:
+      enabled: true
+      method: neyman
+      sample_size: 2
+      history_window: 100
+      min_history_for_variance: 3
+      std_floor: 1.0e-6
+      fallback: uniform
+  great_filter:
     enabled: true
-    method: neyman
-    sample_size: 2
-    history_window: 100
-    min_history_for_variance: 3
-    std_floor: 1.0e-6
-
-  hard_allocation:
-    enabled: false
-
-allocation:
-  enabled: true
-  method: neyman
-  history_window: 100
-  sample_size: 2
-  min_history_for_variance: 3
-  std_floor: 1.0e-6
-  fallback: uniform
-  costs:
-    cifar_convnet: 1.0
-    minigpt_wikitext2: 1.0
-  score_weights:
-    quality: 0.7
-    steps: 0.3
-
-novelty_filter:
-  enabled: false
-
-bandit_llm_selection:
-  enabled: false
+    interval_generations: 5
+    eval_mode: full
+    timeout_sec_per_eval: 7200
+    top_h_per_island: 3
+    experiments:
+      - cifar_convnet
+      - audio_transformer
+      - minigpt_wikitext2
+      - ddpm_cifar10
+      - lora_sft
+    allocation:
+      enabled: false
 
 llm:
   provider: chatgpt

@@ -1,0 +1,8 @@
+Create a seed organism for this research island.
+
+Island id: {island_id}
+Island name: {island_name}
+Island description:
+{island_description}
+
+Produce an optimizer whose genetic code clearly reflects this island's school of thought while remaining robust and computationally disciplined.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from omegaconf import DictConfig
 
-from valopt.schemas import OptionalDependencyError
+from optbench.schemas import OptionalDependencyError
 
 
 def build_model(cfg: DictConfig):

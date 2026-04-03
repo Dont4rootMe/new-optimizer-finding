@@ -42,3 +42,19 @@ def test_hydra_compose_config_and_experiments() -> None:
         assert "enabled" in cfg.experiments[exp_name]
         assert "run_validation" in cfg.experiments[exp_name]
         assert "normalization" in cfg.experiments[exp_name]
+        assert "quality_ref" not in cfg.experiments[exp_name].normalization
+        assert "steps_ref" not in cfg.experiments[exp_name].normalization
+
+    assert "selection_strategy" not in cfg.evolver
+    assert "eval_experiments" not in cfg.evolver
+    assert "evaluation" not in cfg.evolver
+    assert "parent_sampling" not in cfg.evolver.operators.mutation
+    assert "parent_sampling" not in cfg.evolver.operators.crossover
+    assert cfg.evolver.max_generations == 100
+    assert cfg.evolver.islands.dir == "conf/prompts/islands"
+    assert cfg.evolver.islands.organisms_per_island == 5
+    assert cfg.evolver.operators.mutation.probability == 0.5
+    assert cfg.evolver.phases.simple.eval_mode == "smoke"
+    assert cfg.evolver.phases.simple.timeout_sec_per_eval == 7200
+    assert cfg.evolver.phases.great_filter.eval_mode == "full"
+    assert cfg.evolver.phases.great_filter.timeout_sec_per_eval == 7200

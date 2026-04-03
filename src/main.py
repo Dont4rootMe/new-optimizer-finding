@@ -24,7 +24,7 @@ def main(cfg: DictConfig) -> None:
         run_evolution(cfg)
         return
 
-    from valopt.runner import ExperimentRunner
+    from optbench.runner import ExperimentRunner
 
     ExperimentRunner(cfg).run()
 

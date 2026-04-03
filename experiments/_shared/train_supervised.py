@@ -13,16 +13,16 @@ import torch
 import torch.nn as nn
 from omegaconf import DictConfig
 
-from valopt.utils.optimizer_runtime import (
+from optbench.utils.optimizer_runtime import (
     ActivationRecorder,
     StepBudget,
     collect_named_trainable_parameters,
     collect_step_tensors,
 )
-from valopt.utils.safety import check_params_finite, grad_norm, loss_is_finite
-from valopt.utils.objective_tracking import TrainObjectiveTracker
-from valopt.utils.seed import set_seed
-from valopt.utils.timer import WallTimer
+from optbench.utils.safety import check_params_finite, grad_norm, loss_is_finite
+from optbench.utils.objective_tracking import TrainObjectiveTracker
+from optbench.utils.seed import set_seed
+from optbench.utils.timer import WallTimer
 
 from .metrics import compute_primary, is_target_reached
 

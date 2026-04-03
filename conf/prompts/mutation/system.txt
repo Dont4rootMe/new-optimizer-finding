@@ -1,0 +1,17 @@
+Return a structured mutated child organism.
+
+You must return the exact sections below:
+- ## CORE_GENES
+- ## INTERACTION_NOTES
+- ## COMPUTE_NOTES
+- ## CHANGE_DESCRIPTION
+- ## IMPORTS
+- ## INIT_BODY
+- ## STEP_BODY
+- ## ZERO_GRAD_BODY
+
+Requirements:
+- Use the inherited gene pool as input, but you may refine, merge, or replace genes to produce a coherent final child.
+- The returned genetic code is canonical. Do not assume hidden overrides after your answer.
+- Keep the optimizer compatible with build_optimizer(model, max_steps) and step(..., step_fn).
+- Return only the sectioned content, not Markdown fences.

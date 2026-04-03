@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from valopt.schemas import RunResult, validate_run_result_dict
+from optbench.schemas import RunResult, validate_run_result_dict
 
 
 def test_result_schema_validation() -> None:

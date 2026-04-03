@@ -1,0 +1,1 @@
+Focus on reliable first-order gradient methods. Favor stable momentum handling, robust scheduling, clipping or normalization when justified, and budget-aware improvements that help on noisy tasks without expensive inner loops.

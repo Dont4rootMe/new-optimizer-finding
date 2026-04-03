@@ -1,0 +1,60 @@
+"""Tests for config-driven prompt bundle loading."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from omegaconf import OmegaConf
+
+from src.evolve.prompt_utils import compose_system_prompt, load_prompt_bundle
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_load_prompt_bundle_from_default_conf_assets() -> None:
+    cfg = OmegaConf.create({"evolver": {"llm": {"provider": "mock"}}})
+
+    bundle = load_prompt_bundle(cfg)
+
+    assert "island-based optimizer discovery program" in bundle.project_context
+    assert "## CORE_GENES" in bundle.seed_system
+    assert "{island_description}" in bundle.seed_user
+
+
+def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
+    prompts_dir = tmp_path / "prompts"
+    files = {
+        "shared/project_context.txt": "project context",
+        "seed/system.txt": "seed system",
+        "seed/user.txt": "seed user",
+        "mutation/system.txt": "mutation system",
+        "mutation/user.txt": "mutation user",
+        "crossover/system.txt": "crossover system",
+        "crossover/user.txt": "crossover user",
+    }
+    for relative_path, contents in files.items():
+        target = prompts_dir / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(contents, encoding="utf-8")
+
+    cfg = OmegaConf.create(
+        {
+            "evolver": {
+                "prompts": {
+                    "project_context": str(prompts_dir / "shared" / "project_context.txt"),
+                    "seed_system": str(prompts_dir / "seed" / "system.txt"),
+                    "seed_user": str(prompts_dir / "seed" / "user.txt"),
+                    "mutation_system": str(prompts_dir / "mutation" / "system.txt"),
+                    "mutation_user": str(prompts_dir / "mutation" / "user.txt"),
+                    "crossover_system": str(prompts_dir / "crossover" / "system.txt"),
+                    "crossover_user": str(prompts_dir / "crossover" / "user.txt"),
+                }
+            }
+        }
+    )
+
+    bundle = load_prompt_bundle(cfg)
+
+    assert bundle.project_context == "project context"
+    assert bundle.crossover_user == "crossover user"
+    assert compose_system_prompt(bundle.project_context, bundle.seed_system) == "project context\n\nseed system"

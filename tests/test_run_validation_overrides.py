@@ -6,7 +6,7 @@ from pathlib import Path
 
 from hydra import compose, initialize_config_dir
 
-from valopt.runner import ExperimentRunner
+from optbench.runner import ExperimentRunner
 
 ROOT = Path(__file__).resolve().parents[1]
 

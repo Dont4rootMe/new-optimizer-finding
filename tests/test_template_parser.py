@@ -46,10 +46,61 @@ def test_validate_rendered_code_syntax_error() -> None:
     assert "Syntax error" in error
 
 
+def test_validate_rendered_code_rejects_legacy_builder_contract() -> None:
+    code = """
+class LegacyOpt:
+    def __init__(self, cfg):
+        self.cfg = cfg
+
+    def step(self, weights, grads, activations, step_fn):
+        del weights, grads, activations, step_fn
+
+    def zero_grad(self, set_to_none=True):
+        del set_to_none
+
+
+def build_optimizer(cfg):
+    return LegacyOpt(cfg)
+"""
+    ok, error = validate_rendered_code(code)
+    assert not ok
+    assert "build_optimizer" in str(error)
+
+
+def test_validate_rendered_code_rejects_missing_step_fn() -> None:
+    code = """
+class InvalidOpt:
+    def __init__(self, model, max_steps):
+        self.model = model
+        self.max_steps = max_steps
+
+    def step(self, weights, grads, activations):
+        del weights, grads, activations
+
+    def zero_grad(self, set_to_none=True):
+        del set_to_none
+
+
+def build_optimizer(model, max_steps):
+    return InvalidOpt(model, max_steps)
+"""
+    ok, error = validate_rendered_code(code)
+    assert not ok
+    assert "step(self, weights, grads, activations, step_fn)" in str(error)
+
+
 def test_parse_llm_response_sections() -> None:
     text = (
-        "## IDEA_DNA\n"
-        "momentum; warmup\n"
+        "## CORE_GENES\n"
+        "- momentum schedule\n"
+        "- warmup controller\n"
+        "- gradient clipping\n"
+        "\n"
+        "## INTERACTION_NOTES\n"
+        "Momentum and warmup stay synchronized.\n"
+        "\n"
+        "## COMPUTE_NOTES\n"
+        "No extra closure calls.\n"
         "\n"
         "## CHANGE_DESCRIPTION\n"
         "Added momentum with warmup phase.\n"
@@ -68,7 +119,9 @@ def test_parse_llm_response_sections() -> None:
     )
     parsed = parse_llm_response(text)
 
-    assert parsed["IDEA_DNA"] == "momentum; warmup"
+    assert "momentum schedule" in parsed["CORE_GENES"]
+    assert "Momentum and warmup" in parsed["INTERACTION_NOTES"]
+    assert "No extra closure calls" in parsed["COMPUTE_NOTES"]
     assert "momentum" in parsed["CHANGE_DESCRIPTION"]
     assert "import math" in parsed["IMPORTS"]
     assert "self.model = model" in parsed["INIT_BODY"]

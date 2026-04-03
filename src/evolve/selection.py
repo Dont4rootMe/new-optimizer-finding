@@ -1,76 +1,95 @@
-"""Selection operators for the evolutionary pipeline."""
+"""Canonical selection operators for organism-first evolution."""
 
 from __future__ import annotations
 
-import random
-from typing import Any
+import math
+from collections import defaultdict
 
 from src.evolve.types import OrganismMeta
+import random
 
 
-def tournament_select(
+def uniform_select_organisms(
     population: list[OrganismMeta],
     k: int,
-    tournament_size: int = 3,
-    score_key: str = "score",
     rng: random.Random | None = None,
 ) -> list[OrganismMeta]:
-    """Tournament selection: pick k winners from population.
+    """Uniform parent sampling with replacement."""
 
-    Each tournament draws tournament_size individuals and keeps the best.
-    """
-    if not population:
+    if not population or k <= 0:
         return []
     rng = rng or random.Random()
-    winners: list[OrganismMeta] = []
-    for _ in range(k):
-        contestants = rng.choices(population, k=min(tournament_size, len(population)))
-        best = max(contestants, key=lambda org: getattr(org, score_key) or -float("inf"))
-        winners.append(best)
-    return winners
+    return [rng.choice(population) for _ in range(k)]
 
 
-def elite_select(
+def softmax_select_organisms(
     population: list[OrganismMeta],
-    elite_count: int,
-    score_key: str = "score",
-) -> list[OrganismMeta]:
-    """Elitist selection: top-N by score."""
-    scored = [org for org in population if getattr(org, score_key) is not None]
-    scored.sort(key=lambda org: getattr(org, score_key), reverse=True)
-    return scored[:elite_count]
-
-
-def select_parents_for_reproduction(
-    survivors: list[OrganismMeta],
-    num_offspring: int,
-    mutation_rate: float = 0.7,
-    tournament_size: int = 3,
+    score_field: str = "selection_reward",
+    temperature: float = 1.0,
+    k: int = 1,
     rng: random.Random | None = None,
-) -> list[tuple[str, list[OrganismMeta]]]:
-    """Build a reproduction plan: list of (operator_name, [parents]).
+) -> list[OrganismMeta]:
+    """Softmax sampling over a score field with deterministic uniform fallback."""
 
-    mutation_rate fraction of offspring are produced by mutation (1 parent),
-    the rest by crossover (2 parents).
-    """
-    if not survivors:
+    if not population or k <= 0:
         return []
 
     rng = rng or random.Random()
-    plan: list[tuple[str, list[OrganismMeta]]] = []
+    temperature = max(float(temperature), 1.0e-8)
 
-    for _ in range(num_offspring):
-        if rng.random() < mutation_rate or len(survivors) < 2:
-            parent = tournament_select(survivors, k=1, tournament_size=tournament_size, rng=rng)[0]
-            plan.append(("mutation", [parent]))
-        else:
-            parent_a = tournament_select(survivors, k=1, tournament_size=tournament_size, rng=rng)[0]
-            parent_b = tournament_select(survivors, k=1, tournament_size=tournament_size, rng=rng)[0]
-            # Avoid self-crossover when possible
-            if parent_a.organism_id == parent_b.organism_id and len(survivors) >= 2:
-                others = [s for s in survivors if s.organism_id != parent_a.organism_id]
-                if others:
-                    parent_b = rng.choice(others)
-            plan.append(("crossover", [parent_a, parent_b]))
+    raw_scores = [getattr(org, score_field) for org in population]
+    finite_scores = [
+        float(score) for score in raw_scores if score is not None and math.isfinite(float(score))
+    ]
+    if not finite_scores:
+        return uniform_select_organisms(population, k=k, rng=rng)
 
-    return plan
+    max_score = max(finite_scores)
+    weights: list[float] = []
+    for score in raw_scores:
+        if score is None:
+            weights.append(0.0)
+            continue
+        try:
+            normalized = (float(score) - max_score) / temperature
+            weights.append(math.exp(normalized))
+        except (TypeError, ValueError, OverflowError):
+            weights.append(0.0)
+
+    if sum(weights) <= 0:
+        return uniform_select_organisms(population, k=k, rng=rng)
+    return rng.choices(population=population, weights=weights, k=k)
+
+
+def _group_by_island(population: list[OrganismMeta]) -> dict[str, list[OrganismMeta]]:
+    grouped: dict[str, list[OrganismMeta]] = defaultdict(list)
+    for organism in population:
+        grouped[organism.island_id].append(organism)
+    return dict(grouped)
+
+
+def select_top_k_per_island(
+    population: list[OrganismMeta],
+    k: int,
+    score_field: str = "simple_reward",
+) -> list[OrganismMeta]:
+    """Select top-k organisms independently inside each island."""
+
+    selected: list[OrganismMeta] = []
+    for island_population in _group_by_island(population).values():
+        island_scored = [
+            organism for organism in island_population if getattr(organism, score_field) is not None
+        ]
+        island_scored.sort(key=lambda organism: getattr(organism, score_field), reverse=True)
+        selected.extend(island_scored[: max(0, int(k))])
+    return selected
+
+
+def select_top_h_per_island(
+    population: list[OrganismMeta],
+    h: int,
+    score_field: str = "hard_reward",
+) -> list[OrganismMeta]:
+    """Select top-h organisms independently inside each island."""
+
+    return select_top_k_per_island(population, k=h, score_field=score_field)

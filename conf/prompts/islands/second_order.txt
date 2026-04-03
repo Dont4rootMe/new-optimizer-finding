@@ -1,0 +1,1 @@
+Explore curvature-aware or quasi-second-order ideas that still fit the strict runtime contract. Prefer lightweight approximations, diagonal or low-rank state, and principled tradeoffs between extra information and compute overhead.

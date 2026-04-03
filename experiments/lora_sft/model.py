@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from omegaconf import DictConfig
 
-from valopt.schemas import OptionalDependencyError
+from optbench.schemas import OptionalDependencyError
 
 
 def _dtype_from_precision(precision: str) -> torch.dtype:

@@ -1,4 +1,4 @@
-"""Neyman allocation helpers for partial benchmark evaluation."""
+"""Canonical Neyman allocation helpers for honest subset evaluation."""
 
 from __future__ import annotations
 
@@ -7,7 +7,10 @@ import random
 from statistics import mean, stdev
 from typing import Any
 
-from src.evolve.storage import load_recent_experiment_scores
+from src.evolve.storage import (
+    load_recent_legacy_candidate_experiment_scores,
+    load_recent_organism_experiment_scores,
+)
 
 
 def _safe_float(value: Any, default: float) -> float:
@@ -43,11 +46,7 @@ def compute_experiment_stats(
         values = history.get(exp_name, [])
         n = len(values)
         mean_value = float(mean(values)) if values else 0.0
-        if n >= 2:
-            std_value = float(stdev(values))
-        else:
-            std_value = std_floor
-
+        std_value = float(stdev(values)) if n >= 2 else std_floor
         stats[exp_name] = {
             "mean": mean_value,
             "std": max(std_value, std_floor),
@@ -58,13 +57,13 @@ def compute_experiment_stats(
     return stats
 
 
-def compute_neyman_pi(
+def compute_neyman_weights(
     stats: dict[str, dict[str, float | int]],
     min_history_for_variance: int,
     std_floor: float,
     fallback: str,
 ) -> dict[str, float]:
-    """Compute Neyman allocation probabilities with fallback behavior."""
+    """Compute normalized Neyman weights `w_i ∝ std_i / sqrt(cost_i)`."""
 
     experiments = list(stats.keys())
     if not experiments:
@@ -89,36 +88,70 @@ def compute_neyman_pi(
     return {exp_name: raw_weights[exp_name] / total_weight for exp_name in experiments}
 
 
-def sample_experiments_without_replacement(
-    experiments: list[str],
-    pi: dict[str, float],
+def compute_inclusion_probabilities(
+    weights: dict[str, float],
     sample_size: int,
+) -> dict[str, float]:
+    """Compute Poisson-style inclusion probabilities `q_i = min(1, m * w_i)`."""
+
+    clamped_sample_size = max(1, int(sample_size))
+    return {
+        exp_name: min(1.0, max(0.0, clamped_sample_size * float(weight)))
+        for exp_name, weight in weights.items()
+    }
+
+
+def compute_nonempty_probability(inclusion_prob: dict[str, float]) -> float:
+    """Compute `P(sample != emptyset)` for independent Bernoulli draws."""
+
+    prob_all_skipped = 1.0
+    for q_i in inclusion_prob.values():
+        prob_all_skipped *= 1.0 - max(0.0, min(1.0, _safe_float(q_i, 0.0)))
+    return max(0.0, min(1.0, 1.0 - prob_all_skipped))
+
+
+def compute_conditional_inclusion_probabilities(
+    inclusion_prob: dict[str, float],
+    nonempty_probability: float,
+) -> dict[str, float]:
+    """Condition first-order inclusion probabilities on the sample being non-empty."""
+
+    p_nonempty = _safe_float(nonempty_probability, 0.0)
+    if p_nonempty <= 0.0:
+        raise ValueError("Conditional Poisson sampling requires positive non-empty probability.")
+    return {
+        exp_name: max(0.0, min(1.0, _safe_float(q_i, 0.0) / p_nonempty))
+        for exp_name, q_i in inclusion_prob.items()
+    }
+
+
+def sample_experiments_poisson(
+    experiments: list[str],
+    inclusion_prob: dict[str, float],
     seed: int,
 ) -> list[str]:
-    """Weighted sampling without replacement from experiment names."""
+    """Sample from the Poisson design conditioned on a non-empty subset."""
 
     if not experiments:
         return []
 
-    sample_size = max(1, min(sample_size, len(experiments)))
-    if sample_size >= len(experiments):
-        return list(experiments)
-
     rng = random.Random(seed)
-    available = list(experiments)
-    selected: list[str] = []
+    while True:
+        selected = [
+            exp_name
+            for exp_name in experiments
+            if rng.random() < max(0.0, min(1.0, _safe_float(inclusion_prob.get(exp_name, 0.0), 0.0)))
+        ]
+        if selected:
+            return selected
 
-    while available and len(selected) < sample_size:
-        weights = [max(_safe_float(pi.get(exp_name, 0.0), 0.0), 0.0) for exp_name in available]
-        total = sum(weights)
-        if total <= 0:
-            pick = rng.choice(available)
-        else:
-            pick = rng.choices(population=available, weights=weights, k=1)[0]
-        selected.append(pick)
-        available.remove(pick)
 
-    return selected
+def _history_loader(history_source: str):
+    if history_source == "organism":
+        return load_recent_organism_experiment_scores
+    if history_source == "legacy_candidate":
+        return load_recent_legacy_candidate_experiment_scores
+    raise ValueError(f"Unsupported allocation history source '{history_source}'")
 
 
 def build_allocation_snapshot(
@@ -126,9 +159,10 @@ def build_allocation_snapshot(
     experiments: list[str],
     allocation_cfg: Any,
     seed: int,
-    candidate_id: str,
+    entity_id: str,
+    history_source: str = "organism",
 ) -> dict[str, Any]:
-    """Build one allocation snapshot for a candidate."""
+    """Build an allocation snapshot with explicit Neyman weights and inclusion probabilities."""
 
     if not experiments:
         raise ValueError("Allocation requires at least one experiment.")
@@ -147,12 +181,11 @@ def build_allocation_snapshot(
     if not isinstance(costs, dict):
         costs = {}
 
-    history = load_recent_experiment_scores(
+    history = _history_loader(history_source)(
         population_root=population_root,
         experiments=experiments,
         history_window=history_window,
     )
-
     stats = compute_experiment_stats(
         history=history,
         experiments=experiments,
@@ -160,22 +193,32 @@ def build_allocation_snapshot(
         std_floor=std_floor,
     )
 
-    if not enabled or sample_size >= len(experiments) or method != "neyman":
+    if not enabled or method != "neyman" or sample_size >= len(experiments):
         uniform = 1.0 / float(len(experiments))
-        pi = {exp_name: uniform for exp_name in experiments}
+        weights = {exp_name: uniform for exp_name in experiments}
+        base_inclusion_prob = {exp_name: 1.0 for exp_name in experiments}
+        inclusion_prob = {exp_name: 1.0 for exp_name in experiments}
+        sampling_design = "full_evaluation"
+        prob_nonempty = 1.0
         selected_experiments = list(experiments)
     else:
-        pi = compute_neyman_pi(
+        weights = compute_neyman_weights(
             stats=stats,
             min_history_for_variance=min_history,
             std_floor=std_floor,
             fallback=fallback,
         )
-        deterministic_seed = int(seed) + sum(ord(ch) for ch in candidate_id)
-        selected_experiments = sample_experiments_without_replacement(
+        base_inclusion_prob = compute_inclusion_probabilities(weights, sample_size=sample_size)
+        prob_nonempty = compute_nonempty_probability(base_inclusion_prob)
+        inclusion_prob = compute_conditional_inclusion_probabilities(
+            base_inclusion_prob,
+            nonempty_probability=prob_nonempty,
+        )
+        sampling_design = "conditional_poisson_nonempty"
+        deterministic_seed = int(seed) + sum(ord(ch) for ch in entity_id)
+        selected_experiments = sample_experiments_poisson(
             experiments=experiments,
-            pi=pi,
-            sample_size=sample_size,
+            inclusion_prob=base_inclusion_prob,
             seed=deterministic_seed,
         )
 
@@ -184,7 +227,11 @@ def build_allocation_snapshot(
         "enabled": enabled,
         "history_window": history_window,
         "sample_size": sample_size,
-        "pi": pi,
+        "sampling_design": sampling_design,
+        "weights": weights,
+        "base_inclusion_prob": base_inclusion_prob,
+        "prob_nonempty": prob_nonempty,
+        "inclusion_prob": inclusion_prob,
         "stats": stats,
         "selected_experiments": selected_experiments,
     }

@@ -4,9 +4,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from src.evolve.types import ManifestEntry, OrganismMeta
+
+LOGGER = logging.getLogger(__name__)
+
+_LEGACY_FLAT_ISLAND = "legacy_flat_population"
+_GENERATION_RE = re.compile(r"^gen_(\d+)$")
+_SECTION_RE = re.compile(
+    r"^##\s+(CORE_GENES|INTERACTION_NOTES|COMPUTE_NOTES)\s*$",
+    re.MULTILINE,
+)
 
 
 def utc_now_iso() -> str:
@@ -23,7 +36,7 @@ def ensure_dir(path: str | Path) -> Path:
     return out
 
 
-def write_json(path: str | Path, payload: dict[str, Any]) -> Path:
+def write_json(path: str | Path, payload: Any) -> Path:
     """Write JSON payload with stable formatting."""
 
     out = Path(path)
@@ -32,7 +45,7 @@ def write_json(path: str | Path, payload: dict[str, Any]) -> Path:
     return out
 
 
-def read_json(path: str | Path) -> dict[str, Any]:
+def read_json(path: str | Path) -> Any:
     """Read JSON payload from path."""
 
     return json.loads(Path(path).read_text(encoding="utf-8"))
@@ -54,10 +67,48 @@ def sha1_text(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()
 
 
+def _generation_dir_name(generation: int) -> str:
+    return f"gen_{int(generation):04d}"
+
+
 def generation_dir(population_root: str | Path, generation: int) -> Path:
     """Path for one generation directory."""
 
-    return ensure_dir(Path(population_root) / f"gen_{generation}")
+    return ensure_dir(Path(population_root) / _generation_dir_name(generation))
+
+
+def _generation_sort_key(path: Path) -> tuple[int, str]:
+    match = _GENERATION_RE.match(path.name)
+    if match is None:
+        return (-1, path.name)
+    try:
+        return (int(match.group(1)), path.name)
+    except ValueError:
+        return (-1, path.name)
+
+
+def resolve_generation_dir(population_root: str | Path, generation: int) -> Path:
+    """Resolve a generation dir with backward-compatible support for `gen_N` names."""
+
+    root = Path(population_root)
+    canonical = root / _generation_dir_name(generation)
+    if canonical.exists():
+        return canonical
+
+    legacy = root / f"gen_{int(generation)}"
+    if legacy.exists():
+        LOGGER.warning("Using legacy generation directory layout at %s", legacy)
+        return legacy
+
+    return canonical
+
+
+def list_generation_dirs(population_root: str | Path) -> list[Path]:
+    root = Path(population_root)
+    if not root.exists():
+        return []
+    dirs = [item for item in root.iterdir() if item.is_dir() and _GENERATION_RE.match(item.name)]
+    return sorted(dirs, key=_generation_sort_key)
 
 
 def candidate_dir(gen_dir: str | Path, candidate_id: str) -> Path:
@@ -125,54 +176,555 @@ def missing_experiments(cand_dir: str | Path, experiments: list[str]) -> list[st
     return [exp_name for exp_name in experiments if not result_path(cand_dir, exp_name).exists()]
 
 
-def organism_dir(gen_dir: Path, organism_id: str) -> Path:
-    """Create and return organism directory."""
-    d = gen_dir / f"org_{organism_id}"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+def organism_dir(
+    gen_dir: str | Path,
+    organism_id: str,
+    island_id: str = _LEGACY_FLAT_ISLAND,
+) -> Path:
+    """Create and return organism directory with canonical island nesting."""
+
+    base = ensure_dir(Path(gen_dir) / f"island_{island_id}" / f"org_{organism_id}")
+    ensure_dir(base / "results" / "simple")
+    ensure_dir(base / "results" / "hard")
+    ensure_dir(base / "logs")
+    return base
 
 
-def idea_dna_path(org_dir: Path) -> Path:
-    return org_dir / "idea_dna.txt"
+def genetic_code_path(org_dir: str | Path) -> Path:
+    return Path(org_dir) / "genetic_code.md"
 
 
-def evolution_log_path(org_dir: Path) -> Path:
-    return org_dir / "evolution_log.json"
+def lineage_path(org_dir: str | Path) -> Path:
+    return Path(org_dir) / "lineage.json"
 
 
-def organism_meta_path(org_dir: Path) -> Path:
-    return org_dir / "organism.json"
+def organism_meta_path(org_dir: str | Path) -> Path:
+    return Path(org_dir) / "organism.json"
+
+
+def organism_summary_path(org_dir: str | Path) -> Path:
+    return Path(org_dir) / "summary.json"
+
+
+def phase_result_path(org_dir: str | Path, phase: str, experiment_name: str) -> Path:
+    return Path(org_dir) / "results" / phase / f"{experiment_name}.json"
+
+
+def phase_stdout_path(org_dir: str | Path, phase: str, experiment_name: str) -> Path:
+    return Path(org_dir) / "logs" / f"{phase}_{experiment_name}.out"
+
+
+def phase_stderr_path(org_dir: str | Path, phase: str, experiment_name: str) -> Path:
+    return Path(org_dir) / "logs" / f"{phase}_{experiment_name}.err"
+
+
+def population_manifest_path(population_root: str | Path) -> Path:
+    return Path(population_root) / "population_manifest.json"
+
+
+def _coerce_manifest_entry(entry: OrganismMeta | dict[str, Any]) -> ManifestEntry:
+    if isinstance(entry, OrganismMeta):
+        return {
+            "organism_id": entry.organism_id,
+            "island_id": entry.island_id,
+            "organism_dir": entry.organism_dir,
+            "generation_created": entry.generation_created,
+            "current_generation_active": entry.current_generation_active,
+            "simple_reward": entry.simple_reward,
+            "hard_reward": entry.hard_reward,
+            "selection_reward": entry.selection_reward,
+        }
+
+    return {
+        "organism_id": str(entry["organism_id"]),
+        "island_id": str(entry.get("island_id", _LEGACY_FLAT_ISLAND)),
+        "organism_dir": str(entry["organism_dir"]),
+        "generation_created": int(entry.get("generation_created", entry.get("generation", 0))),
+        "current_generation_active": int(
+            entry.get("current_generation_active", entry.get("generation", 0))
+        ),
+        "simple_reward": entry.get("simple_reward", entry.get("simple_score")),
+        "hard_reward": entry.get("hard_reward", entry.get("hard_score")),
+        "selection_reward": entry.get("selection_reward", entry.get("score")),
+    }
+
+
+def write_population_manifest(
+    population_root: str | Path,
+    generation: int,
+    organisms: list[OrganismMeta | dict[str, Any]],
+) -> Path:
+    payload = {
+        "generation": int(generation),
+        "active_organisms": [_coerce_manifest_entry(entry) for entry in organisms],
+    }
+    return write_json(population_manifest_path(population_root), payload)
+
+
+def _coerce_int_field(value: Any, field_name: str, *, path: Path) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"JSON payload at {path} contains non-int {field_name}: {value!r}") from exc
+
+
+def _validate_manifest_entry(
+    entry: Any,
+    *,
+    idx: int,
+    path: Path,
+    seen_ids: set[str],
+    seen_dirs: set[str],
+) -> ManifestEntry:
+    if not isinstance(entry, dict):
+        raise ValueError(f"Population manifest at {path} entry #{idx} must be a JSON object.")
+
+    organism_id = str(entry.get("organism_id", "")).strip()
+    if not organism_id:
+        raise ValueError(f"Population manifest at {path} entry #{idx} is missing organism_id.")
+    if organism_id in seen_ids:
+        raise ValueError(f"Population manifest at {path} contains duplicate organism_id '{organism_id}'.")
+
+    island_id = entry.get("island_id")
+    if not isinstance(island_id, str) or not island_id.strip():
+        raise ValueError(f"Population manifest at {path} entry #{idx} is missing island_id.")
+
+    organism_dir_value = entry.get("organism_dir")
+    if not isinstance(organism_dir_value, str) or not organism_dir_value.strip():
+        raise ValueError(f"Population manifest at {path} entry #{idx} is missing organism_dir.")
+    organism_dir_path = Path(organism_dir_value).expanduser()
+    if not organism_dir_path.is_absolute():
+        organism_dir_path = (path.parent / organism_dir_path).resolve()
+    else:
+        organism_dir_path = organism_dir_path.resolve()
+    organism_dir = str(organism_dir_path)
+    if organism_dir in seen_dirs:
+        raise ValueError(f"Population manifest at {path} contains duplicate organism_dir '{organism_dir}'.")
+
+    generation_created = _coerce_int_field(
+        entry.get("generation_created", entry.get("generation")),
+        "generation_created",
+        path=path,
+    )
+    current_generation_active = _coerce_int_field(
+        entry.get("current_generation_active", entry.get("generation")),
+        "current_generation_active",
+        path=path,
+    )
+
+    seen_ids.add(organism_id)
+    seen_dirs.add(organism_dir)
+    if island_id == _LEGACY_FLAT_ISLAND:
+        LOGGER.warning("Population manifest at %s uses legacy flat-pop island mapping for %s", path, organism_id)
+
+    return {
+        "organism_id": organism_id,
+        "island_id": island_id,
+        "organism_dir": organism_dir,
+        "generation_created": generation_created,
+        "current_generation_active": current_generation_active,
+        "simple_reward": entry.get("simple_reward", entry.get("simple_score")),
+        "hard_reward": entry.get("hard_reward", entry.get("hard_score")),
+        "selection_reward": entry.get("selection_reward", entry.get("score")),
+    }
+
+
+def read_population_manifest(population_root: str | Path) -> dict[str, Any] | None:
+    path = population_manifest_path(population_root)
+    if not path.exists():
+        return None
+    payload = read_json(path)
+    if not isinstance(payload, dict):
+        raise ValueError(f"Population manifest at {path} must be a JSON object.")
+    generation = _coerce_int_field(payload.get("generation"), "generation", path=path)
+    active = payload.get("active_organisms")
+    if not isinstance(active, list):
+        raise ValueError(f"Population manifest at {path} must contain active_organisms list.")
+    seen_ids: set[str] = set()
+    seen_dirs: set[str] = set()
+    validated = [
+        _validate_manifest_entry(entry, idx=idx, path=path, seen_ids=seen_ids, seen_dirs=seen_dirs)
+        for idx, entry in enumerate(active)
+    ]
+    return {
+        "generation": generation,
+        "active_organisms": validated,
+    }
+
+
+def _render_genetic_code(genetic_code: dict[str, Any]) -> str:
+    core_genes = genetic_code.get("core_genes", [])
+    if not isinstance(core_genes, list):
+        core_genes = []
+    interaction_notes = str(genetic_code.get("interaction_notes", "")).strip()
+    compute_notes = str(genetic_code.get("compute_notes", "")).strip()
+    gene_lines = "\n".join(f"- {str(gene).strip()}" for gene in core_genes if str(gene).strip())
+    return (
+        "## CORE_GENES\n"
+        f"{gene_lines}\n\n"
+        "## INTERACTION_NOTES\n"
+        f"{interaction_notes}\n\n"
+        "## COMPUTE_NOTES\n"
+        f"{compute_notes}\n"
+    )
+
+
+def _parse_genetic_code_sections(text: str) -> dict[str, str]:
+    matches = list(_SECTION_RE.finditer(text))
+    if not matches:
+        return {}
+
+    sections: dict[str, str] = {}
+    for idx, match in enumerate(matches):
+        key = match.group(1)
+        start = match.end()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+        sections[key] = text[start:end].strip()
+    return sections
+
+
+def write_genetic_code(path: str | Path, genetic_code: dict[str, Any]) -> Path:
+    out = Path(path)
+    ensure_dir(out.parent)
+    out.write_text(_render_genetic_code(genetic_code), encoding="utf-8")
+    return out
+
+
+def read_genetic_code(
+    path: str | Path,
+    *,
+    allow_legacy_fallback: bool = False,
+    allow_empty: bool = False,
+) -> dict[str, Any]:
+    target = Path(path)
+    if target.exists():
+        sections = _parse_genetic_code_sections(target.read_text(encoding="utf-8"))
+        required_sections = ("CORE_GENES", "INTERACTION_NOTES", "COMPUTE_NOTES")
+        missing_sections = [section for section in required_sections if section not in sections]
+        if missing_sections:
+            missing = ", ".join(missing_sections)
+            raise ValueError(
+                f"Canonical genetic code at {target} is malformed; missing required sections: {missing}"
+            )
+        core_genes_raw = sections.get("CORE_GENES", "")
+        core_genes = []
+        for line in core_genes_raw.splitlines():
+            cleaned = line.strip()
+            if cleaned.startswith("- "):
+                cleaned = cleaned[2:].strip()
+            if cleaned:
+                core_genes.append(cleaned)
+        if not core_genes:
+            raise ValueError(f"Canonical genetic code at {target} must contain at least one CORE_GENES bullet.")
+        return {
+            "core_genes": core_genes,
+            "interaction_notes": sections.get("INTERACTION_NOTES", ""),
+            "compute_notes": sections.get("COMPUTE_NOTES", ""),
+        }
+
+    legacy_path = target.parent / "idea_dna.txt"
+    if allow_legacy_fallback and legacy_path.exists():
+        text = legacy_path.read_text(encoding="utf-8")
+        genes = [item.strip() for item in text.split(";") if item.strip()]
+        LOGGER.warning("Using legacy idea_dna.txt at %s", legacy_path)
+        return {
+            "core_genes": genes,
+            "interaction_notes": "",
+            "compute_notes": "",
+        }
+
+    if allow_empty:
+        return {
+            "core_genes": [],
+            "interaction_notes": "",
+            "compute_notes": "",
+        }
+
+    raise FileNotFoundError(f"Canonical genetic code is missing at {target}")
+
+
+def write_lineage(path: str | Path, lineage: list[dict[str, Any]]) -> Path:
+    return write_json(path, lineage)
+
+
+def read_lineage(
+    path: str | Path,
+    *,
+    allow_legacy_fallback: bool = False,
+) -> list[dict[str, Any]]:
+    target = Path(path)
+    if target.exists():
+        payload = read_json(target)
+        if isinstance(payload, list):
+            for idx, entry in enumerate(payload):
+                if not isinstance(entry, dict):
+                    raise ValueError(f"Lineage payload at {target} entry #{idx} must be a JSON object.")
+            return payload
+        raise ValueError(f"Lineage payload at {target} must be a JSON list.")
+
+    legacy_path = target.parent / "evolution_log.json"
+    if allow_legacy_fallback and legacy_path.exists():
+        payload = read_json(legacy_path)
+        if isinstance(payload, list):
+            LOGGER.warning("Using legacy evolution_log.json at %s", legacy_path)
+            return payload
+
+    raise FileNotFoundError(f"Canonical lineage is missing at {target}")
+
+
+def _coerce_legacy_organism_payload(
+    payload: dict[str, Any],
+    *,
+    org_dir: Path,
+) -> dict[str, Any]:
+    generation = int(payload.get("generation_created", payload.get("generation", 0)))
+    parent_ids = payload.get("parent_ids", [])
+    if not isinstance(parent_ids, list):
+        parent_ids = []
+
+    mother_id = payload.get("mother_id")
+    father_id = payload.get("father_id")
+    if mother_id is None and parent_ids:
+        mother_id = str(parent_ids[0])
+    if father_id is None and len(parent_ids) > 1:
+        father_id = str(parent_ids[1])
+
+    island_id = payload.get("island_id")
+    if island_id is None:
+        island_parent = org_dir.parent.name
+        if island_parent.startswith("island_"):
+            island_id = island_parent.removeprefix("island_")
+        else:
+            island_id = _LEGACY_FLAT_ISLAND
+
+    return {
+        "organism_id": str(payload["organism_id"]),
+        "island_id": str(island_id),
+        "generation_created": generation,
+        "current_generation_active": int(
+            payload.get("current_generation_active", payload.get("generation", generation))
+        ),
+        "timestamp": str(payload.get("timestamp", utc_now_iso())),
+        "mother_id": str(mother_id) if mother_id is not None else None,
+        "father_id": str(father_id) if father_id is not None else None,
+        "operator": str(payload.get("operator", "seed")),
+        "genetic_code_path": str(
+            payload.get("genetic_code_path", genetic_code_path(org_dir))
+        ),
+        "optimizer_path": str(payload.get("optimizer_path", org_dir / "optimizer.py")),
+        "lineage_path": str(payload.get("lineage_path", lineage_path(org_dir))),
+        "organism_dir": str(payload.get("organism_dir", org_dir)),
+        "simple_reward": payload.get("simple_reward", payload.get("simple_score")),
+        "hard_reward": payload.get("hard_reward", payload.get("hard_score")),
+        "selection_reward": payload.get("selection_reward", payload.get("score")),
+        "status": str(payload.get("status", "pending")),
+        "model_name": str(payload.get("model_name", "")),
+        "prompt_hash": str(payload.get("prompt_hash", "")),
+        "seed": int(payload.get("seed", 0)),
+    }
+
+
+def _require_str_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    meta_file: Path,
+) -> str:
+    value = payload.get(field_name)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Canonical organism meta at {meta_file} is missing required field '{field_name}'.")
+    return value
+
+
+def _require_path_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    org_dir: Path,
+    meta_file: Path,
+) -> str:
+    value = _require_str_field(payload, field_name, meta_file=meta_file)
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = (org_dir / path).resolve()
+    else:
+        path = path.resolve()
+    return str(path)
+
+
+def _optional_str_field(payload: dict[str, Any], field_name: str) -> str | None:
+    value = payload.get(field_name)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _coerce_canonical_organism_payload(
+    payload: dict[str, Any],
+    *,
+    org_dir: Path,
+    meta_file: Path,
+) -> dict[str, Any]:
+    generation_created = _coerce_int_field(
+        payload.get("generation_created"),
+        "generation_created",
+        path=meta_file,
+    )
+    current_generation_active = _coerce_int_field(
+        payload.get("current_generation_active"),
+        "current_generation_active",
+        path=meta_file,
+    )
+
+    return {
+        "organism_id": _require_str_field(payload, "organism_id", meta_file=meta_file),
+        "island_id": _require_str_field(payload, "island_id", meta_file=meta_file),
+        "generation_created": generation_created,
+        "current_generation_active": current_generation_active,
+        "timestamp": _require_str_field(payload, "timestamp", meta_file=meta_file),
+        "mother_id": _optional_str_field(payload, "mother_id"),
+        "father_id": _optional_str_field(payload, "father_id"),
+        "operator": _require_str_field(payload, "operator", meta_file=meta_file),
+        "genetic_code_path": _require_path_field(
+            payload,
+            "genetic_code_path",
+            org_dir=org_dir,
+            meta_file=meta_file,
+        ),
+        "optimizer_path": _require_path_field(
+            payload,
+            "optimizer_path",
+            org_dir=org_dir,
+            meta_file=meta_file,
+        ),
+        "lineage_path": _require_path_field(
+            payload,
+            "lineage_path",
+            org_dir=org_dir,
+            meta_file=meta_file,
+        ),
+        "organism_dir": _require_path_field(
+            payload,
+            "organism_dir",
+            org_dir=org_dir,
+            meta_file=meta_file,
+        ),
+        "simple_reward": payload.get("simple_reward"),
+        "hard_reward": payload.get("hard_reward"),
+        "selection_reward": payload.get("selection_reward"),
+        "status": _require_str_field(payload, "status", meta_file=meta_file),
+        "model_name": str(payload.get("model_name", "")),
+        "prompt_hash": str(payload.get("prompt_hash", "")),
+        "seed": int(payload.get("seed", 0)),
+    }
+
+
+def write_organism_meta(org: OrganismMeta) -> Path:
+    return write_json(organism_meta_path(org.organism_dir), org.to_dict())
+
+
+def read_organism_meta(
+    path: str | Path,
+    *,
+    allow_legacy_artifacts: bool = False,
+) -> OrganismMeta:
+    target = Path(path)
+    meta_file = target if target.name.endswith(".json") else organism_meta_path(target)
+    payload = read_json(meta_file)
+    if not isinstance(payload, dict):
+        raise ValueError(f"Organism meta at {meta_file} must be a JSON object.")
+
+    org_dir = meta_file.parent
+    if allow_legacy_artifacts:
+        canonical = _coerce_legacy_organism_payload(payload, org_dir=org_dir)
+    else:
+        canonical = _coerce_canonical_organism_payload(payload, org_dir=org_dir, meta_file=meta_file)
+    genetic_code = read_genetic_code(
+        canonical["genetic_code_path"],
+        allow_legacy_fallback=allow_legacy_artifacts,
+        allow_empty=False,
+    )
+    lineage = read_lineage(
+        canonical["lineage_path"],
+        allow_legacy_fallback=allow_legacy_artifacts,
+    )
+    return OrganismMeta(
+        organism_id=canonical["organism_id"],
+        island_id=canonical["island_id"],
+        generation_created=canonical["generation_created"],
+        current_generation_active=canonical["current_generation_active"],
+        timestamp=canonical["timestamp"],
+        mother_id=canonical["mother_id"],
+        father_id=canonical["father_id"],
+        operator=canonical["operator"],
+        genetic_code_path=canonical["genetic_code_path"],
+        optimizer_path=canonical["optimizer_path"],
+        lineage_path=canonical["lineage_path"],
+        organism_dir=canonical["organism_dir"],
+        simple_reward=canonical["simple_reward"],
+        hard_reward=canonical["hard_reward"],
+        selection_reward=canonical["selection_reward"],
+        status=canonical["status"],
+        model_name=canonical["model_name"],
+        prompt_hash=canonical["prompt_hash"],
+        seed=canonical["seed"],
+        genetic_code=genetic_code,
+        lineage=lineage,
+    )
+
+
+def write_organism_summary(org_dir: str | Path, payload: dict[str, Any]) -> Path:
+    return write_json(organism_summary_path(org_dir), payload)
+
+
+def read_organism_summary(org_dir: str | Path) -> dict[str, Any] | None:
+    path = organism_summary_path(org_dir)
+    if not path.exists():
+        return None
+    payload = read_json(path)
+    if not isinstance(payload, dict):
+        raise ValueError(f"Organism summary at {path} must be a JSON object.")
+    return payload
+
+
+def _iter_generation_organism_dirs(gen_dir: Path) -> list[Path]:
+    canonical = sorted(gen_dir.glob("island_*/org_*"))
+    legacy = sorted(gen_dir.glob("org_*"))
+    return canonical + legacy
 
 
 def load_population(population_root: str | Path, generation: int) -> list[dict[str, Any]]:
-    """Load all organism summaries for a given generation."""
-    root = Path(population_root)
-    gen_dir = root / f"gen_{generation}"
+    """Load organism metadata for a given generation.
+
+    This remains as a compatibility helper; manifest-based restore is canonical.
+    """
+
+    gen_dir = resolve_generation_dir(population_root, generation)
     if not gen_dir.exists():
         return []
 
     organisms = []
-    for org_path in sorted(gen_dir.glob("org_*")):
+    for org_path in _iter_generation_organism_dirs(gen_dir):
         meta_file = organism_meta_path(org_path)
         if meta_file.exists():
-            organisms.append(read_json(meta_file))
+            organisms.append(read_organism_meta(meta_file, allow_legacy_artifacts=True).to_dict())
     return organisms
 
 
 def load_top_organisms(
     population_root: str | Path,
     limit: int = 5,
-    score_key: str = "score",
+    score_key: str = "selection_reward",
 ) -> list[dict[str, Any]]:
     """Load top-scoring organisms across all generations."""
-    root = Path(population_root)
-    all_organisms: list[dict[str, Any]] = []
 
-    for gen_path in sorted(root.glob("gen_*")):
-        for org_path in gen_path.glob("org_*"):
+    all_organisms: list[dict[str, Any]] = []
+    for gen_path in list_generation_dirs(population_root):
+        for org_path in _iter_generation_organism_dirs(gen_path):
             meta_file = organism_meta_path(org_path)
             if meta_file.exists():
-                meta = read_json(meta_file)
+                meta = read_organism_meta(meta_file, allow_legacy_artifacts=True).to_dict()
                 if meta.get(score_key) is not None:
                     all_organisms.append(meta)
 
@@ -180,8 +732,11 @@ def load_top_organisms(
     return all_organisms[:limit]
 
 
-def load_best_context(population_root: str | Path, limit: int = 3) -> list[dict[str, Any]]:
-    """Load top candidate summaries from all generations for prompt context."""
+def load_best_legacy_candidate_context(
+    population_root: str | Path,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Load top legacy candidate summaries from all generations for legacy prompt context."""
 
     root = Path(population_root)
     if not root.exists():
@@ -191,7 +746,7 @@ def load_best_context(population_root: str | Path, limit: int = 3) -> list[dict[
     for summary_file in root.glob("gen_*/cand_*/summary.json"):
         try:
             payload = read_json(summary_file)
-        except Exception:
+        except Exception:  # noqa: BLE001
             continue
         if payload.get("status") == "ok" and payload.get("aggregate_score") is not None:
             summaries.append(payload)
@@ -200,12 +755,35 @@ def load_best_context(population_root: str | Path, limit: int = 3) -> list[dict[
     return summaries[:limit]
 
 
-def load_recent_experiment_scores(
+def load_best_organism_context(
+    population_root: str | Path,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Load top organism summaries for prompt conditioning."""
+
+    root = Path(population_root)
+    if not root.exists():
+        return []
+
+    summaries: list[dict[str, Any]] = []
+    for summary_file in root.glob("gen_*/island_*/org_*/summary.json"):
+        try:
+            payload = read_json(summary_file)
+        except Exception:  # noqa: BLE001
+            continue
+        if payload.get("status") != "failed" and payload.get("selection_reward") is not None:
+            summaries.append(payload)
+
+    summaries.sort(key=lambda item: float(item.get("selection_reward", float("-inf"))), reverse=True)
+    return summaries[:limit]
+
+
+def load_recent_legacy_candidate_experiment_scores(
     population_root: str | Path,
     experiments: list[str],
     history_window: int,
 ) -> dict[str, list[float]]:
-    """Load recent per-experiment exp_score history from candidate summaries."""
+    """Load recent exp_score history from legacy candidate summaries only."""
 
     history_window = max(1, int(history_window))
     output: dict[str, list[float]] = {exp_name: [] for exp_name in experiments}
@@ -214,44 +792,83 @@ def load_recent_experiment_scores(
     if not root.exists():
         return output
 
-    summary_files = list(root.glob("gen_*/cand_*/summary.json"))
-
-    def _sort_key(path: Path) -> tuple[int, str]:
-        generation_name = path.parents[1].name
-        generation = -1
-        if generation_name.startswith("gen_"):
-            try:
-                generation = int(generation_name.split("_", 1)[1])
-            except ValueError:
-                generation = -1
-        return generation, path.parent.name
-
-    summary_files.sort(key=_sort_key)
+    summary_files = sorted(
+        root.glob("gen_*/cand_*/summary.json"),
+        key=lambda path: (_generation_sort_key(path.parents[1])[0], str(path)),
+    )
 
     for summary_file in summary_files:
         try:
             payload = read_json(summary_file)
-        except Exception:
+        except Exception:  # noqa: BLE001
             continue
 
         experiments_payload = payload.get("experiments")
-        if not isinstance(experiments_payload, dict):
-            continue
-
-        for exp_name in experiments:
-            exp_payload = experiments_payload.get(exp_name)
-            if not isinstance(exp_payload, dict):
-                continue
-            if str(exp_payload.get("status", "failed")) != "ok":
-                continue
-            try:
-                score = float(exp_payload.get("exp_score"))
-            except (TypeError, ValueError):
-                continue
-            if score != score:
-                continue
-            output[exp_name].append(score)
-            if len(output[exp_name]) > history_window:
-                output[exp_name] = output[exp_name][-history_window:]
+        if isinstance(experiments_payload, dict):
+            for exp_name in experiments:
+                exp_payload = experiments_payload.get(exp_name)
+                if isinstance(exp_payload, dict):
+                    _append_experiment_score(output, exp_name, exp_payload, history_window)
 
     return output
+
+
+def load_recent_organism_experiment_scores(
+    population_root: str | Path,
+    experiments: list[str],
+    history_window: int,
+) -> dict[str, list[float]]:
+    """Load recent exp_score history from canonical organism summaries only."""
+
+    history_window = max(1, int(history_window))
+    output: dict[str, list[float]] = {exp_name: [] for exp_name in experiments}
+
+    root = Path(population_root)
+    if not root.exists():
+        return output
+
+    summary_files = sorted(
+        root.glob("gen_*/island_*/org_*/summary.json"),
+        key=lambda path: (_generation_sort_key(path.parents[2])[0], str(path)),
+    )
+
+    for summary_file in summary_files:
+        try:
+            payload = read_json(summary_file)
+        except Exception:  # noqa: BLE001
+            continue
+
+        phase_results = payload.get("phase_results")
+        if not isinstance(phase_results, dict):
+            continue
+        for phase_payload in phase_results.values():
+            if not isinstance(phase_payload, dict):
+                continue
+            nested_experiments = phase_payload.get("experiments")
+            if not isinstance(nested_experiments, dict):
+                continue
+            for exp_name in experiments:
+                exp_payload = nested_experiments.get(exp_name)
+                if isinstance(exp_payload, dict):
+                    _append_experiment_score(output, exp_name, exp_payload, history_window)
+
+    return output
+
+
+def _append_experiment_score(
+    output: dict[str, list[float]],
+    exp_name: str,
+    exp_payload: dict[str, Any],
+    history_window: int,
+) -> None:
+    if str(exp_payload.get("status", "failed")) != "ok":
+        return
+    try:
+        score = float(exp_payload.get("exp_score"))
+    except (TypeError, ValueError):
+        return
+    if score != score:
+        return
+    output[exp_name].append(score)
+    if len(output[exp_name]) > history_window:
+        output[exp_name] = output[exp_name][-history_window:]

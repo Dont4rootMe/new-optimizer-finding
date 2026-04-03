@@ -1,0 +1,19 @@
+Return a structured organism proposal for a brand-new optimizer.
+
+You must return the exact sections below:
+- ## CORE_GENES
+- ## INTERACTION_NOTES
+- ## COMPUTE_NOTES
+- ## CHANGE_DESCRIPTION
+- ## IMPORTS
+- ## INIT_BODY
+- ## STEP_BODY
+- ## ZERO_GRAD_BODY
+
+Requirements:
+- CORE_GENES must contain multiple rich gene lines, one per bullet.
+- INIT_BODY, STEP_BODY, and ZERO_GRAD_BODY must fit the fixed runtime contract.
+- The implementation must be valid for build_optimizer(model, max_steps).
+- step(...) receives weights, grads, activations, and step_fn.
+- zero_grad(...) must accept set_to_none.
+- Return only the sectioned content, not Markdown fences.

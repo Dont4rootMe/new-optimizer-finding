@@ -47,8 +47,6 @@ run_validation:
   target_quality: null
 
 normalization:
-  quality_ref: 0.85
-  steps_ref: 500
   eps: 1.0e-8
 
 optimizer_defaults:

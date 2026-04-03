@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Any, TypedDict
 
 
 @dataclass(slots=True)
@@ -24,13 +24,34 @@ class CandidateMeta:
 
 
 @dataclass(slots=True)
-class EvolutionEntry:
-    """One entry in an organism's evolution log."""
+class Island:
+    """Canonical research-island definition."""
+
+    island_id: str
+    name: str
+    description_path: str
+    description_text: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class LineageEntry:
+    """One score-bearing lineage entry in the maternal organism history."""
 
     generation: int
+    operator: str
+    mother_id: str | None
+    father_id: str | None
     change_description: str
-    score: float | None
-    parent_ids: list[str] = field(default_factory=list)
+    gene_diff_summary: str
+    selected_simple_experiments: list[str] = field(default_factory=list)
+    selected_hard_experiments: list[str] = field(default_factory=list)
+    simple_score: float | None = None
+    hard_score: float | None = None
+    cross_island: bool = False
+    father_island_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -38,27 +59,85 @@ class EvolutionEntry:
 
 @dataclass(slots=True)
 class OrganismMeta:
-    """Full metadata for an organism in the evolutionary population."""
+    """Full metadata for an organism in the island-aware population."""
 
     organism_id: str
-    generation: int
+    island_id: str
+    generation_created: int
+    current_generation_active: int
     timestamp: str
-    parent_ids: list[str]
+    mother_id: str | None
+    father_id: str | None
     operator: str  # "seed" | "mutation" | "crossover"
-    idea_dna: list[str]
-    evolution_log: list[dict[str, Any]]
-    model_name: str
-    prompt_hash: str
-    seed: int
-    organism_dir: str
+    genetic_code_path: str
     optimizer_path: str
-    score: float | None = None
-    simple_score: float | None = None
-    hard_score: float | None = None
-    status: str = "pending"  # "pending" | "evaluated" | "eliminated"
+    lineage_path: str
+    organism_dir: str
+    simple_reward: float | None = None
+    hard_reward: float | None = None
+    selection_reward: float | None = None
+    status: str = "pending"  # "pending" | "evaluated" | "eliminated" | "archived"
+    model_name: str = ""
+    prompt_hash: str = ""
+    seed: int = 0
+    genetic_code: dict[str, Any] = field(default_factory=dict, repr=False)
+    lineage: list[dict[str, Any]] = field(default_factory=list, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "organism_id": self.organism_id,
+            "island_id": self.island_id,
+            "generation_created": self.generation_created,
+            "current_generation_active": self.current_generation_active,
+            "timestamp": self.timestamp,
+            "mother_id": self.mother_id,
+            "father_id": self.father_id,
+            "operator": self.operator,
+            "genetic_code_path": self.genetic_code_path,
+            "optimizer_path": self.optimizer_path,
+            "lineage_path": self.lineage_path,
+            "organism_dir": self.organism_dir,
+            "simple_reward": self.simple_reward,
+            "hard_reward": self.hard_reward,
+            "selection_reward": self.selection_reward,
+            "status": self.status,
+            "model_name": self.model_name,
+            "prompt_hash": self.prompt_hash,
+            "seed": self.seed,
+        }
+
+    @property
+    def generation(self) -> int:
+        """Backward-compatible alias for the generation when the organism was born."""
+
+        return self.generation_created
+
+    @property
+    def parent_ids(self) -> list[str]:
+        parents = [parent_id for parent_id in (self.mother_id, self.father_id) if parent_id]
+        return parents
+
+    @property
+    def idea_dna(self) -> list[str]:
+        genes = self.genetic_code.get("core_genes", [])
+        if not isinstance(genes, list):
+            return []
+        return [str(gene) for gene in genes]
+
+    @property
+    def evolution_log(self) -> list[dict[str, Any]]:
+        return list(self.lineage)
+
+
+class ManifestEntry(TypedDict):
+    organism_id: str
+    island_id: str
+    organism_dir: str
+    generation_created: int
+    current_generation_active: int
+    simple_reward: float | None
+    hard_reward: float | None
+    selection_reward: float | None
 
 
 @dataclass(slots=True)
@@ -140,6 +219,39 @@ class GenerationSummary:
     failed_candidates: int
     output_dir: str
     candidate_summaries: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class OrganismEvaluationRequest:
+    """Public evaluation request emitted by the organism evolution loop."""
+
+    organism_id: str
+    organism_dir: str
+    phase: str  # "simple" | "hard"
+    experiments: list[str]
+    allocation_cfg: dict[str, Any]
+    eval_mode: str
+    timeout_sec: int
+    created_at: str
+
+
+@dataclass(slots=True)
+class OrganismEvaluationSummary:
+    """Public evaluation summary returned to the organism evolution loop."""
+
+    organism_id: str
+    phase: str
+    aggregate_score: float | None
+    per_experiment: dict[str, dict[str, Any]]
+    selected_experiments: list[str]
+    allocation_snapshot: dict[str, Any]
+    status: str
+    created_at: str
+    eval_finished_at: str
+    error_msg: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

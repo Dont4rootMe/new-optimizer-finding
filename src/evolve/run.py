@@ -1,4 +1,4 @@
-"""Hydra entrypoint for evolve mode."""
+"""Hydra entrypoints for canonical evolve mode and explicit legacy mode."""
 
 from __future__ import annotations
 
@@ -8,35 +8,30 @@ import logging
 import hydra
 from omegaconf import DictConfig
 
-from src.evolve.orchestrator import EvolverOrchestrator
-
 LOGGER = logging.getLogger(__name__)
 
 
-def run_single_generation(cfg: DictConfig) -> dict:
-    """Run one evolution generation (legacy single-gen mode)."""
+def run_legacy_single_generation(cfg: DictConfig) -> dict:
+    """LEGACY: run one candidate-first generation via the explicit legacy entry."""
 
     if not bool(cfg.evolver.enabled):
         LOGGER.info("evolver.enabled=false, skipping evolve run")
         return {}
 
-    orchestrator = EvolverOrchestrator(cfg)
+    from src.evolve.legacy_orchestrator import LegacyCandidateOrchestrator
+
+    orchestrator = LegacyCandidateOrchestrator(cfg)
     result = asyncio.run(orchestrator.run())
-    LOGGER.info("Evolution generation finished: %s", result)
+    LOGGER.info("Legacy single-generation evolution finished: %s", result)
     return result
 
 
 def run_evolution(cfg: DictConfig) -> dict:
-    """Run multi-generation evolution loop."""
+    """Run canonical organism-first multi-generation evolution loop."""
 
     if not bool(cfg.evolver.enabled):
         LOGGER.info("evolver.enabled=false, skipping evolve run")
         return {}
-
-    evo_cfg = cfg.evolver.get("evolution")
-    if evo_cfg is None:
-        LOGGER.info("No evolution config found, falling back to single generation")
-        return run_single_generation(cfg)
 
     from src.evolve.evolution_loop import EvolutionLoop
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from valopt.utils.baselines import load_baseline_profile
+from optbench.utils.baselines import load_baseline_profile
 
 
 def test_load_baseline_profile_roundtrip(tmp_path: Path) -> None:

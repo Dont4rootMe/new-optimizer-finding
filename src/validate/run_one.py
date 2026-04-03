@@ -11,11 +11,11 @@ from typing import Any
 from hydra import compose, initialize_config_dir
 from omegaconf import DictConfig, OmegaConf
 
-from valopt.registry import create_experiment
-from valopt.utils.baselines import inject_baseline_threshold
-from valopt.utils.import_utils import load_optimizer_builder
-from valopt.utils.io import save_json
-from valopt.utils.seed import set_seed
+from optbench.registry import create_experiment
+from optbench.utils.baselines import inject_baseline_threshold
+from optbench.utils.import_utils import load_optimizer_builder
+from optbench.utils.io import save_json
+from optbench.utils.seed import set_seed
 
 LOGGER = logging.getLogger(__name__)
 

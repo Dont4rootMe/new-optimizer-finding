@@ -9,7 +9,7 @@ import torch
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, Dataset
 
-from valopt.schemas import OptionalDependencyError
+from optbench.schemas import OptionalDependencyError
 
 
 class PackedTokenDataset(Dataset):
