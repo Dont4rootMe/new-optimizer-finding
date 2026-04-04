@@ -19,19 +19,34 @@ prompts:
   mutation_user: conf/prompts/mutation/user.txt
   crossover_system: conf/prompts/crossover/system.txt
   crossover_user: conf/prompts/crossover/user.txt
+  implementation_system: conf/prompts/implementation/system.txt
+  implementation_user: conf/prompts/implementation/user.txt
+  implementation_template: conf/prompts/implementation/template.txt
 
 islands:
   dir: conf/prompts/islands
-  organisms_per_island: 5
-  inter_island_crossover_rate: 0.1
+  seed_organisms_per_island: 5
+  max_organisms_per_island: 5
+
+reproduction:
+  offspring_per_generation: 10
+  operator_selection_strategy: deterministic
+  operator_weights:
+    within_island_crossover: 1.0
+    inter_island_crossover: 1.0
+    mutation: 1.0
+  island_sampling:
+    within_island_crossover: unified
+    inter_island_crossover: unified
+    mutation: unified
 
 operators:
   mutation:
-    probability: 0.5
-    gene_delete_probability: 0.2
+    gene_removal_probability: 0.2
+    parent_selection_softmax_temperature: 1.0
   crossover:
-    inherit_gene_probability_from_mother: 0.7
-    softmax_temperature: 1.0
+    primary_parent_gene_inheritance_probability: 0.7
+    parent_selection_softmax_temperature: 1.0
 
 phases:
   simple:

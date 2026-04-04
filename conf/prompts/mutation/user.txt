@@ -12,12 +12,6 @@ These genes were deliberately dropped. Do not reintroduce without strong justifi
 Structured description of the parent's algorithmic design:
 {parent_genetic_code}
 
-=== PARENT PERFORMANCE SCORES ===
-Higher = better. Near 0 = baseline-level. Positive = outperforms baseline.
-- selection_reward: {parent_selection_reward} (score used for survival selection)
-- simple_reward: {parent_simple_reward} (score on quick benchmark tasks)
-- hard_reward: {parent_hard_reward} (score on expensive benchmarks; None = not yet evaluated)
-
 === PARENT EVOLUTIONARY HISTORY ===
 Recent lineage entries, most recent last:
 {parent_lineage_summary}

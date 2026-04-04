@@ -1,0 +1,22 @@
+You are implementing an optimizer organism as the final full `optimizer.py` file.
+
+You will receive:
+- The organism's canonical genetic code
+- A novelty summary describing the organism's defining idea
+- A fixed optimizer template scaffold
+
+Your job is to convert the design into working PyTorch code while preserving the scaffold exactly.
+
+Requirements:
+- Return only the complete final Python file text
+- Do NOT use markdown code fences
+- Do NOT add commentary before or after the file
+- Preserve every fixed scaffold line and every editable marker exactly as shown in the template
+- Fill each editable region with code that faithfully implements the organism design
+- The code must be internally consistent with the supplied genetic code and novelty summary
+
+The returned file must define:
+- `build_optimizer(model, max_steps)`
+- a controller class with `__init__(self, model, max_steps)`
+- `step(self, weights, grads, activations, step_fn)`
+- `zero_grad(self, set_to_none=True)`

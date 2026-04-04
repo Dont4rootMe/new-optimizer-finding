@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
 from src.evolve.storage import (
     genetic_code_path,
     lineage_path,
@@ -17,7 +18,6 @@ from src.evolve.storage import (
 )
 from src.evolve.template_parser import (
     extract_editable_sections,
-    render_template,
     validate_rendered_code,
 )
 from src.evolve.types import LineageEntry, OrganismMeta
@@ -30,10 +30,6 @@ _REQUIRED_RESPONSE_SECTIONS = (
     "INTERACTION_NOTES",
     "COMPUTE_NOTES",
     "CHANGE_DESCRIPTION",
-    "IMPORTS",
-    "INIT_BODY",
-    "STEP_BODY",
-    "ZERO_GRAD_BODY",
 )
 
 
@@ -93,7 +89,6 @@ def format_lineage_summary(
         generation = entry.get("generation", "?")
         operator = entry.get("operator", "?")
         change_description = str(entry.get("change_description", "")).strip() or "(none)"
-        gene_diff_summary = str(entry.get("gene_diff_summary", "")).strip() or "(none)"
         simple_score = entry.get("simple_score")
         hard_score = entry.get("hard_score")
         cross_island = bool(entry.get("cross_island", False))
@@ -103,7 +98,6 @@ def format_lineage_summary(
             f"gen={generation}",
             f"op={operator}",
             f"change={change_description}",
-            f"genes={gene_diff_summary}",
             f"simple={simple_score}",
             f"hard={hard_score}",
         ]
@@ -190,69 +184,27 @@ def _build_genetic_code(parsed: dict[str, str]) -> dict[str, Any]:
     }
 
 
-def _lower_to_original(genes: list[str]) -> dict[str, str]:
-    mapping: dict[str, str] = {}
-    for gene in genes:
-        normalized = gene.strip().lower()
-        if normalized and normalized not in mapping:
-            mapping[normalized] = gene.strip()
-    return mapping
+def build_implementation_prompt_from_design(
+    parsed: dict[str, str],
+    prompts: PromptBundle,
+) -> tuple[str, str]:
+    """Build the shared implementation-stage prompt from a design-stage response."""
 
-
-def summarize_mutation_gene_diff(
-    parent_genes: list[str],
-    child_genes: list[str],
-) -> str:
-    """Describe actual conceptual mutation deltas using parent-vs-child genes."""
-
-    parent_map = _lower_to_original(parent_genes)
-    child_map = _lower_to_original(child_genes)
-
-    removed = [parent_map[key] for key in parent_map.keys() - child_map.keys()]
-    added_or_rewritten = [child_map[key] for key in child_map.keys() - parent_map.keys()]
-    preserved = [child_map[key] for key in child_map.keys() & parent_map.keys()]
-
-    parts = [
-        f"Preserved genes: {', '.join(preserved) if preserved else '(none)'}",
-        f"Removed genes: {', '.join(removed) if removed else '(none)'}",
-        f"Added or rewritten genes: {', '.join(added_or_rewritten) if added_or_rewritten else '(none)'}",
-    ]
-    return ". ".join(parts) + "."
-
-
-def summarize_crossover_gene_diff(
-    mother_genes: list[str],
-    father_genes: list[str],
-    child_genes: list[str],
-) -> str:
-    """Describe actual conceptual crossover deltas using maternal/paternal provenance."""
-
-    mother_map = _lower_to_original(mother_genes)
-    father_map = _lower_to_original(father_genes)
-    child_map = _lower_to_original(child_genes)
-
-    maternal_preserved = [child_map[key] for key in child_map.keys() & mother_map.keys()]
-    paternal_introduced = [
-        child_map[key]
-        for key in child_map.keys() & father_map.keys()
-        if key not in mother_map
-    ]
-    rewrites = [
-        child_map[key]
-        for key in child_map.keys()
-        if key not in mother_map and key not in father_map
-    ]
-
-    parts = [
-        f"Maternal genes preserved: {', '.join(maternal_preserved) if maternal_preserved else '(none)'}",
-        f"Paternal genes introduced: {', '.join(paternal_introduced) if paternal_introduced else '(none)'}",
-        f"Major rewrites: {', '.join(rewrites) if rewrites else '(none)'}",
-    ]
-    return ". ".join(parts) + "."
+    genetic_code = _build_genetic_code(parsed)
+    change_description = _require_section(parsed, "CHANGE_DESCRIPTION")
+    system = compose_system_prompt(prompts.project_context, prompts.implementation_system)
+    user = prompts.implementation_user.format(
+        organism_genetic_code=format_genetic_code(genetic_code),
+        change_description=change_description,
+        implementation_template=prompts.implementation_template,
+    )
+    return system, user
 
 
 def build_organism_from_response(
     parsed: dict[str, str],
+    optimizer_code: str,
+    implementation_template: str,
     organism_id: str,
     island_id: str,
     generation: int,
@@ -265,11 +217,10 @@ def build_organism_from_response(
     seed: int,
     timestamp: str,
     parent_lineage: list[dict[str, Any]] | None = None,
-    gene_diff_summary: str | None = None,
     cross_island: bool = False,
     father_island_id: str | None = None,
 ) -> OrganismMeta:
-    """Build `OrganismMeta` from a canonical structured LLM response."""
+    """Build `OrganismMeta` from a canonical design response and full optimizer source."""
 
     for key in _REQUIRED_RESPONSE_SECTIONS:
         if key not in parsed:
@@ -277,42 +228,13 @@ def build_organism_from_response(
 
     genetic_code = _build_genetic_code(parsed)
     change_description = _require_section(parsed, "CHANGE_DESCRIPTION")
-    diff_summary = (gene_diff_summary or "").strip()
-    if not diff_summary:
-        diff_summary = "No semantic gene diff summary recorded."
 
-    class_name = f"Optimizer_{organism_id[:8]}"
-    optimizer_name = class_name
-
-    sections = {
-        "IMPORTS": _require_section(parsed, "IMPORTS"),
-        "INIT_BODY": parsed.get("INIT_BODY", ""),
-        "STEP_BODY": parsed.get("STEP_BODY", ""),
-        "ZERO_GRAD_BODY": parsed.get("ZERO_GRAD_BODY", ""),
-    }
-    for key in ("INIT_BODY", "STEP_BODY", "ZERO_GRAD_BODY"):
-        sections[key] = _require_section(parsed, key)
-
-    for key in ("INIT_BODY", "STEP_BODY", "ZERO_GRAD_BODY"):
-        lines = sections[key].split("\n")
-        indented = []
-        for line in lines:
-            stripped = line.rstrip()
-            if not stripped:
-                indented.append("")
-            elif not stripped.startswith("        "):
-                indented.append("        " + stripped.lstrip())
-            else:
-                indented.append(stripped)
-        sections[key] = "\n".join(indented)
-
-    code = render_template(sections, optimizer_name=optimizer_name, class_name=class_name)
-    is_valid, error = validate_rendered_code(code)
+    is_valid, error = validate_rendered_code(optimizer_code, implementation_template)
     if not is_valid:
         raise ValueError(f"Generated code failed validation: {error}")
 
     optimizer_file = Path(org_dir) / "optimizer.py"
-    optimizer_file.write_text(code, encoding="utf-8")
+    optimizer_file.write_text(optimizer_code, encoding="utf-8")
 
     lineage = list(parent_lineage or [])
     lineage.append(
@@ -322,7 +244,6 @@ def build_organism_from_response(
             mother_id=mother_id,
             father_id=father_id,
             change_description=change_description,
-            gene_diff_summary=diff_summary,
             cross_island=cross_island,
             father_island_id=father_island_id,
         ).to_dict()

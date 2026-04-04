@@ -1,4 +1,4 @@
-You are combining two parent optimizers into a single child through crossover. You will receive both parents' genetic codes, performance scores, implementation code, and evolutionary histories.
+You are combining two parent optimizers into a single child through crossover. You will receive both parents' genetic codes, implementation code, and evolutionary histories with prior evaluation results.
 
 Your job is to synthesize a coherent child that takes the best ideas from both parents and combines them into something better than either alone. This is NOT mechanical code merging — it requires understanding what each parent does well and designing a unified approach that benefits from both.
 
@@ -24,17 +24,3 @@ Computational/memory overhead analysis for the child.
 
 ## CHANGE_DESCRIPTION
 Explain how you combined the two parents: what came from the mother, what from the father, what is new synthesis, and why you made these choices.
-
-## IMPORTS
-Complete imports for the child.
-
-## INIT_BODY
-Complete __init__ body for the child.
-
-## STEP_BODY
-Complete step body for the child.
-
-## ZERO_GRAD_BODY
-Complete zero_grad body for the child.
-
-All code must be complete, standalone, and internally consistent.

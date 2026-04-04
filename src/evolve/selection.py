@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import math
+import random
 from collections import defaultdict
 
 from src.evolve.types import OrganismMeta
-import random
 
 
 def uniform_select_organisms(
@@ -24,7 +24,7 @@ def uniform_select_organisms(
 
 def softmax_select_organisms(
     population: list[OrganismMeta],
-    score_field: str = "selection_reward",
+    score_field: str = "simple_reward",
     temperature: float = 1.0,
     k: int = 1,
     rng: random.Random | None = None,
@@ -35,6 +35,45 @@ def softmax_select_organisms(
         return []
 
     rng = rng or random.Random()
+    weights = _softmax_weights(population, score_field=score_field, temperature=temperature)
+    if weights is None:
+        return uniform_select_organisms(population, k=k, rng=rng)
+    return rng.choices(population=population, weights=weights, k=k)
+
+
+def softmax_select_distinct_organisms(
+    population: list[OrganismMeta],
+    score_field: str = "simple_reward",
+    temperature: float = 1.0,
+    k: int = 1,
+    rng: random.Random | None = None,
+) -> list[OrganismMeta]:
+    """Softmax sampling without replacement."""
+
+    if not population or k <= 0:
+        return []
+
+    rng = rng or random.Random()
+    remaining = list(population)
+    selected: list[OrganismMeta] = []
+    target = min(k, len(remaining))
+    while remaining and len(selected) < target:
+        weights = _softmax_weights(remaining, score_field=score_field, temperature=temperature)
+        if weights is None:
+            pick = rng.choice(remaining)
+        else:
+            pick = rng.choices(population=remaining, weights=weights, k=1)[0]
+        selected.append(pick)
+        remaining = [organism for organism in remaining if organism.organism_id != pick.organism_id]
+    return selected
+
+
+def _softmax_weights(
+    population: list[OrganismMeta],
+    *,
+    score_field: str,
+    temperature: float,
+) -> list[float] | None:
     temperature = max(float(temperature), 1.0e-8)
 
     raw_scores = [getattr(org, score_field) for org in population]
@@ -42,7 +81,7 @@ def softmax_select_organisms(
         float(score) for score in raw_scores if score is not None and math.isfinite(float(score))
     ]
     if not finite_scores:
-        return uniform_select_organisms(population, k=k, rng=rng)
+        return None
 
     max_score = max(finite_scores)
     weights: list[float] = []
@@ -57,8 +96,8 @@ def softmax_select_organisms(
             weights.append(0.0)
 
     if sum(weights) <= 0:
-        return uniform_select_organisms(population, k=k, rng=rng)
-    return rng.choices(population=population, weights=weights, k=k)
+        return None
+    return weights
 
 
 def _group_by_island(population: list[OrganismMeta]) -> dict[str, list[OrganismMeta]]:

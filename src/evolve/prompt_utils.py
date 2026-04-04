@@ -17,6 +17,9 @@ class PromptBundle:
     mutation_user: str
     crossover_system: str
     crossover_user: str
+    implementation_system: str
+    implementation_user: str
+    implementation_template: str
 
 
 def _default_conf_prompts_dir() -> Path:
@@ -32,6 +35,9 @@ def _default_prompt_relative_path(key: str) -> Path:
         "mutation_user": Path("mutation/user.txt"),
         "crossover_system": Path("crossover/system.txt"),
         "crossover_user": Path("crossover/user.txt"),
+        "implementation_system": Path("implementation/system.txt"),
+        "implementation_user": Path("implementation/user.txt"),
+        "implementation_template": Path("implementation/template.txt"),
     }
     try:
         return mapping[key]
@@ -73,6 +79,9 @@ def load_prompt_bundle(cfg: DictConfig) -> PromptBundle:
         mutation_user=_read_path(_resolve_prompt_path(cfg, "mutation_user")),
         crossover_system=_read_path(_resolve_prompt_path(cfg, "crossover_system")),
         crossover_user=_read_path(_resolve_prompt_path(cfg, "crossover_user")),
+        implementation_system=_read_path(_resolve_prompt_path(cfg, "implementation_system")),
+        implementation_user=_read_path(_resolve_prompt_path(cfg, "implementation_user")),
+        implementation_template=_read_path(_resolve_prompt_path(cfg, "implementation_template")),
     )
 
 

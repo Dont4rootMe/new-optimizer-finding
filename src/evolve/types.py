@@ -21,14 +21,13 @@ class Island:
 
 @dataclass(slots=True)
 class LineageEntry:
-    """One score-bearing lineage entry in the maternal organism history."""
+    """One score-bearing lineage entry in the organism history."""
 
     generation: int
     operator: str
     mother_id: str | None
     father_id: str | None
     change_description: str
-    gene_diff_summary: str
     selected_simple_experiments: list[str] = field(default_factory=list)
     selected_hard_experiments: list[str] = field(default_factory=list)
     simple_score: float | None = None
@@ -58,7 +57,6 @@ class OrganismMeta:
     organism_dir: str
     simple_reward: float | None = None
     hard_reward: float | None = None
-    selection_reward: float | None = None
     status: str = "pending"  # "pending" | "evaluated" | "eliminated" | "archived"
     model_name: str = ""
     prompt_hash: str = ""
@@ -82,7 +80,6 @@ class OrganismMeta:
             "organism_dir": self.organism_dir,
             "simple_reward": self.simple_reward,
             "hard_reward": self.hard_reward,
-            "selection_reward": self.selection_reward,
             "status": self.status,
             "model_name": self.model_name,
             "prompt_hash": self.prompt_hash,
@@ -109,7 +106,6 @@ class ManifestEntry(TypedDict):
     current_generation_active: int
     simple_reward: float | None
     hard_reward: float | None
-    selection_reward: float | None
 
 
 @dataclass(slots=True)

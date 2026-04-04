@@ -4,8 +4,8 @@ This file applies to `conf/prompts/mutation/`.
 
 ## Purpose
 
-- `system.txt`: defines the canonical structured response contract for mutation.
-- `user.txt`: injects the parent organism's genes, rewards, lineage, and editable code sections.
+- `system.txt`: defines the canonical design-stage response contract for mutation.
+- `user.txt`: injects the parent organism's genes, lineage, and editable code sections.
 
 ## Placeholder Contract
 
@@ -14,9 +14,6 @@ This file applies to `conf/prompts/mutation/`.
 - `inherited_gene_pool`
 - `removed_gene_pool`
 - `parent_genetic_code`
-- `parent_selection_reward`
-- `parent_simple_reward`
-- `parent_hard_reward`
 - `parent_lineage_summary`
 - `parent_imports`
 - `parent_init_body`
@@ -28,4 +25,4 @@ Keep these names synchronized with `src/organisms/mutation.py`.
 ## Editing Guidance
 
 - Preserve the distinction between inherited genes and removed genes.
-- Preserve the expectation that the model returns a structured organism, not a free-form explanation.
+- Preserve the expectation that the model returns only the design artifact, not raw Python.

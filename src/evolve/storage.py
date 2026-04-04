@@ -130,7 +130,6 @@ def _coerce_manifest_entry(entry: OrganismMeta | dict[str, Any]) -> ManifestEntr
             "current_generation_active": entry.current_generation_active,
             "simple_reward": entry.simple_reward,
             "hard_reward": entry.hard_reward,
-            "selection_reward": entry.selection_reward,
         }
 
     if not isinstance(entry, dict):
@@ -144,7 +143,6 @@ def _coerce_manifest_entry(entry: OrganismMeta | dict[str, Any]) -> ManifestEntr
         "current_generation_active": int(entry["current_generation_active"]),
         "simple_reward": entry.get("simple_reward"),
         "hard_reward": entry.get("hard_reward"),
-        "selection_reward": entry.get("selection_reward"),
     }
 
 
@@ -217,7 +215,6 @@ def _validate_manifest_entry(
         "current_generation_active": current_generation_active,
         "simple_reward": entry.get("simple_reward"),
         "hard_reward": entry.get("hard_reward"),
-        "selection_reward": entry.get("selection_reward"),
     }
 
 
@@ -418,7 +415,6 @@ def _coerce_canonical_organism_payload(
         ),
         "simple_reward": payload.get("simple_reward"),
         "hard_reward": payload.get("hard_reward"),
-        "selection_reward": payload.get("selection_reward"),
         "status": _require_str_field(payload, "status", meta_file=meta_file),
         "model_name": str(payload.get("model_name", "")),
         "prompt_hash": str(payload.get("prompt_hash", "")),
@@ -456,7 +452,6 @@ def read_organism_meta(path: str | Path) -> OrganismMeta:
         organism_dir=canonical["organism_dir"],
         simple_reward=canonical["simple_reward"],
         hard_reward=canonical["hard_reward"],
-        selection_reward=canonical["selection_reward"],
         status=canonical["status"],
         model_name=canonical["model_name"],
         prompt_hash=canonical["prompt_hash"],

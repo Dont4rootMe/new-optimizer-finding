@@ -11,11 +11,6 @@ MOTHER (primary parent — preserve continuity with her approach)
 --- Mother genetic code ---
 {mother_genetic_code}
 
---- Mother performance scores ---
-- selection_reward: {mother_selection_reward}
-- simple_reward: {mother_simple_reward}
-- hard_reward: {mother_hard_reward}
-
 --- Mother evolutionary history ---
 {mother_lineage_summary}
 
@@ -38,11 +33,6 @@ FATHER (secondary parent — contribute best complementary ideas)
 
 --- Father genetic code ---
 {father_genetic_code}
-
---- Father performance scores ---
-- selection_reward: {father_selection_reward}
-- simple_reward: {father_simple_reward}
-- hard_reward: {father_hard_reward}
 
 --- Father evolutionary history ---
 {father_lineage_summary}

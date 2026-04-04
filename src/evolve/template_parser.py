@@ -1,4 +1,4 @@
-"""Parser for optimizer template: extract editable sections, render, validate."""
+"""Parser for optimizer templates: extract editable sections, render, validate."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
-_TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "optimizer_template.txt"
+_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "conf" / "prompts" / "implementation" / "template.txt"
 
 _EDITABLE_RE = re.compile(
     r"#\s*===\s*EDITABLE:\s*(\w+)\s*===\s*\n(.*?)#\s*===\s*END EDITABLE\s*===",
@@ -16,6 +16,9 @@ _EDITABLE_RE = re.compile(
 )
 
 SECTION_NAMES = ("IMPORTS", "INIT_BODY", "STEP_BODY", "ZERO_GRAD_BODY")
+_TEMPLATE_PLACEHOLDER_RE = re.compile(
+    r"\{(?:imports|init_body|step_body|zero_grad_body|optimizer_name|class_name)\}"
+)
 
 
 def _positional_arg_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
@@ -60,12 +63,13 @@ def render_template(
     sections: dict[str, str],
     optimizer_name: str,
     class_name: str,
+    template_text: str | None = None,
 ) -> str:
     """Render optimizer.py from template and editable sections.
 
     Section values should be raw code lines (properly indented for their context).
     """
-    template = _load_template()
+    template = template_text if template_text is not None else _load_template()
 
     # Default empty sections
     imports = sections.get("IMPORTS", "import math")
@@ -84,8 +88,41 @@ def render_template(
     return rendered
 
 
-def validate_rendered_code(code: str) -> tuple[bool, str | None]:
-    """Validate rendered optimizer code: syntax + required structure."""
+def validate_template_scaffold(code: str, template_text: str) -> tuple[bool, str | None]:
+    """Validate that generated code preserves the required fixed scaffold."""
+
+    extracted = extract_editable_sections(code)
+    missing_sections = [name for name in SECTION_NAMES if name not in extracted]
+    if missing_sections:
+        missing = ", ".join(missing_sections)
+        return False, f"Generated code is missing editable section markers: {missing}"
+
+    position = 0
+    for literal in _TEMPLATE_PLACEHOLDER_RE.split(template_text):
+        if not literal:
+            continue
+        next_position = code.find(literal, position)
+        if next_position < 0:
+            return False, "Generated code does not preserve the required optimizer template scaffold."
+        position = next_position + len(literal)
+
+    return True, None
+
+
+def validate_rendered_code(
+    code: str,
+    template_text: str | None = None,
+) -> tuple[bool, str | None]:
+    """Validate optimizer code: scaffold preservation, syntax, and required structure."""
+
+    if "```" in code:
+        return False, "Generated code must not contain markdown code fences."
+
+    if template_text is not None:
+        ok, error = validate_template_scaffold(code, template_text)
+        if not ok:
+            return ok, error
+
     try:
         tree = ast.parse(code)
     except SyntaxError as exc:

@@ -1,0 +1,12 @@
+Implement this organism as a full `optimizer.py` file.
+
+=== ORGANISM GENETIC CODE ===
+{organism_genetic_code}
+
+=== ORGANISM NOVELTY SUMMARY ===
+{change_description}
+
+=== FIXED OPTIMIZER TEMPLATE ===
+{implementation_template}
+
+Return only the final `optimizer.py` text.

@@ -40,14 +40,31 @@ def _make_cfg(tmp_path: Path) -> object:
                 "max_generations": 3,
                 "islands": {
                     "dir": str(islands_dir),
-                    "organisms_per_island": 2,
-                    "inter_island_crossover_rate": 0.1,
+                    "seed_organisms_per_island": 2,
+                    "max_organisms_per_island": 2,
+                },
+                "reproduction": {
+                    "offspring_per_generation": 1,
+                    "operator_selection_strategy": "deterministic",
+                    "operator_weights": {
+                        "within_island_crossover": 1.0,
+                        "inter_island_crossover": 1.0,
+                        "mutation": 1.0,
+                    },
+                    "island_sampling": {
+                        "within_island_crossover": "unified",
+                        "inter_island_crossover": "unified",
+                        "mutation": "unified",
+                    },
                 },
                 "operators": {
-                    "mutation": {"probability": 0.5, "gene_delete_probability": 0.2},
+                    "mutation": {
+                        "gene_removal_probability": 0.2,
+                        "parent_selection_softmax_temperature": 1.0,
+                    },
                     "crossover": {
-                        "inherit_gene_probability_from_mother": 0.7,
-                        "softmax_temperature": 1.0,
+                        "primary_parent_gene_inheritance_probability": 0.7,
+                        "parent_selection_softmax_temperature": 1.0,
                     },
                 },
                 "phases": {
@@ -113,7 +130,6 @@ def _write_organism(pop_root: Path, generation: int, organism_id: str) -> Organi
         lineage_path=str(org_dir / "lineage.json"),
         organism_dir=str(org_dir),
         simple_reward=0.8,
-        selection_reward=0.8,
         genetic_code={
             "core_genes": [
                 f"adaptive rule {organism_id}",

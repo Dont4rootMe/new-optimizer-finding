@@ -8,8 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
-from src.evolve.storage import sha1_text, utc_now_iso
-from src.evolve.template_parser import parse_llm_response
+from src.evolve.storage import utc_now_iso
 from src.evolve.types import OrganismMeta
 from src.organisms.organism import (
     build_organism_from_response,
@@ -17,7 +16,6 @@ from src.organisms.organism import (
     format_lineage_summary,
     load_organism_code_sections,
     read_organism_genetic_code,
-    summarize_crossover_gene_diff,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -74,18 +72,12 @@ def _build_crossbreed_prompt(
     user = prompts.crossover_user.format(
         inherited_gene_pool="\n".join(f"- {gene}" for gene in inherited_genes) or "(none)",
         mother_genetic_code=format_genetic_code(read_organism_genetic_code(mother)),
-        mother_selection_reward=mother.selection_reward,
-        mother_simple_reward=mother.simple_reward,
-        mother_hard_reward=mother.hard_reward,
         mother_lineage_summary=format_lineage_summary(mother.lineage),
         mother_imports=mother_sections.get("IMPORTS", ""),
         mother_init_body=mother_sections.get("INIT_BODY", ""),
         mother_step_body=mother_sections.get("STEP_BODY", ""),
         mother_zero_grad_body=mother_sections.get("ZERO_GRAD_BODY", ""),
         father_genetic_code=format_genetic_code(read_organism_genetic_code(father)),
-        father_selection_reward=father.selection_reward,
-        father_simple_reward=father.simple_reward,
-        father_hard_reward=father.hard_reward,
         father_lineage_summary=format_lineage_summary(father.lineage),
         father_imports=father_sections.get("IMPORTS", ""),
         father_init_body=father_sections.get("INIT_BODY", ""),
@@ -134,18 +126,17 @@ class CrossbreedingOperator:
             father,
             generator.prompt_bundle,
         )
-        prompt_hash = sha1_text(system_prompt + "\n" + user_prompt)
-
-        raw_response = generator.call_llm(system_prompt, user_prompt, org_dir)
-        parsed = parse_llm_response(raw_response)
-        child_genes = [
-            line.strip()[2:].strip() if line.strip().startswith("- ") else line.strip()
-            for line in parsed.get("CORE_GENES", "").splitlines()
-            if line.strip()
-        ]
-        diff_summary = summarize_crossover_gene_diff(mother_genes, father_genes, child_genes)
+        parsed, optimizer_code, prompt_hash = generator.run_creation_stages(
+            design_system_prompt=system_prompt,
+            design_user_prompt=user_prompt,
+            org_dir=org_dir,
+            organism_id=organism_id,
+            generation=generation,
+        )
         return build_organism_from_response(
             parsed=parsed,
+            optimizer_code=optimizer_code,
+            implementation_template=generator.prompt_bundle.implementation_template,
             organism_id=organism_id,
             island_id=mother.island_id,
             generation=generation,
@@ -158,7 +149,6 @@ class CrossbreedingOperator:
             seed=generator.seed,
             timestamp=utc_now_iso(),
             parent_lineage=mother.lineage,
-            gene_diff_summary=diff_summary,
             cross_island=mother.island_id != father.island_id,
             father_island_id=father.island_id,
         )

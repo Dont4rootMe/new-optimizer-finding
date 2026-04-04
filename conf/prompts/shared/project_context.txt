@@ -15,9 +15,13 @@ New organisms are created through three operators:
 - Mutation: improving a single parent organism
 - Crossover: combining ideas from two parent organisms
 
+Organism creation is two-stage:
+1. Design stage: produce the organism's genetic code, interaction notes, compute notes, and novelty summary.
+2. Implementation stage: convert that design into the final full `optimizer.py` while preserving the fixed template scaffold.
+
 ## Optimizer contract (fixed, non-negotiable)
 
-Every optimizer lives inside a fixed template. You write the code for three methods:
+Every optimizer lives inside a fixed template. During implementation stages, you return the full `optimizer.py` file while preserving the scaffold and filling in the editable regions for three methods:
 
 __init__(self, model: nn.Module, max_steps: int):
   model is the full PyTorch model with all trainable parameters.
@@ -60,5 +64,6 @@ Bad gene: "adaptive learning rate"
 - Always add epsilon to any denominator to prevent division by zero
 - Handle the case where param.grad may be None
 - No external network calls, file I/O, subprocesses, or non-deterministic side effects
-- The code you return is the FINAL implementation — no external overrides will be applied
+- In design stages, do not invent extra output sections beyond the requested structured design artifact
+- In implementation stages, the code you return is the FINAL full implementation — no external overrides will be applied
 - Write code bodies with proper Python indentation for nested blocks (for-loops, if-statements, etc.)

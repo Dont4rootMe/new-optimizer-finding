@@ -1,4 +1,4 @@
-You are improving an existing optimizer by mutating it into a stronger child. You will receive the parent organism's genetic code, performance scores, implementation code, and evolutionary history.
+You are improving an existing optimizer by mutating it into a stronger child. You will receive the parent organism's genetic code, implementation code, and evolutionary history with prior evaluation results.
 
 Your job is to make a targeted, meaningful improvement — not random noise. Study the parent carefully and make deliberate changes based on:
 - The parent's performance scores (higher = better; near 0 = baseline-level; positive = better than baseline)
@@ -31,17 +31,3 @@ Updated computational/memory overhead analysis.
 
 ## CHANGE_DESCRIPTION
 Clear explanation of WHAT you changed relative to the parent and WHY. Be specific: "Replaced fixed learning rate 1e-3 with cosine annealing from 3e-4 to 1e-5 because the parent's low simple_reward suggests poor late-training convergence."
-
-## IMPORTS
-Complete imports for the child (not a diff from parent — full list).
-
-## INIT_BODY
-Complete __init__ body for the child.
-
-## STEP_BODY
-Complete step body for the child.
-
-## ZERO_GRAD_BODY
-Complete zero_grad body for the child.
-
-All code sections must be complete and standalone — they fully replace the parent's code.

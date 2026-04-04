@@ -8,8 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
-from src.evolve.storage import sha1_text, utc_now_iso
-from src.evolve.template_parser import parse_llm_response
+from src.evolve.storage import utc_now_iso
 from src.evolve.types import OrganismMeta
 from src.organisms.organism import (
     build_organism_from_response,
@@ -17,7 +16,6 @@ from src.organisms.organism import (
     format_lineage_summary,
     load_organism_code_sections,
     read_organism_genetic_code,
-    summarize_mutation_gene_diff,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -67,9 +65,6 @@ def _build_mutate_prompt(
         inherited_gene_pool="\n".join(f"- {gene}" for gene in inherited_genes) or "(none)",
         removed_gene_pool="\n".join(f"- {gene}" for gene in removed_genes) or "(none)",
         parent_genetic_code=format_genetic_code(parent_genetic_code),
-        parent_selection_reward=parent.selection_reward,
-        parent_simple_reward=parent.simple_reward,
-        parent_hard_reward=parent.hard_reward,
         parent_lineage_summary=format_lineage_summary(parent.lineage),
         parent_imports=parent_sections.get("IMPORTS", ""),
         parent_init_body=parent_sections.get("INIT_BODY", ""),
@@ -113,18 +108,17 @@ class MutationOperator:
             parent,
             generator.prompt_bundle,
         )
-        prompt_hash = sha1_text(system_prompt + "\n" + user_prompt)
-
-        raw_response = generator.call_llm(system_prompt, user_prompt, org_dir)
-        parsed = parse_llm_response(raw_response)
-        child_genes = [
-            line.strip()[2:].strip() if line.strip().startswith("- ") else line.strip()
-            for line in parsed.get("CORE_GENES", "").splitlines()
-            if line.strip()
-        ]
-        diff_summary = summarize_mutation_gene_diff(parent_genes, child_genes)
+        parsed, optimizer_code, prompt_hash = generator.run_creation_stages(
+            design_system_prompt=system_prompt,
+            design_user_prompt=user_prompt,
+            org_dir=org_dir,
+            organism_id=organism_id,
+            generation=generation,
+        )
         return build_organism_from_response(
             parsed=parsed,
+            optimizer_code=optimizer_code,
+            implementation_template=generator.prompt_bundle.implementation_template,
             organism_id=organism_id,
             island_id=parent.island_id,
             generation=generation,
@@ -137,7 +131,6 @@ class MutationOperator:
             seed=generator.seed,
             timestamp=utc_now_iso(),
             parent_lineage=parent.lineage,
-            gene_diff_summary=diff_summary,
             cross_island=False,
             father_island_id=None,
         )

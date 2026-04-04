@@ -10,8 +10,12 @@ Canonical organism tasks:
 - `mutation/user.txt`
 - `crossover/system.txt`
 - `crossover/user.txt`
+- `implementation/system.txt`
+- `implementation/user.txt`
+- `implementation/template.txt`
 
-Each task folder contains the paired system/user prompts for one LLM action.
+`seed/`, `mutation/`, and `crossover/` define the design-stage prompts.
+`implementation/` defines the shared second-stage code-generation prompt and fixed template scaffold.
 
 Island prompts:
 - `islands/*.txt`: research directions for the island-based search. These are also prompt assets and are loaded by the canonical evolution loop.

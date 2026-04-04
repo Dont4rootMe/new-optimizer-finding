@@ -8,6 +8,7 @@ from pathlib import Path
 import src.evolve.selection as canonical_selection
 from src.evolve.selection import (
     select_top_k_per_island,
+    softmax_select_distinct_organisms,
     softmax_select_organisms,
     uniform_select_organisms,
 )
@@ -34,7 +35,6 @@ def _make_organism(org_id: str, score: float | None = None) -> OrganismMeta:
         organism_dir=str(org_dir),
         simple_reward=score,
         hard_reward=score,
-        selection_reward=score,
         genetic_code={"core_genes": ["test"], "interaction_notes": "", "compute_notes": ""},
         lineage=[],
     )
@@ -55,7 +55,7 @@ def test_softmax_select_biases_toward_higher_reward() -> None:
     ]
     picks = softmax_select_organisms(
         pop,
-        score_field="selection_reward",
+        score_field="simple_reward",
         temperature=0.2,
         k=200,
         rng=random.Random(0),
@@ -64,6 +64,23 @@ def test_softmax_select_biases_toward_higher_reward() -> None:
     for pick in picks:
         counts[pick.organism_id] = counts.get(pick.organism_id, 0) + 1
     assert counts["high"] > counts["mid"] > counts["low"]
+
+
+def test_softmax_select_distinct_organisms_samples_without_replacement() -> None:
+    pop = [
+        _make_organism("low", 0.1),
+        _make_organism("mid", 0.5),
+        _make_organism("high", 1.0),
+    ]
+    picks = softmax_select_distinct_organisms(
+        pop,
+        score_field="simple_reward",
+        temperature=0.2,
+        k=3,
+        rng=random.Random(0),
+    )
+    assert len(picks) == 3
+    assert len({pick.organism_id for pick in picks}) == 3
 
 
 def test_select_top_k_per_island_keeps_boundaries() -> None:

@@ -48,12 +48,23 @@ def test_hydra_compose_config_and_experiments() -> None:
     assert "selection_strategy" not in cfg.evolver
     assert "eval_experiments" not in cfg.evolver
     assert "evaluation" not in cfg.evolver
+    assert "organisms_per_island" not in cfg.evolver.islands
+    assert "inter_island_crossover_rate" not in cfg.evolver.islands
+    assert "probability" not in cfg.evolver.operators.mutation
     assert "parent_sampling" not in cfg.evolver.operators.mutation
     assert "parent_sampling" not in cfg.evolver.operators.crossover
     assert cfg.evolver.max_generations == 100
     assert cfg.evolver.islands.dir == "conf/prompts/islands"
-    assert cfg.evolver.islands.organisms_per_island == 5
-    assert cfg.evolver.operators.mutation.probability == 0.5
+    assert cfg.evolver.islands.seed_organisms_per_island == 5
+    assert cfg.evolver.islands.max_organisms_per_island == 5
+    assert cfg.evolver.reproduction.offspring_per_generation == 10
+    assert cfg.evolver.reproduction.operator_selection_strategy == "deterministic"
+    assert cfg.evolver.prompts.implementation_system == "conf/prompts/implementation/system.txt"
+    assert cfg.evolver.prompts.implementation_user == "conf/prompts/implementation/user.txt"
+    assert cfg.evolver.prompts.implementation_template == "conf/prompts/implementation/template.txt"
+    assert cfg.evolver.reproduction.operator_weights.within_island_crossover == 1.0
+    assert cfg.evolver.operators.mutation.gene_removal_probability == 0.2
+    assert cfg.evolver.operators.crossover.primary_parent_gene_inheritance_probability == 0.7
     assert cfg.evolver.phases.simple.eval_mode == "smoke"
     assert cfg.evolver.phases.simple.timeout_sec_per_eval == 7200
     assert cfg.evolver.phases.great_filter.eval_mode == "full"

@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.evolve.template_parser import (
     extract_editable_sections,
     parse_llm_response,
     render_template,
     validate_rendered_code,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _template_text() -> str:
+    return (ROOT / "conf" / "prompts" / "implementation" / "template.txt").read_text(encoding="utf-8")
 
 
 def test_render_and_extract_roundtrip() -> None:
@@ -104,18 +112,6 @@ def test_parse_llm_response_sections() -> None:
         "\n"
         "## CHANGE_DESCRIPTION\n"
         "Added momentum with warmup phase.\n"
-        "\n"
-        "## IMPORTS\n"
-        "import math\n"
-        "\n"
-        "## INIT_BODY\n"
-        "        self.model = model\n"
-        "\n"
-        "## STEP_BODY\n"
-        "        pass\n"
-        "\n"
-        "## ZERO_GRAD_BODY\n"
-        "        pass\n"
     )
     parsed = parse_llm_response(text)
 
@@ -123,7 +119,29 @@ def test_parse_llm_response_sections() -> None:
     assert "Momentum and warmup" in parsed["INTERACTION_NOTES"]
     assert "No extra closure calls" in parsed["COMPUTE_NOTES"]
     assert "momentum" in parsed["CHANGE_DESCRIPTION"]
-    assert "import math" in parsed["IMPORTS"]
-    assert "self.model = model" in parsed["INIT_BODY"]
-    assert "pass" in parsed["STEP_BODY"]
-    assert "pass" in parsed["ZERO_GRAD_BODY"]
+
+
+def test_validate_rendered_code_rejects_markdown_fences_with_template() -> None:
+    ok, error = validate_rendered_code("```python\nprint('x')\n```", _template_text())
+    assert not ok
+    assert "code fences" in str(error)
+
+
+def test_validate_rendered_code_rejects_missing_scaffold_markers() -> None:
+    code = (
+        "import torch\n"
+        "import torch.nn as nn\n\n"
+        "class Bad:\n"
+        "    def __init__(self, model, max_steps):\n"
+        "        self.model = model\n"
+        "        self.max_steps = max_steps\n"
+        "    def step(self, weights, grads, activations, step_fn):\n"
+        "        del weights, grads, activations, step_fn\n"
+        "    def zero_grad(self, set_to_none=True):\n"
+        "        del set_to_none\n\n"
+        "def build_optimizer(model, max_steps):\n"
+        "    return Bad(model, max_steps)\n"
+    )
+    ok, error = validate_rendered_code(code, _template_text())
+    assert not ok
+    assert "editable section markers" in str(error) or "template scaffold" in str(error)

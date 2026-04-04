@@ -8,11 +8,12 @@ from pathlib import Path
 from omegaconf import OmegaConf
 
 from src.evolve.prompt_utils import load_prompt_bundle
-from src.evolve.storage import write_json
+from src.evolve.storage import sha1_text, write_json
+from src.evolve.template_parser import parse_llm_response, render_template
 from src.evolve.types import OrganismMeta
 from src.organisms.crossbreeding import CrossbreedingOperator
 from src.organisms.mutation import MutationOperator
-from src.organisms.organism import save_organism_artifacts
+from src.organisms.organism import build_implementation_prompt_from_design, save_organism_artifacts
 
 
 def _cfg():
@@ -28,6 +29,9 @@ def _cfg():
                     "mutation_user": "conf/prompts/mutation/user.txt",
                     "crossover_system": "conf/prompts/crossover/system.txt",
                     "crossover_user": "conf/prompts/crossover/user.txt",
+                    "implementation_system": "conf/prompts/implementation/system.txt",
+                    "implementation_user": "conf/prompts/implementation/user.txt",
+                    "implementation_template": "conf/prompts/implementation/template.txt",
                 },
                 "llm": {
                     "provider": "mock",
@@ -44,44 +48,15 @@ def _cfg():
 
 
 def _optimizer_code() -> str:
-    return (
-        "# === FIXED: DO NOT MODIFY ===\n"
-        "import torch\n"
-        "import torch.nn as nn\n"
-        "# === END FIXED ===\n"
-        "\n"
-        "# === EDITABLE: IMPORTS ===\n"
-        "import math\n"
-        "# === END EDITABLE ===\n"
-        "\n"
-        "# === FIXED ===\n"
-        "OPTIMIZER_NAME = \"ParentOpt\"\n"
-        "\n"
-        "class ParentOpt:\n"
-        "    def __init__(self, model: nn.Module, max_steps: int) -> None:\n"
-        "# === END FIXED ===\n"
-        "        # === EDITABLE: INIT_BODY ===\n"
-        "        self.model = model\n"
-        "        # === END EDITABLE ===\n"
-        "\n"
-        "# === FIXED ===\n"
-        "    def step(self, weights, grads, activations, step_fn) -> None:\n"
-        "# === END FIXED ===\n"
-        "        # === EDITABLE: STEP_BODY ===\n"
-        "        del weights, grads, activations, step_fn\n"
-        "        # === END EDITABLE ===\n"
-        "\n"
-        "# === FIXED ===\n"
-        "    def zero_grad(self, set_to_none: bool = True) -> None:\n"
-        "# === END FIXED ===\n"
-        "        # === EDITABLE: ZERO_GRAD_BODY ===\n"
-        "        pass\n"
-        "        # === END EDITABLE ===\n"
-        "\n"
-        "# === FIXED ===\n"
-        "def build_optimizer(model: nn.Module, max_steps: int):\n"
-        "    return ParentOpt(model, max_steps)\n"
-        "# === END FIXED ===\n"
+    return render_template(
+        {
+            "IMPORTS": "import math",
+            "INIT_BODY": "        self.model = model\n        self.max_steps = max_steps",
+            "STEP_BODY": "        del weights, grads, activations, step_fn",
+            "ZERO_GRAD_BODY": "        pass",
+        },
+        optimizer_name="ParentOpt",
+        class_name="ParentOpt",
     )
 
 
@@ -112,7 +87,6 @@ def _make_parent(
         organism_dir=str(org_dir_path),
         optimizer_path=str(org_dir_path / "optimizer.py"),
         simple_reward=0.5,
-        selection_reward=0.5,
         genetic_code={
             "core_genes": genes,
             "interaction_notes": "Parent baseline organism.",
@@ -125,7 +99,6 @@ def _make_parent(
                 "mother_id": None,
                 "father_id": None,
                 "change_description": "Initial creation",
-                "gene_diff_summary": "; ".join(genes),
                 "selected_simple_experiments": ["simple_a"],
                 "selected_hard_experiments": [],
                 "simple_score": 0.5,
@@ -140,18 +113,70 @@ def _make_parent(
 
 
 class _FakeCanonicalGenerator:
-    def __init__(self, response_text: str) -> None:
+    def __init__(self, *, design_response_text: str, implementation_response_text: str) -> None:
         self.prompt_bundle = load_prompt_bundle(_cfg())
         self.model_name = "mock-model"
         self.seed = 123
-        self.response_text = response_text
-        self.calls: list[tuple[str, str, Path]] = []
+        self.design_response_text = design_response_text
+        self.implementation_response_text = implementation_response_text
+        self.calls: list[tuple[str, str, str, Path]] = []
 
-    def call_llm(self, system_prompt: str, user_prompt: str, org_dir: Path) -> str:
-        self.calls.append((system_prompt, user_prompt, org_dir))
-        write_json(org_dir / "llm_request.json", {"provider": "test"})
-        write_json(org_dir / "llm_response.json", {"provider": "test", "text": self.response_text})
-        return self.response_text
+    def run_creation_stages(
+        self,
+        *,
+        design_system_prompt: str,
+        design_user_prompt: str,
+        org_dir: Path,
+        organism_id: str,
+        generation: int,
+    ) -> tuple[dict[str, str], str, str]:
+        del generation
+        self.calls.append(("design", design_system_prompt, design_user_prompt, org_dir))
+        parsed = parse_llm_response(self.design_response_text)
+        implementation_system_prompt, implementation_user_prompt = build_implementation_prompt_from_design(
+            parsed,
+            self.prompt_bundle,
+        )
+        self.calls.append(("implementation", implementation_system_prompt, implementation_user_prompt, org_dir))
+        write_json(
+            org_dir / "llm_request.json",
+            {
+                "design": {
+                    "system_prompt": design_system_prompt,
+                    "user_prompt": design_user_prompt,
+                    "request": {"provider": "test", "stage": "design"},
+                },
+                "implementation": {
+                    "system_prompt": implementation_system_prompt,
+                    "user_prompt": implementation_user_prompt,
+                    "request": {"provider": "test", "stage": "implementation"},
+                },
+            },
+        )
+        write_json(
+            org_dir / "llm_response.json",
+            {
+                "design": {
+                    "text": self.design_response_text,
+                    "response": {"provider": "test", "stage": "design"},
+                },
+                "implementation": {
+                    "text": self.implementation_response_text,
+                    "response": {"provider": "test", "stage": "implementation"},
+                },
+            },
+        )
+        prompt_hash = sha1_text(
+            "\n".join(
+                (
+                    design_system_prompt,
+                    design_user_prompt,
+                    implementation_system_prompt,
+                    implementation_user_prompt,
+                )
+            )
+        )
+        return parsed, self.implementation_response_text, prompt_hash
 
 
 def test_mutation_operator_produce_persists_artifacts_and_semantic_lineage(tmp_path: Path) -> None:
@@ -161,7 +186,7 @@ def test_mutation_operator_produce_persists_artifacts_and_semantic_lineage(tmp_p
         island_id="gradient_methods",
         genes=["adaptive momentum", "warmup schedule", "gradient clipping"],
     )
-    response_text = (
+    design_response_text = (
         "## CORE_GENES\n"
         "- adaptive momentum\n"
         "- warmup schedule\n"
@@ -171,18 +196,23 @@ def test_mutation_operator_produce_persists_artifacts_and_semantic_lineage(tmp_p
         "## COMPUTE_NOTES\n"
         "Keep step_fn unused and update compute light.\n\n"
         "## CHANGE_DESCRIPTION\n"
-        "Dropped clipping and replaced it with trust-ratio scaling.\n\n"
-        "## IMPORTS\n"
-        "import math\n\n"
-        "## INIT_BODY\n"
-        "        self.model = model\n"
-        "        self.max_steps = max_steps\n\n"
-        "## STEP_BODY\n"
-        "        del weights, grads, activations, step_fn\n\n"
-        "## ZERO_GRAD_BODY\n"
-        "        pass\n"
+        "Dropped clipping and replaced it with trust-ratio scaling.\n"
     )
-    generator = _FakeCanonicalGenerator(response_text)
+    implementation_response_text = render_template(
+        {
+            "IMPORTS": "import math",
+            "INIT_BODY": "        self.model = model\n        self.max_steps = max_steps",
+            "STEP_BODY": "        del weights, grads, activations, step_fn",
+            "ZERO_GRAD_BODY": "        pass",
+        },
+        optimizer_name="MutationChild",
+        class_name="MutationChild",
+        template_text=load_prompt_bundle(_cfg()).implementation_template,
+    )
+    generator = _FakeCanonicalGenerator(
+        design_response_text=design_response_text,
+        implementation_response_text=implementation_response_text,
+    )
     operator = MutationOperator(q=0.6, seed=1)
     org_dir = tmp_path / "child_mutation"
     org_dir.mkdir(parents=True, exist_ok=True)
@@ -195,19 +225,26 @@ def test_mutation_operator_produce_persists_artifacts_and_semantic_lineage(tmp_p
         generator=generator,
     )
 
-    _, user_prompt, _ = generator.calls[0]
+    _, _, user_prompt, _ = generator.calls[0]
     assert "=== INHERITED GENE POOL ===" in user_prompt
     assert "=== REMOVED GENES ===" in user_prompt
+    assert generator.calls[1][0] == "implementation"
+    assert "=== FIXED OPTIMIZER TEMPLATE ===" in generator.calls[1][2]
     assert child.island_id == parent.island_id
     assert child.mother_id == parent.organism_id
     assert (org_dir / "genetic_code.md").exists()
     assert (org_dir / "lineage.json").exists()
+    assert (org_dir / "optimizer.py").read_text(encoding="utf-8") == implementation_response_text
     lineage = json.loads((org_dir / "lineage.json").read_text(encoding="utf-8"))
     latest = lineage[-1]
     assert latest["operator"] == "mutation"
-    assert "gradient clipping" in latest["gene_diff_summary"]
-    assert "trust ratio scaling" in latest["gene_diff_summary"]
+    assert latest["change_description"] == "Dropped clipping and replaced it with trust-ratio scaling."
+    assert "gene_diff_summary" not in latest
     assert "aggregate_score" not in latest
+    llm_request = json.loads((org_dir / "llm_request.json").read_text(encoding="utf-8"))
+    llm_response = json.loads((org_dir / "llm_response.json").read_text(encoding="utf-8"))
+    assert set(llm_request.keys()) == {"design", "implementation"}
+    assert set(llm_response.keys()) == {"design", "implementation"}
 
 
 def test_crossover_operator_produce_records_cross_island_lineage(tmp_path: Path) -> None:
@@ -223,7 +260,7 @@ def test_crossover_operator_produce_records_cross_island_lineage(tmp_path: Path)
         island_id="second_order",
         genes=["diagonal preconditioning", "curvature damping", "gradient clipping"],
     )
-    response_text = (
+    design_response_text = (
         "## CORE_GENES\n"
         "- adaptive momentum\n"
         "- warmup schedule\n"
@@ -233,18 +270,23 @@ def test_crossover_operator_produce_records_cross_island_lineage(tmp_path: Path)
         "## COMPUTE_NOTES\n"
         "No extra closures; keep the controller cheap.\n\n"
         "## CHANGE_DESCRIPTION\n"
-        "Kept the maternal schedule and introduced paternal diagonal preconditioning.\n\n"
-        "## IMPORTS\n"
-        "import math\n\n"
-        "## INIT_BODY\n"
-        "        self.model = model\n"
-        "        self.max_steps = max_steps\n\n"
-        "## STEP_BODY\n"
-        "        del weights, grads, activations, step_fn\n\n"
-        "## ZERO_GRAD_BODY\n"
-        "        pass\n"
+        "Kept the maternal schedule and introduced paternal diagonal preconditioning.\n"
     )
-    generator = _FakeCanonicalGenerator(response_text)
+    implementation_response_text = render_template(
+        {
+            "IMPORTS": "import math",
+            "INIT_BODY": "        self.model = model\n        self.max_steps = max_steps",
+            "STEP_BODY": "        del weights, grads, activations, step_fn",
+            "ZERO_GRAD_BODY": "        pass",
+        },
+        optimizer_name="CrossoverChild",
+        class_name="CrossoverChild",
+        template_text=load_prompt_bundle(_cfg()).implementation_template,
+    )
+    generator = _FakeCanonicalGenerator(
+        design_response_text=design_response_text,
+        implementation_response_text=implementation_response_text,
+    )
     operator = CrossbreedingOperator(p=1.0, seed=3)
     org_dir = tmp_path / "child_crossover"
     org_dir.mkdir(parents=True, exist_ok=True)
@@ -258,10 +300,11 @@ def test_crossover_operator_produce_records_cross_island_lineage(tmp_path: Path)
         generator=generator,
     )
 
-    _, user_prompt, _ = generator.calls[0]
+    _, _, user_prompt, _ = generator.calls[0]
     assert "=== INHERITED GENE POOL ===" in user_prompt
     assert "MOTHER (primary parent" in user_prompt
     assert "FATHER (secondary parent" in user_prompt
+    assert generator.calls[1][0] == "implementation"
     assert child.island_id == mother.island_id
     assert child.mother_id == mother.organism_id
     assert child.father_id == father.organism_id
@@ -269,5 +312,5 @@ def test_crossover_operator_produce_records_cross_island_lineage(tmp_path: Path)
     latest = child.lineage[-1]
     assert latest["cross_island"] is True
     assert latest["father_island_id"] == "second_order"
-    assert "adaptive momentum" in latest["gene_diff_summary"]
-    assert "diagonal preconditioning" in latest["gene_diff_summary"]
+    assert latest["change_description"] == "Kept the maternal schedule and introduced paternal diagonal preconditioning."
+    assert "gene_diff_summary" not in latest

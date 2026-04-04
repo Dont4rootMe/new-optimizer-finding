@@ -19,6 +19,7 @@ def test_load_prompt_bundle_from_default_conf_assets() -> None:
     assert "automated evolutionary search for novel optimizers" in bundle.project_context
     assert "## CORE_GENES" in bundle.seed_system
     assert "{island_description}" in bundle.seed_user
+    assert "Return only the final `optimizer.py` text." in bundle.implementation_user
 
 
 def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
@@ -31,6 +32,9 @@ def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
         "mutation/user.txt": "mutation user",
         "crossover/system.txt": "crossover system",
         "crossover/user.txt": "crossover user",
+        "implementation/system.txt": "implementation system",
+        "implementation/user.txt": "implementation user",
+        "implementation/template.txt": "implementation template",
     }
     for relative_path, contents in files.items():
         target = prompts_dir / relative_path
@@ -48,6 +52,9 @@ def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
                     "mutation_user": str(prompts_dir / "mutation" / "user.txt"),
                     "crossover_system": str(prompts_dir / "crossover" / "system.txt"),
                     "crossover_user": str(prompts_dir / "crossover" / "user.txt"),
+                    "implementation_system": str(prompts_dir / "implementation" / "system.txt"),
+                    "implementation_user": str(prompts_dir / "implementation" / "user.txt"),
+                    "implementation_template": str(prompts_dir / "implementation" / "template.txt"),
                 }
             }
         }
@@ -57,4 +64,5 @@ def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
 
     assert bundle.project_context == "project context"
     assert bundle.crossover_user == "crossover user"
+    assert bundle.implementation_template == "implementation template"
     assert compose_system_prompt(bundle.project_context, bundle.seed_system) == "project context\n\nseed system"

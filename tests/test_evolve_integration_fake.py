@@ -86,17 +86,31 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                 "max_evaluation_jobs": 1,
                 "islands": {
                     "dir": str(islands_dir),
-                    "organisms_per_island": 1,
-                    "inter_island_crossover_rate": 1.0,
+                    "seed_organisms_per_island": 1,
+                    "max_organisms_per_island": 1,
+                },
+                "reproduction": {
+                    "offspring_per_generation": 2,
+                    "operator_selection_strategy": "deterministic",
+                    "operator_weights": {
+                        "within_island_crossover": 0.0,
+                        "inter_island_crossover": 1.0,
+                        "mutation": 0.0,
+                    },
+                    "island_sampling": {
+                        "within_island_crossover": "unified",
+                        "inter_island_crossover": "unified",
+                        "mutation": "unified",
+                    },
                 },
                 "operators": {
                     "mutation": {
-                        "probability": 0.0,
-                        "gene_delete_probability": 0.2,
+                        "gene_removal_probability": 0.2,
+                        "parent_selection_softmax_temperature": 1.0,
                     },
                     "crossover": {
-                        "inherit_gene_probability_from_mother": 0.7,
-                        "softmax_temperature": 1.0,
+                        "primary_parent_gene_inheritance_probability": 0.7,
+                        "parent_selection_softmax_temperature": 1.0,
                     },
                 },
                 "phases": {
@@ -160,7 +174,6 @@ def test_canonical_organism_first_pipeline_fake(tmp_path: Path) -> None:
         assert phase_results["hard"]["allocation_snapshot"]["inclusion_prob"]["hard_b"] == 1.0
         assert summary_payload["simple_reward"] is not None
         assert summary_payload["hard_reward"] is not None
-        assert summary_payload["selection_reward"] == summary_payload["hard_reward"]
 
 
 def test_canonical_multigeneration_resume_keeps_manifest_and_island_boundaries(tmp_path: Path) -> None:

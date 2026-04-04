@@ -22,16 +22,4 @@ How this optimizer interacts with different model architectures and training sce
 Computational and memory overhead. What state is stored per parameter? How does per-step cost compare to Adam? Any operations that scale super-linearly?
 
 ## CHANGE_DESCRIPTION
-Since this is a new seed organism, describe the overall design philosophy and what makes this optimizer interesting or novel.
-
-## IMPORTS
-Additional Python imports beyond torch and torch.nn (which are already provided in the fixed template). If none needed, write a comment like "# no additional imports".
-
-## INIT_BODY
-Body of __init__(self, model, max_steps). You MUST store self.model and self.max_steps yourself — they are not stored automatically. Create parameter groups, initialize moment buffers, define LR schedules, etc.
-
-## STEP_BODY
-Body of step(self, weights, grads, activations, step_fn). Your core update logic. Iterate over self.model.parameters(), compute and apply updates. The weights/grads/activations dicts are read-only snapshots — to modify parameters, use self.model.parameters() directly.
-
-## ZERO_GRAD_BODY
-Body of zero_grad(self, set_to_none). Standard pattern: iterate self.model.parameters(), set .grad = None if set_to_none, else zero it.
+Since this is a new seed organism, describe the overall design philosophy and the main novelty that distinguishes this organism from ordinary Adam/SGD baselines.

@@ -8,11 +8,32 @@ from pathlib import Path
 import pytest
 
 from src.evolve.storage import read_genetic_code, read_lineage, read_organism_meta, write_json
+from src.evolve.template_parser import render_template
 from src.organisms.organism import (
     build_organism_from_response,
     format_lineage_summary,
     update_latest_lineage_entry,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _implementation_template() -> str:
+    return (ROOT / "conf" / "prompts" / "implementation" / "template.txt").read_text(encoding="utf-8")
+
+
+def _optimizer_code() -> str:
+    return render_template(
+        {
+            "IMPORTS": "import math",
+            "INIT_BODY": "        self.model = model\n        self.max_steps = max_steps",
+            "STEP_BODY": "        del weights, grads, activations, step_fn",
+            "ZERO_GRAD_BODY": "        pass",
+        },
+        optimizer_name="TestOpt",
+        class_name="TestOpt",
+        template_text=_implementation_template(),
+    )
 
 
 def _base_parsed() -> dict[str, str]:
@@ -21,10 +42,6 @@ def _base_parsed() -> dict[str, str]:
         "INTERACTION_NOTES": "Momentum and warmup are coordinated.",
         "COMPUTE_NOTES": "No extra step_fn calls.",
         "CHANGE_DESCRIPTION": "Initial organism build.",
-        "IMPORTS": "import math",
-        "INIT_BODY": "self.model = model\nself.max_steps = max_steps",
-        "STEP_BODY": "del weights, grads, activations, step_fn",
-        "ZERO_GRAD_BODY": "pass",
     }
 
 
@@ -33,6 +50,8 @@ def _build(tmp_path: Path, parsed: dict[str, str], **overrides):
     org_dir.mkdir(parents=True, exist_ok=True)
     kwargs = {
         "parsed": parsed,
+        "optimizer_code": _optimizer_code(),
+        "implementation_template": _implementation_template(),
         "organism_id": "org01",
         "island_id": "gradient_methods",
         "generation": 0,
@@ -89,7 +108,6 @@ def test_new_lineage_write_omits_aggregate_score_and_summary_mentions_cross_isla
         operator="crossover",
         cross_island=True,
         father_island_id="second_order",
-        gene_diff_summary="Maternal genes preserved: adaptive momentum. Paternal genes introduced: diagonal preconditioning. Major rewrites: (none).",
     )
     update_latest_lineage_entry(
         org,
@@ -101,11 +119,13 @@ def test_new_lineage_write_omits_aggregate_score_and_summary_mentions_cross_isla
     lineage = read_lineage(Path(org.lineage_path))
     latest = lineage[-1]
     assert "aggregate_score" not in latest
+    assert "gene_diff_summary" not in latest
     assert latest["cross_island"] is True
     assert latest["father_island_id"] == "second_order"
 
     summary = format_lineage_summary(lineage)
     assert "cross_island=true:second_order" in summary
+    assert "genes=" not in summary
 
 
 def test_old_lineage_with_aggregate_score_still_loads(tmp_path: Path) -> None:
@@ -214,3 +234,8 @@ def test_canonical_organism_meta_read_rejects_noncanonical_meta_shape(tmp_path: 
 
     with pytest.raises(ValueError, match="generation_created|island_id"):
         read_organism_meta(org_dir)
+
+
+def test_build_organism_rejects_optimizer_code_with_markdown_fences(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="code fences"):
+        _build(tmp_path, _base_parsed(), optimizer_code="```python\nprint('bad')\n```")

@@ -23,6 +23,9 @@ def _cfg():
                     "mutation_user": "conf/prompts/mutation/user.txt",
                     "crossover_system": "conf/prompts/crossover/system.txt",
                     "crossover_user": "conf/prompts/crossover/user.txt",
+                    "implementation_system": "conf/prompts/implementation/system.txt",
+                    "implementation_user": "conf/prompts/implementation/user.txt",
+                    "implementation_template": "conf/prompts/implementation/template.txt",
                 },
                 "max_generation_attempts": 2,
                 "llm": {
@@ -179,6 +182,9 @@ def test_generator_loads_only_current_prompt_bundle_assets(monkeypatch) -> None:
         ("mutation", "user.txt"),
         ("crossover", "system.txt"),
         ("crossover", "user.txt"),
+        ("implementation", "system.txt"),
+        ("implementation", "user.txt"),
+        ("implementation", "template.txt"),
     }
     assert "## CORE_GENES" in generator.prompt_bundle.seed_system
 
@@ -206,6 +212,8 @@ def test_canonical_generator_seeds_real_island_organism(tmp_path: Path) -> None:
     assert (organism_dir / "optimizer.py").exists()
     assert (organism_dir / "genetic_code.md").exists()
     assert (organism_dir / "lineage.json").exists()
+    assert "design" in (organism_dir / "llm_request.json").read_text(encoding="utf-8")
+    assert "implementation" in (organism_dir / "llm_request.json").read_text(encoding="utf-8")
 
 
 def test_canonical_seed_operator_module_excludes_prompt_only_mutation_and_crossover() -> None:
