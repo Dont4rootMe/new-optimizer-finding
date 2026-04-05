@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.minigpt_wikitext2.MiniGptWikiText2Experiment
 enabled: true
 name: minigpt_wikitext2
+need_cuda: true
 
 
 baseline:

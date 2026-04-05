@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 from omegaconf import DictConfig
 
+from experiments.optimization_survey._runtime.compute import resolve_torch_device
 from experiments.optimization_survey._runtime.optimizer_runtime import (
     ActivationRecorder,
     StepBudget,
@@ -26,10 +27,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _device_from_cfg(cfg: DictConfig) -> torch.device:
-    requested = str(cfg.compute.device)
-    if requested == "cuda" and torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
+    return resolve_torch_device(str(cfg.compute.device))
 
 
 @torch.no_grad()

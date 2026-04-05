@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.poly_regression.PolyRegressionExperiment
 enabled: true
 name: poly_regression
+need_cuda: false
 
 
 baseline:

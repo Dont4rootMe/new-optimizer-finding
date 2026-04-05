@@ -66,6 +66,8 @@ class OrganismMeta:
     model_name: str = ""  # Deprecated compatibility alias; new writes use provider_model_id.
     prompt_hash: str = ""
     seed: int = 0
+    pipeline_state: str = ""
+    planned_phase_evaluations: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -91,6 +93,8 @@ class OrganismMeta:
             "provider_model_id": self.provider_model_id or self.model_name,
             "prompt_hash": self.prompt_hash,
             "seed": self.seed,
+            "pipeline_state": self.pipeline_state,
+            "planned_phase_evaluations": dict(self.planned_phase_evaluations),
         }
 
     @property
@@ -122,6 +126,7 @@ class EvalTask:
     task_id: str
     organism_id: str
     generation: int
+    phase: str
     experiment_name: str
     organism_dir: str
     output_json_path: str
@@ -136,6 +141,8 @@ class EvalTask:
     timeout_sec: int
     max_retries: int
     workdir: str
+    resource_class: str
+    assigned_rank: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -160,12 +167,16 @@ class EvalTaskResult:
     task_id: str
     organism_id: str
     generation: int
+    phase: str
     experiment_name: str
     status: str
     result_json_path: str
     duration_sec: float
     attempts: int
-    worker_gpu: int
+    resource_class: str
+    assigned_device: str
+    assigned_rank: int | None = None
+    worker_slot_id: str = ""
     return_code: int | None = None
     error_msg: str | None = None
 
@@ -204,3 +215,88 @@ class OrganismEvaluationSummary:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class PlannedPhaseEvaluation:
+    """Persistent phase plan attached to one organism before execution starts."""
+
+    phase: str
+    allocation_snapshot: dict[str, Any]
+    selected_experiments: list[str]
+    task_states: dict[str, dict[str, Any]] = field(default_factory=dict)
+    status: str = "planned"
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PlannedPhaseEvaluation":
+        return cls(
+            phase=str(payload["phase"]),
+            allocation_snapshot=dict(payload.get("allocation_snapshot", {})),
+            selected_experiments=[str(name) for name in payload.get("selected_experiments", [])],
+            task_states={
+                str(name): dict(state)
+                for name, state in dict(payload.get("task_states", {})).items()
+            },
+            status=str(payload.get("status", "planned")),
+        )
+
+
+@dataclass(slots=True)
+class PlannedOffspring:
+    """Persistent generation-plan entry for one not-yet-finalized offspring."""
+
+    organism_id: str
+    organism_dir: str
+    island_id: str
+    generation: int
+    route: str
+    operator: str
+    mother_id: str | None
+    mother_organism_dir: str | None
+    father_id: str | None
+    father_organism_dir: str | None
+    father_island_id: str | None
+    operator_seed: int
+    timestamp: str
+    pipeline_state: str = "planned_creation"
+    error_msg: str | None = None
+    planned_phase_evaluations: dict[str, PlannedPhaseEvaluation] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["planned_phase_evaluations"] = {
+            phase: plan.to_dict() for phase, plan in self.planned_phase_evaluations.items()
+        }
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PlannedOffspring":
+        phase_payload = dict(payload.get("planned_phase_evaluations", {}))
+        return cls(
+            organism_id=str(payload["organism_id"]),
+            organism_dir=str(payload["organism_dir"]),
+            island_id=str(payload["island_id"]),
+            generation=int(payload["generation"]),
+            route=str(payload["route"]),
+            operator=str(payload["operator"]),
+            mother_id=(str(payload["mother_id"]) if payload.get("mother_id") else None),
+            mother_organism_dir=(
+                str(payload["mother_organism_dir"]) if payload.get("mother_organism_dir") else None
+            ),
+            father_id=(str(payload["father_id"]) if payload.get("father_id") else None),
+            father_organism_dir=(
+                str(payload["father_organism_dir"]) if payload.get("father_organism_dir") else None
+            ),
+            father_island_id=(str(payload["father_island_id"]) if payload.get("father_island_id") else None),
+            operator_seed=int(payload["operator_seed"]),
+            timestamp=str(payload["timestamp"]),
+            pipeline_state=str(payload.get("pipeline_state", "planned_creation")),
+            error_msg=(str(payload["error_msg"]) if payload.get("error_msg") else None),
+            planned_phase_evaluations={
+                str(phase): PlannedPhaseEvaluation.from_dict(dict(plan))
+                for phase, plan in phase_payload.items()
+            },
+        )

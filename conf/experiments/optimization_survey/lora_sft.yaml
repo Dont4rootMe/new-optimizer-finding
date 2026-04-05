@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.lora_sft.LoraSftExperiment
 enabled: false
 name: lora_sft
+need_cuda: true
 
 
 baseline:

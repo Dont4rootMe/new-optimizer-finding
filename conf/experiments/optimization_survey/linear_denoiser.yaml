@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.linear_denoiser.LinearDenoiserExperiment
 enabled: true
 name: linear_denoiser
+need_cuda: false
 
 
 baseline:

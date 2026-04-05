@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.ddpm_cifar10.DdpmCifar10Experiment
 enabled: false
 name: ddpm_cifar10
+need_cuda: true
 
 
 baseline:

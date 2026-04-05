@@ -24,16 +24,28 @@ from src.evolve.selection import (
 )
 from src.evolve.storage import (
     generation_dir,
+    genetic_code_path,
+    implementation_path,
+    lineage_path,
     organism_dir,
     phase_result_path,
+    read_json,
     read_organism_meta,
     read_organism_summary,
     read_population_state,
+    utc_now_iso,
+    write_json,
     write_organism_meta,
     write_organism_summary,
     write_population_state,
 )
-from src.evolve.types import Island, OrganismEvaluationRequest, OrganismMeta
+from src.evolve.types import (
+    Island,
+    OrganismEvaluationRequest,
+    OrganismMeta,
+    PlannedOffspring,
+    PlannedPhaseEvaluation,
+)
 from src.organisms.crossbreeding import CrossbreedingOperator
 from src.organisms.mutation import MutationOperator
 from src.organisms.organism import update_latest_lineage_entry
@@ -64,6 +76,7 @@ class EvolutionLoop:
         self.llm_registry = llm_registry or ApiPlatformRegistry(cfg)
         self._owns_llm_registry = llm_registry is None
         self.generator = CandidateGenerator(cfg, llm_registry=self.llm_registry)
+        self.orchestrator = EvolverOrchestrator(cfg)
         self.rng = random.Random(int(cfg.seed))
         self.max_proposal_jobs = max(1, int(self.evolver_cfg.get("max_proposal_jobs") or 1))
 
@@ -236,18 +249,25 @@ class EvolutionLoop:
             key=lambda organism: organism.simple_score if organism.simple_score is not None else -float("inf"),
         )
 
-    def _save_state(self) -> None:
+    def _save_state(
+        self,
+        *,
+        finalized_generation: int | None = None,
+        inflight_generation: dict[str, Any] | None = None,
+    ) -> None:
+        active_generation = self.generation if finalized_generation is None else finalized_generation
         for organism in self.population:
-            organism.current_generation_active = self.generation
+            organism.current_generation_active = active_generation
             write_organism_meta(organism)
 
         best = self._best_active_organism()
         write_population_state(
             self.population_root,
-            self.generation,
+            active_generation,
             self.population,
             best_organism_id=best.organism_id if best is not None else None,
             best_simple_score=best.simple_score if best is not None else None,
+            inflight_generation=inflight_generation,
         )
 
     def _load_state(self) -> dict[str, Any] | None:
@@ -519,15 +539,116 @@ class EvolutionLoop:
             generator=self.generator,
         )
 
-    async def _produce_offspring(
+    def _simple_evaluation_request(
+        self,
+        *,
+        organism_id: str,
+        organism_dir_path: Path,
+        created_at: str,
+    ) -> OrganismEvaluationRequest:
+        return OrganismEvaluationRequest(
+            organism_id=organism_id,
+            organism_dir=str(organism_dir_path),
+            phase="simple",
+            experiments=self._phase_experiments("simple"),
+            allocation_cfg=self._phase_allocation_cfg("simple"),
+            eval_mode=self._phase_eval_mode("simple"),
+            timeout_sec=self._phase_timeout_sec("simple"),
+            created_at=created_at,
+        )
+
+    def _write_planned_organism_stub(self, plan: PlannedOffspring) -> None:
+        placeholder = OrganismMeta(
+            organism_id=plan.organism_id,
+            island_id=plan.island_id,
+            generation_created=plan.generation,
+            current_generation_active=plan.generation,
+            timestamp=plan.timestamp,
+            mother_id=plan.mother_id,
+            father_id=plan.father_id,
+            operator=plan.operator,
+            genetic_code_path=str(genetic_code_path(plan.organism_dir)),
+            implementation_path=str(implementation_path(plan.organism_dir)),
+            lineage_path=str(lineage_path(plan.organism_dir)),
+            organism_dir=plan.organism_dir,
+            ancestor_ids=[],
+            experiment_report_index={},
+            status="pending",
+            pipeline_state=plan.pipeline_state,
+            planned_phase_evaluations={
+                phase: phase_plan.to_dict() for phase, phase_plan in plan.planned_phase_evaluations.items()
+            },
+        )
+        write_organism_meta(placeholder)
+
+    def _serialize_inflight_generation(
+        self,
+        planned_offspring: list[PlannedOffspring],
+    ) -> dict[str, Any]:
+        return {
+            "target_generation": self.generation,
+            "parent_snapshot": [organism.to_dict() for organism in self.population],
+            "planned_offspring": [plan.to_dict() for plan in planned_offspring],
+            "creation_queue": {
+                "pending": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "planned_creation"],
+                "active": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "creating"],
+                "completed": [
+                    plan.organism_id
+                    for plan in planned_offspring
+                    if plan.pipeline_state
+                    in {"pending_simple_eval", "running_simple_eval", "simple_complete", "failed_simple_eval"}
+                ],
+                "failed": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "failed_creation"],
+            },
+            "simple_eval_queue": {
+                "pending": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "pending_simple_eval"],
+                "active": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "running_simple_eval"],
+                "completed": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "simple_complete"],
+                "failed": [
+                    plan.organism_id for plan in planned_offspring if plan.pipeline_state == "failed_simple_eval"
+                ],
+            },
+            "completed": all(
+                plan.pipeline_state in {"simple_complete", "failed_creation", "failed_simple_eval"}
+                for plan in planned_offspring
+            ),
+            "failed": any(
+                plan.pipeline_state in {"failed_creation", "failed_simple_eval"} for plan in planned_offspring
+            ),
+            "finalized": False,
+        }
+
+    def _persist_inflight_generation(self, planned_offspring: list[PlannedOffspring]) -> None:
+        self._save_state(
+            finalized_generation=max(0, self.generation - 1),
+            inflight_generation=self._serialize_inflight_generation(planned_offspring),
+        )
+
+    def _resolve_parent_meta(
+        self,
+        *,
+        parent_id: str | None,
+        parent_dir: str | None,
+        active_by_id: dict[str, OrganismMeta],
+    ) -> OrganismMeta | None:
+        if not parent_id:
+            return None
+        parent = active_by_id.get(parent_id)
+        if parent is not None:
+            return parent
+        if parent_dir:
+            return read_organism_meta(parent_dir)
+        raise FileNotFoundError(f"Unable to resolve parent organism '{parent_id}' for inflight generation.")
+
+    def _plan_offspring_generation(
         self,
         active_by_island: dict[str, list[OrganismMeta]],
-    ) -> list[OrganismMeta]:
+    ) -> list[PlannedOffspring]:
         if self.offspring_per_generation <= 0:
             return []
 
         gen_dir = generation_dir(self.population_root, self.generation)
-        builders: list[Callable[[], OrganismMeta]] = []
+        planned_offspring: list[PlannedOffspring] = []
         for route in self._planned_reproduction_routes(active_by_island):
             if route == _ROUTE_MUTATION:
                 candidate_islands = self._eligible_island_ids_for_route(_ROUTE_MUTATION, active_by_island)
@@ -546,13 +667,29 @@ class EvolutionLoop:
                 )[0]
                 organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=island_id)
                 operator_seed = self.rng.randint(0, 2**31 - 1)
-                builders.append(
-                    lambda parent=parent, organism_id=organism_id, org_dir=org_dir, operator_seed=operator_seed: self._create_mutation_offspring(
-                        parent=parent,
+                timestamp = utc_now_iso()
+                phase_plan = self.orchestrator.plan_phase_evaluation(
+                    self._simple_evaluation_request(
                         organism_id=organism_id,
-                        org_dir=org_dir,
-                        operator_seed=operator_seed,
+                        organism_dir_path=org_dir,
+                        created_at=timestamp,
                     )
+                )
+                plan = PlannedOffspring(
+                    organism_id=organism_id,
+                    organism_dir=str(org_dir),
+                    island_id=island_id,
+                    generation=self.generation,
+                    route=route,
+                    operator="mutation",
+                    mother_id=parent.organism_id,
+                    mother_organism_dir=parent.organism_dir,
+                    father_id=None,
+                    father_organism_dir=None,
+                    father_island_id=None,
+                    operator_seed=operator_seed,
+                    timestamp=timestamp,
+                    planned_phase_evaluations={"simple": phase_plan},
                 )
             elif route == _ROUTE_WITHIN_ISLAND_CROSSOVER:
                 candidate_islands = self._eligible_island_ids_for_route(_ROUTE_WITHIN_ISLAND_CROSSOVER, active_by_island)
@@ -573,14 +710,29 @@ class EvolutionLoop:
                     raise ValueError("Within-island crossover sampled duplicate parents; expected distinct organisms.")
                 organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=island_id)
                 operator_seed = self.rng.randint(0, 2**31 - 1)
-                builders.append(
-                    lambda mother=primary_parent, father=secondary_parent, organism_id=organism_id, org_dir=org_dir, operator_seed=operator_seed: self._create_within_island_crossover_offspring(
-                        mother=mother,
-                        father=father,
+                timestamp = utc_now_iso()
+                phase_plan = self.orchestrator.plan_phase_evaluation(
+                    self._simple_evaluation_request(
                         organism_id=organism_id,
-                        org_dir=org_dir,
-                        operator_seed=operator_seed,
+                        organism_dir_path=org_dir,
+                        created_at=timestamp,
                     )
+                )
+                plan = PlannedOffspring(
+                    organism_id=organism_id,
+                    organism_dir=str(org_dir),
+                    island_id=island_id,
+                    generation=self.generation,
+                    route=route,
+                    operator="crossover",
+                    mother_id=primary_parent.organism_id,
+                    mother_organism_dir=primary_parent.organism_dir,
+                    father_id=secondary_parent.organism_id,
+                    father_organism_dir=secondary_parent.organism_dir,
+                    father_island_id=secondary_parent.island_id,
+                    operator_seed=operator_seed,
+                    timestamp=timestamp,
+                    planned_phase_evaluations={"simple": phase_plan},
                 )
             elif route == _ROUTE_INTER_ISLAND_CROSSOVER:
                 candidate_islands = self._eligible_island_ids_for_route(_ROUTE_INTER_ISLAND_CROSSOVER, active_by_island)
@@ -606,18 +758,281 @@ class EvolutionLoop:
                 )[0]
                 organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=primary_island_id)
                 operator_seed = self.rng.randint(0, 2**31 - 1)
-                builders.append(
-                    lambda mother=primary_parent, father=secondary_parent, organism_id=organism_id, org_dir=org_dir, operator_seed=operator_seed: self._create_inter_island_crossover_offspring(
-                        mother=mother,
-                        father=father,
+                timestamp = utc_now_iso()
+                phase_plan = self.orchestrator.plan_phase_evaluation(
+                    self._simple_evaluation_request(
                         organism_id=organism_id,
-                        org_dir=org_dir,
-                        operator_seed=operator_seed,
+                        organism_dir_path=org_dir,
+                        created_at=timestamp,
                     )
+                )
+                plan = PlannedOffspring(
+                    organism_id=organism_id,
+                    organism_dir=str(org_dir),
+                    island_id=primary_island_id,
+                    generation=self.generation,
+                    route=route,
+                    operator="crossover",
+                    mother_id=primary_parent.organism_id,
+                    mother_organism_dir=primary_parent.organism_dir,
+                    father_id=secondary_parent.organism_id,
+                    father_organism_dir=secondary_parent.organism_dir,
+                    father_island_id=secondary_parent.island_id,
+                    operator_seed=operator_seed,
+                    timestamp=timestamp,
+                    planned_phase_evaluations={"simple": phase_plan},
                 )
             else:
                 raise ValueError(f"Unsupported reproduction route '{route}'")
-        return await self._run_proposal_builders(builders)
+
+            self._write_planned_organism_stub(plan)
+            planned_offspring.append(plan)
+        return planned_offspring
+
+    def _existing_eval_results(self, phase_plan: PlannedPhaseEvaluation) -> dict[str, dict[str, Any]]:
+        existing: dict[str, dict[str, Any]] = {}
+        for exp_name, task_state in phase_plan.task_states.items():
+            task_status = str(task_state.get("status", "planned"))
+            if task_status in {"planned", "queued", "running"}:
+                continue
+            result_path = str(task_state.get("result_path", "")).strip()
+            if result_path and Path(result_path).exists():
+                payload = read_json(result_path)
+                if isinstance(payload, dict):
+                    existing[exp_name] = payload
+                    continue
+            existing[exp_name] = {
+                "status": task_status,
+                "score": None,
+                "error_msg": task_state.get("error_msg"),
+            }
+        return existing
+
+    def _materialize_planned_offspring(
+        self,
+        plan: PlannedOffspring,
+        active_by_id: dict[str, OrganismMeta],
+    ) -> OrganismMeta:
+        mother = self._resolve_parent_meta(
+            parent_id=plan.mother_id,
+            parent_dir=plan.mother_organism_dir,
+            active_by_id=active_by_id,
+        )
+        father = self._resolve_parent_meta(
+            parent_id=plan.father_id,
+            parent_dir=plan.father_organism_dir,
+            active_by_id=active_by_id,
+        )
+        org_dir = Path(plan.organism_dir)
+
+        if plan.route == _ROUTE_MUTATION:
+            if mother is None:
+                raise ValueError(f"Mutation plan for organism {plan.organism_id} is missing parent.")
+            organism = self._create_mutation_offspring(
+                parent=mother,
+                organism_id=plan.organism_id,
+                org_dir=org_dir,
+                operator_seed=plan.operator_seed,
+            )
+        elif plan.route == _ROUTE_WITHIN_ISLAND_CROSSOVER:
+            if mother is None or father is None:
+                raise ValueError(f"Within-island crossover plan for organism {plan.organism_id} is missing parents.")
+            organism = self._create_within_island_crossover_offspring(
+                mother=mother,
+                father=father,
+                organism_id=plan.organism_id,
+                org_dir=org_dir,
+                operator_seed=plan.operator_seed,
+            )
+        elif plan.route == _ROUTE_INTER_ISLAND_CROSSOVER:
+            if mother is None or father is None:
+                raise ValueError(f"Inter-island crossover plan for organism {plan.organism_id} is missing parents.")
+            organism = self._create_inter_island_crossover_offspring(
+                mother=mother,
+                father=father,
+                organism_id=plan.organism_id,
+                org_dir=org_dir,
+                operator_seed=plan.operator_seed,
+            )
+        else:
+            raise ValueError(f"Unsupported reproduction route '{plan.route}'")
+
+        organism.pipeline_state = "pending_simple_eval"
+        organism.planned_phase_evaluations = {
+            phase: phase_plan.to_dict() for phase, phase_plan in plan.planned_phase_evaluations.items()
+        }
+        write_organism_meta(organism)
+        return organism
+
+    def _phase_request_from_plan(self, plan: PlannedOffspring, *, phase: str) -> OrganismEvaluationRequest:
+        if phase != "simple":
+            raise ValueError(f"Unsupported planned phase '{phase}'")
+        return self._simple_evaluation_request(
+            organism_id=plan.organism_id,
+            organism_dir_path=Path(plan.organism_dir),
+            created_at=plan.timestamp,
+        )
+
+    def _simple_summary_status_to_pipeline_state(self, summary_status: str) -> str:
+        return "simple_complete" if summary_status in {"ok", "partial"} else "failed_simple_eval"
+
+    def _submit_or_resume_simple_evaluation(
+        self,
+        plan: PlannedOffspring,
+        organism: OrganismMeta,
+    ) -> Any:
+        phase_plan = plan.planned_phase_evaluations["simple"]
+        existing_results = self._existing_eval_results(phase_plan)
+        for exp_name, task_state in phase_plan.task_states.items():
+            if exp_name not in existing_results and task_state.get("status") in {"planned", "queued", "running"}:
+                task_state["status"] = "queued"
+        phase_plan.status = "queued"
+        plan.pipeline_state = "running_simple_eval"
+        organism.pipeline_state = "running_simple_eval"
+        organism.planned_phase_evaluations = {
+            phase: phase_payload.to_dict() for phase, phase_payload in plan.planned_phase_evaluations.items()
+        }
+        write_organism_meta(organism)
+        return self.orchestrator.submit_planned_request(
+            self._phase_request_from_plan(plan, phase="simple"),
+            phase_plan,
+            existing_results=existing_results,
+        )
+
+    def _apply_completed_summary(
+        self,
+        plan: PlannedOffspring,
+        organism: OrganismMeta,
+        summary: Any,
+    ) -> None:
+        if summary.phase == "simple":
+            organism.simple_score = summary.aggregate_score
+        elif summary.phase == "hard":
+            organism.hard_score = summary.aggregate_score
+        else:
+            raise ValueError(f"Unsupported phase '{summary.phase}'")
+
+        phase_plan = plan.planned_phase_evaluations.get(summary.phase)
+        if phase_plan is not None:
+            phase_plan.status = "completed" if summary.status in {"ok", "partial"} else "failed"
+        pipeline_state = self._simple_summary_status_to_pipeline_state(summary.status)
+        plan.pipeline_state = pipeline_state
+        organism.pipeline_state = pipeline_state
+        organism.status = "evaluated" if summary.status in {"ok", "partial"} else "pending"
+        organism.planned_phase_evaluations = {
+            phase: phase_payload.to_dict() for phase, phase_payload in plan.planned_phase_evaluations.items()
+        }
+        update_latest_lineage_entry(
+            organism,
+            phase=summary.phase,
+            phase_score=summary.aggregate_score,
+            selected_experiments=summary.selected_experiments,
+        )
+        write_organism_meta(organism)
+        self._write_phase_summary(organism, summary)
+
+    async def _execute_planned_generation(
+        self,
+        planned_offspring: list[PlannedOffspring],
+    ) -> list[OrganismMeta]:
+        if not planned_offspring:
+            return []
+
+        self._persist_inflight_generation(planned_offspring)
+        active_by_id = {organism.organism_id: organism for organism in self.population}
+        plans_by_id = {plan.organism_id: plan for plan in planned_offspring}
+        created_offspring: dict[str, OrganismMeta] = {}
+        semaphore = asyncio.Semaphore(self.max_proposal_jobs)
+
+        async def _run_creation(plan: PlannedOffspring) -> tuple[str, OrganismMeta | None]:
+            async with semaphore:
+                plan.pipeline_state = "creating"
+                self._write_planned_organism_stub(plan)
+                self._persist_inflight_generation(planned_offspring)
+                try:
+                    organism = await asyncio.to_thread(self._materialize_planned_offspring, plan, active_by_id)
+                except Exception as exc:  # noqa: BLE001
+                    plan.pipeline_state = "failed_creation"
+                    plan.error_msg = str(exc)
+                    self._write_planned_organism_stub(plan)
+                    self._persist_inflight_generation(planned_offspring)
+                    return plan.organism_id, None
+
+                plan.pipeline_state = "pending_simple_eval"
+                plan.error_msg = None
+                self._persist_inflight_generation(planned_offspring)
+                return plan.organism_id, organism
+
+        creation_tasks: set[asyncio.Task[tuple[str, OrganismMeta | None]]] = set()
+        for plan in planned_offspring:
+            if plan.pipeline_state in {"planned_creation", "creating"}:
+                creation_tasks.add(asyncio.create_task(_run_creation(plan)))
+                continue
+            if plan.pipeline_state == "failed_creation":
+                continue
+
+            organism = read_organism_meta(plan.organism_dir)
+            created_offspring[plan.organism_id] = organism
+            if plan.pipeline_state in {"pending_simple_eval", "running_simple_eval"}:
+                immediate_summary = self._submit_or_resume_simple_evaluation(plan, organism)
+                self._persist_inflight_generation(planned_offspring)
+                if immediate_summary is not None:
+                    self._apply_completed_summary(plan, organism, immediate_summary)
+                    self._persist_inflight_generation(planned_offspring)
+
+        try:
+            while creation_tasks or self.orchestrator.has_pending_requests:
+                if creation_tasks:
+                    done, pending = await asyncio.wait(
+                        creation_tasks,
+                        timeout=0.05,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    creation_tasks = set(pending)
+                    for task in done:
+                        organism_id, organism = await task
+                        if organism is None:
+                            continue
+                        created_offspring[organism_id] = organism
+                        immediate_summary = self._submit_or_resume_simple_evaluation(
+                            plans_by_id[organism_id],
+                            organism,
+                        )
+                        self._persist_inflight_generation(planned_offspring)
+                        if immediate_summary is not None:
+                            self._apply_completed_summary(plans_by_id[organism_id], organism, immediate_summary)
+                            self._persist_inflight_generation(planned_offspring)
+
+                event = await self.orchestrator.poll_result(timeout=0.05)
+                if event is not None:
+                    result, payload, summary = event
+                    plan = plans_by_id[result.organism_id]
+                    phase_plan = plan.planned_phase_evaluations[result.phase]
+                    task_state = phase_plan.task_states[result.experiment_name]
+                    task_state["status"] = result.status
+                    task_state["assigned_device"] = result.assigned_device
+                    task_state["assigned_rank"] = result.assigned_rank
+                    task_state["attempts"] = result.attempts
+                    task_state["error_msg"] = payload.get("error_msg", result.error_msg)
+                    if summary is not None:
+                        organism = created_offspring[result.organism_id]
+                        self._apply_completed_summary(plan, organism, summary)
+                    self._persist_inflight_generation(planned_offspring)
+
+                if event is None:
+                    await asyncio.sleep(0.01)
+        finally:
+            self.orchestrator.close()
+
+        return list(created_offspring.values())
+
+    async def _produce_offspring(
+        self,
+        active_by_island: dict[str, list[OrganismMeta]],
+    ) -> list[OrganismMeta]:
+        """Compatibility shim for tests and narrow callers."""
+
+        return await self._execute_planned_generation(self._plan_offspring_generation(active_by_island))
 
     async def _evaluate_phase(
         self,
@@ -633,7 +1048,6 @@ class EvolutionLoop:
             return
 
         allocation_cfg = self._phase_allocation_cfg(phase)
-        orchestrator = EvolverOrchestrator(self.cfg)
         requests = [
             OrganismEvaluationRequest(
                 organism_id=organism.organism_id,
@@ -647,7 +1061,7 @@ class EvolutionLoop:
             )
             for organism in organisms
         ]
-        summaries = await orchestrator.evaluate_organisms(requests)
+        summaries = await self.orchestrator.evaluate_organisms(requests)
         summary_by_id = {summary.organism_id: summary for summary in summaries}
 
         for organism in organisms:
@@ -657,6 +1071,7 @@ class EvolutionLoop:
 
             if phase == "simple":
                 organism.simple_score = summary.aggregate_score
+                organism.pipeline_state = self._simple_summary_status_to_pipeline_state(summary.status)
             elif phase == "hard":
                 organism.hard_score = summary.aggregate_score
             else:
@@ -734,6 +1149,48 @@ class EvolutionLoop:
             organism.status = "eliminated"
             write_organism_meta(organism)
 
+    def _restore_planned_offspring(self, inflight_generation: dict[str, Any]) -> list[PlannedOffspring]:
+        planned_payload = inflight_generation.get("planned_offspring", [])
+        if not isinstance(planned_payload, list):
+            raise ValueError("population_state.json inflight_generation.planned_offspring must be a list")
+        return [PlannedOffspring.from_dict(dict(entry)) for entry in planned_payload]
+
+    async def _run_generation(
+        self,
+        generation: int,
+        *,
+        planned_offspring: list[PlannedOffspring] | None = None,
+    ) -> None:
+        self.generation = generation
+        if planned_offspring is None:
+            active_by_island = self._group_by_island(self.population)
+            planned_offspring = self._plan_offspring_generation(active_by_island)
+
+        offspring = await self._execute_planned_generation(planned_offspring)
+        candidate_pool = list(self.population) + offspring
+        simple_survivors = select_top_k_per_island(
+            candidate_pool,
+            self._simple_top_k(),
+            score_field="simple_score",
+        )
+        self._mark_eliminated(candidate_pool, simple_survivors)
+
+        if self._should_run_great_filter(generation):
+            await self._evaluate_phase(simple_survivors, phase="hard")
+            self.population = select_top_h_per_island(
+                simple_survivors,
+                self._great_filter_top_h(),
+                score_field="hard_score",
+            )
+            self._mark_eliminated(simple_survivors, self.population)
+        else:
+            for organism in simple_survivors:
+                organism.current_generation_active = self.generation
+                write_organism_meta(organism)
+            self.population = simple_survivors
+
+        self._save_state(finalized_generation=generation, inflight_generation=None)
+
     async def run(self) -> dict[str, Any]:
         max_generations = int(self._require_cfg_value("evolver.max_generations"))
         if self._owns_llm_registry:
@@ -742,45 +1199,25 @@ class EvolutionLoop:
         try:
             state = self._load_state()
             if state is not None and bool(self.evolver_cfg.get("resume", True)):
-                self.generation = int(state.get("current_generation", 0))
-                self.population = self._restore_population_from_state(self.generation)
+                finalized_generation = int(state.get("current_generation", 0))
+                self.population = self._restore_population_from_state(finalized_generation)
+                self.generation = finalized_generation
+
+                inflight_generation = state.get("inflight_generation")
+                if isinstance(inflight_generation, dict):
+                    target_generation = int(inflight_generation.get("target_generation", finalized_generation + 1))
+                    planned_offspring = self._restore_planned_offspring(inflight_generation)
+                    await self._run_generation(target_generation, planned_offspring=planned_offspring)
             else:
                 self.generation = 0
                 newborns = await self._seed_initial_population()
                 await self._evaluate_phase(newborns, phase="simple")
                 self.population = select_top_k_per_island(newborns, self._simple_top_k(), score_field="simple_score")
                 self._mark_eliminated(newborns, self.population)
-                self._save_state()
+                self._save_state(finalized_generation=0, inflight_generation=None)
 
             for generation in range(self.generation + 1, max_generations + 1):
-                self.generation = generation
-                active_by_island = self._group_by_island(self.population)
-                offspring = await self._produce_offspring(active_by_island)
-
-                await self._evaluate_phase(offspring, phase="simple")
-                candidate_pool = list(self.population) + offspring
-                simple_survivors = select_top_k_per_island(
-                    candidate_pool,
-                    self._simple_top_k(),
-                    score_field="simple_score",
-                )
-                self._mark_eliminated(candidate_pool, simple_survivors)
-
-                if self._should_run_great_filter(generation):
-                    await self._evaluate_phase(simple_survivors, phase="hard")
-                    self.population = select_top_h_per_island(
-                        simple_survivors,
-                        self._great_filter_top_h(),
-                        score_field="hard_score",
-                    )
-                    self._mark_eliminated(simple_survivors, self.population)
-                else:
-                    for organism in simple_survivors:
-                        organism.current_generation_active = self.generation
-                        write_organism_meta(organism)
-                    self.population = simple_survivors
-
-                self._save_state()
+                await self._run_generation(generation)
 
             best = self._best_active_organism()
             return {
@@ -791,5 +1228,6 @@ class EvolutionLoop:
                 "best_implementation_path": best.implementation_path if best is not None else None,
             }
         finally:
+            self.orchestrator.close()
             if self._owns_llm_registry:
                 self.llm_registry.stop()

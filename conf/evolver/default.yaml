@@ -9,7 +9,6 @@ eval_entrypoint_module: src.validate.run_one
 timeout_sec_per_eval: 7200
 max_retries_per_eval: 0
 max_proposal_jobs: 4
-max_evaluation_jobs: null
 
 islands:
   dir: conf/experiments/optimization_survey/prompts/islands

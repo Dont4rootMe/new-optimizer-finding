@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.cifar_convnet.CifarConvnetExperiment
 enabled: true
 name: cifar_convnet
+need_cuda: true
 
 
 baseline:

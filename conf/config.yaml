@@ -29,8 +29,9 @@ precision: bf16
 num_workers: 4
 
 resources:
-  num_gpus: 1
-  gpu_ids: null
+  evaluation:
+    gpu_ranks: [0]
+    cpu_parallel_jobs: 4
 
 safety:
   detect_nan: true

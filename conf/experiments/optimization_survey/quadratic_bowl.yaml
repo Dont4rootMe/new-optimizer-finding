@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.quadratic_bowl.QuadraticBowlExperiment
 enabled: true
 name: quadratic_bowl
+need_cuda: false
 
 
 baseline:

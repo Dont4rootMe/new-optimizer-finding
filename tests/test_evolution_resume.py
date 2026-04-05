@@ -36,7 +36,7 @@ def _make_cfg(tmp_path: Path) -> object:
                 "runs_root": str(tmp_path / "runs"),
                 "api_platform_runtime_root": str(tmp_path / ".api_platform_runtime"),
             },
-            "resources": {"num_gpus": 1, "gpu_ids": [0]},
+            "resources": {"evaluation": {"gpu_ranks": [0], "cpu_parallel_jobs": 1}},
             "experiments": {},
             "api_platforms": {"mock": {"_target_": "api_platforms.mock.platform.build_platform"}},
             "evolver": {

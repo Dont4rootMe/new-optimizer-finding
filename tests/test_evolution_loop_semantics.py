@@ -31,10 +31,20 @@ def _cfg(tmp_path: Path, **overrides) -> object:
             "data_root": str(tmp_path / "data"),
             "runs_root": str(tmp_path / "runs"),
         },
-        "resources": {"num_gpus": 1, "gpu_ids": [0]},
+        "resources": {"evaluation": {"gpu_ranks": [0], "cpu_parallel_jobs": 1}},
         "experiments": {
-            "simple_a": {"enabled": True, "normalization": {"eps": 1.0e-8}},
-            "hard_b": {"enabled": True, "normalization": {"eps": 1.0e-8}},
+            "simple_a": {
+                "enabled": True,
+                "need_cuda": False,
+                "normalization": {"eps": 1.0e-8},
+                "compute": {"device": "cpu"},
+            },
+            "hard_b": {
+                "enabled": True,
+                "need_cuda": False,
+                "normalization": {"eps": 1.0e-8},
+                "compute": {"device": "cpu"},
+            },
         },
         "evolver": {
             "generation": 0,

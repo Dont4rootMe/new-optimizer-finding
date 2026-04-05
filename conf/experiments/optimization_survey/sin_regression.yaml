@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.sin_regression.SinRegressionExperiment
 enabled: true
 name: sin_regression
+need_cuda: false
 
 
 baseline:

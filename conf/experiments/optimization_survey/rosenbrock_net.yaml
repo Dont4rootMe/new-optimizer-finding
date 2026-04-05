@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.rosenbrock_net.RosenbrockNetExperiment
 enabled: true
 name: rosenbrock_net
+need_cuda: false
 
 
 baseline:

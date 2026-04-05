@@ -42,6 +42,7 @@ def test_hydra_compose_config_and_experiments() -> None:
 
     for exp_name in expected:
         assert "enabled" in cfg.experiments[exp_name]
+        assert "need_cuda" in cfg.experiments[exp_name]
         assert "run_validation" in cfg.experiments[exp_name]
         assert "normalization" in cfg.experiments[exp_name]
         assert "quality_ref" not in cfg.experiments[exp_name].normalization
@@ -67,8 +68,11 @@ def test_hydra_compose_config_and_experiments() -> None:
     assert "probability" not in cfg.evolver.operators.mutation
     assert "parent_sampling" not in cfg.evolver.operators.mutation
     assert "parent_sampling" not in cfg.evolver.operators.crossover
+    assert "max_evaluation_jobs" not in cfg.evolver
     assert cfg.evolver.max_generations == 100
     assert cfg.organism_dir is None
+    assert cfg.resources.evaluation.gpu_ranks == [0]
+    assert cfg.resources.evaluation.cpu_parallel_jobs == 4
     assert cfg.evolver.islands.dir == "conf/experiments/optimization_survey/prompts/islands"
     assert cfg.evolver.islands.seed_organisms_per_island == 5
     assert cfg.evolver.islands.max_organisms_per_island == 5

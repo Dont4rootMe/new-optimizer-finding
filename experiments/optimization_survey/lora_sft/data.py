@@ -9,6 +9,7 @@ import torch
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, Dataset
 
+from experiments.optimization_survey._runtime.compute import pin_memory_for_device
 from experiments.optimization_survey._runtime.errors import OptionalDependencyError
 
 
@@ -119,7 +120,7 @@ def build_datamodule(cfg: DictConfig) -> dict[str, Any]:
 
     batch_size = int(cfg.compute.batch_size)
     num_workers = int(cfg.compute.num_workers)
-    pin_memory = str(cfg.compute.device) == "cuda"
+    pin_memory = pin_memory_for_device(str(cfg.compute.device))
 
     train_loader = DataLoader(
         train_set,

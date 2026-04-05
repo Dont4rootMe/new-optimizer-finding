@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.audio_transformer.AudioTransformerExperiment
 enabled: false
 name: audio_transformer
+need_cuda: true
 
 
 baseline:

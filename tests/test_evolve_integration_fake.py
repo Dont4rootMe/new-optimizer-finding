@@ -52,7 +52,7 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                 "grad_clip_norm": None,
                 "log_grad_norm": True,
             },
-            "resources": {"num_gpus": 1, "gpu_ids": [0]},
+            "resources": {"evaluation": {"gpu_ranks": [0], "cpu_parallel_jobs": 1}},
             "paths": {
                 "population_root": str(pop_root),
                 "data_root": str(tmp_path / "data"),
@@ -66,6 +66,7 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                 "simple_a": {
                     "enabled": True,
                     "name": "simple_a",
+                    "need_cuda": False,
                     "_target_": "tests.fixtures.fake_runner.FakeExperimentEvaluator",
                     "baseline": {"profile_path": str(stats_root / "optimization_survey" / "simple_a" / "baseline.json")},
                     "normalization": {"eps": 1.0e-8},
@@ -74,6 +75,7 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                 "hard_b": {
                     "enabled": True,
                     "name": "hard_b",
+                    "need_cuda": False,
                     "_target_": "tests.fixtures.fake_runner.FakeExperimentEvaluator",
                     "baseline": {"profile_path": str(stats_root / "optimization_survey" / "hard_b" / "baseline.json")},
                     "normalization": {"eps": 1.0e-8},
@@ -90,7 +92,6 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                 "eval_entrypoint_module": "src.validate.run_one",
                 "timeout_sec_per_eval": 60,
                 "max_retries_per_eval": 0,
-                "max_evaluation_jobs": 1,
                 "islands": {
                     "dir": str(islands_dir),
                     "seed_organisms_per_island": 1,

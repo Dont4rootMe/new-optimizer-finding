@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.xor_mlp.XorMlpExperiment
 enabled: true
 name: xor_mlp
+need_cuda: false
 
 
 baseline:

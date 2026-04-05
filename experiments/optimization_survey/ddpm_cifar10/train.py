@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 import math
-from contextlib import nullcontext
 from typing import Any
 
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
 
+from experiments.optimization_survey._runtime.compute import autocast_context, resolve_torch_device
 from experiments.optimization_survey._runtime.optimizer_runtime import (
     ActivationRecorder,
     StepBudget,
@@ -28,18 +28,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _device_from_cfg(cfg: DictConfig) -> torch.device:
-    if str(cfg.compute.device) == "cuda" and torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
+    return resolve_torch_device(str(cfg.compute.device))
 
 
 def _autocast_context(cfg: DictConfig, device: torch.device):
-    precision = str(cfg.compute.precision)
-    enabled = device.type == "cuda" and precision in {"bf16", "fp16"}
-    if not enabled:
-        return nullcontext()
-    dtype = torch.bfloat16 if precision == "bf16" else torch.float16
-    return torch.autocast(device_type="cuda", dtype=dtype, enabled=True)
+    return autocast_context(device=device, precision=str(cfg.compute.precision))
 
 
 def _cosine_beta_schedule(timesteps: int, s: float = 0.008) -> torch.Tensor:

@@ -23,7 +23,7 @@ def _cfg() -> object:
                     "_target_": "api_platforms.mock.platform.build_platform",
                 }
             },
-            "resources": {"num_gpus": 1, "gpu_ids": [0]},
+            "resources": {"evaluation": {"gpu_ranks": [0], "cpu_parallel_jobs": 1}},
             "seed": 1,
             "precision": "fp32",
             "experiments": {},

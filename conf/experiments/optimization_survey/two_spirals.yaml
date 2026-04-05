@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.two_spirals.TwoSpiralsExperiment
 enabled: true
 name: two_spirals
+need_cuda: false
 
 
 baseline:

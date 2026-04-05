@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.matrix_factorization.MatrixFactorizationExperiment
 enabled: true
 name: matrix_factorization
+need_cuda: false
 
 
 baseline:

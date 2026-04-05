@@ -2,6 +2,7 @@ _target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExpe
 experiment_target: experiments.optimization_survey.mnist_mlp.MnistMlpExperiment
 enabled: true
 name: mnist_mlp
+need_cuda: false
 
 
 baseline:

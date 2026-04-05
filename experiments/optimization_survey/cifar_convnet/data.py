@@ -10,6 +10,8 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
 
+from experiments.optimization_survey._runtime.compute import pin_memory_for_device
+
 
 def build_datamodule(cfg: DictConfig) -> dict[str, Any]:
     """Build train/val/test dataloaders for CIFAR-10."""
@@ -52,7 +54,7 @@ def build_datamodule(cfg: DictConfig) -> dict[str, Any]:
 
     batch_size = int(cfg.compute.batch_size)
     num_workers = int(cfg.compute.num_workers)
-    pin_memory = str(cfg.compute.device) == "cuda"
+    pin_memory = pin_memory_for_device(str(cfg.compute.device))
 
     train_loader = DataLoader(
         train_set,
