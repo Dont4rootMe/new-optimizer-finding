@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from omegaconf import DictConfig, OmegaConf
 
-from src.evolve.generator import OptimizerGenerator
+from api_platforms import ApiPlatformRegistry
+from src.evolve.generator import CandidateGenerator
 from src.evolve.islands import load_islands
 from src.evolve.orchestrator import EvolverOrchestrator
 from src.evolve.selection import (
@@ -22,24 +25,21 @@ from src.evolve.selection import (
 from src.evolve.storage import (
     generation_dir,
     organism_dir,
-    read_json,
+    phase_result_path,
     read_organism_meta,
     read_organism_summary,
-    read_population_manifest,
-    utc_now_iso,
-    write_json,
+    read_population_state,
     write_organism_meta,
     write_organism_summary,
-    write_population_manifest,
+    write_population_state,
 )
 from src.evolve.types import Island, OrganismEvaluationRequest, OrganismMeta
 from src.organisms.crossbreeding import CrossbreedingOperator
 from src.organisms.mutation import MutationOperator
-from src.organisms.organism import save_organism_artifacts, update_latest_lineage_entry
+from src.organisms.organism import update_latest_lineage_entry
 
 LOGGER = logging.getLogger(__name__)
 
-_STATE_FILE = "evolution_state.json"
 _MISSING = object()
 _ROUTE_WITHIN_ISLAND_CROSSOVER = "within_island_crossover"
 _ROUTE_INTER_ISLAND_CROSSOVER = "inter_island_crossover"
@@ -52,17 +52,20 @@ _ROUTE_ORDER = (
 
 
 class EvolutionLoop:
-    """Runs multi-generation island-aware optimizer evolution."""
+    """Runs multi-generation island-aware organism evolution."""
 
-    def __init__(self, cfg: DictConfig) -> None:
+    def __init__(self, cfg: DictConfig, llm_registry: ApiPlatformRegistry | None = None) -> None:
         self.cfg = cfg
         self.evolver_cfg = cfg.evolver
         self.population_root = Path(str(cfg.paths.population_root)).expanduser().resolve()
         self.population: list[OrganismMeta] = []
         self.generation = 0
 
-        self.generator = OptimizerGenerator(cfg)
+        self.llm_registry = llm_registry or ApiPlatformRegistry(cfg)
+        self._owns_llm_registry = llm_registry is None
+        self.generator = CandidateGenerator(cfg, llm_registry=self.llm_registry)
         self.rng = random.Random(int(cfg.seed))
+        self.max_proposal_jobs = max(1, int(self.evolver_cfg.get("max_proposal_jobs") or 1))
 
         self.islands = self._load_islands()
         self.islands_by_id = {island.island_id: island for island in self.islands}
@@ -225,15 +228,12 @@ class EvolutionLoop:
     def _should_run_great_filter(self, generation: int) -> bool:
         return self._great_filter_enabled() and generation > 0 and generation % self._great_filter_interval() == 0
 
-    def _state_path(self) -> Path:
-        return self.population_root / _STATE_FILE
-
     def _best_active_organism(self) -> OrganismMeta | None:
         if not self.population:
             return None
         return max(
             self.population,
-            key=lambda organism: organism.simple_reward if organism.simple_reward is not None else -float("inf"),
+            key=lambda organism: organism.simple_score if organism.simple_score is not None else -float("inf"),
         )
 
     def _save_state(self) -> None:
@@ -242,69 +242,81 @@ class EvolutionLoop:
             write_organism_meta(organism)
 
         best = self._best_active_organism()
-        state = {
-            "current_generation": self.generation,
-            "active_population_size": len(self.population),
-            "best_organism_id": best.organism_id if best is not None else None,
-            "best_simple_reward": best.simple_reward if best is not None else None,
-            "timestamp": utc_now_iso(),
-        }
-        write_json(self._state_path(), state)
-        write_population_manifest(self.population_root, self.generation, self.population)
+        write_population_state(
+            self.population_root,
+            self.generation,
+            self.population,
+            best_organism_id=best.organism_id if best is not None else None,
+            best_simple_score=best.simple_score if best is not None else None,
+        )
 
     def _load_state(self) -> dict[str, Any] | None:
-        if self._state_path().exists():
-            payload = read_json(self._state_path())
-            if isinstance(payload, dict):
-                return payload
+        payload = read_population_state(self.population_root)
+        if isinstance(payload, dict):
+            return payload
         return None
 
-    def _restore_population_from_manifest(self, generation: int) -> list[OrganismMeta]:
-        manifest = read_population_manifest(self.population_root)
-        if manifest is None:
-            raise FileNotFoundError("Population manifest is required for canonical resume.")
+    def _restore_population_from_state(self, generation: int) -> list[OrganismMeta]:
+        state = read_population_state(self.population_root)
+        if state is None:
+            raise FileNotFoundError("population_state.json is required for canonical resume.")
 
-        manifest_generation = int(manifest.get("generation", generation))
-        if manifest_generation != generation:
+        state_generation = int(state.get("current_generation", generation))
+        if state_generation != generation:
             LOGGER.warning(
-                "Evolution state points to generation %d but manifest points to generation %d. "
-                "Using manifest generation.",
+                "Population state points to generation %d while requested generation is %d. "
+                "Using population state generation.",
+                state_generation,
                 generation,
-                manifest_generation,
             )
-            self.generation = manifest_generation
+            self.generation = state_generation
 
         organisms: list[OrganismMeta] = []
-        for entry in manifest.get("active_organisms", []):
+        for entry in state.get("active_organisms", []):
             organism_dir_path = Path(str(entry["organism_dir"]))
             if not organism_dir_path.is_absolute():
                 organism_dir_path = (self.population_root / organism_dir_path).resolve()
             if not organism_dir_path.exists():
                 raise FileNotFoundError(
-                    f"Active population manifest points to missing organism dir: {organism_dir_path}"
+                    f"population_state.json points to missing organism dir: {organism_dir_path}"
                 )
             organism = read_organism_meta(organism_dir_path)
             organism.current_generation_active = int(entry.get("current_generation_active", self.generation))
             organisms.append(organism)
         return organisms
 
-    async def _seed_island(self, island: Island, count: int) -> list[OrganismMeta]:
-        organisms: list[OrganismMeta] = []
-        if count <= 0:
-            return organisms
+    async def _run_proposal_builders(
+        self,
+        builders: list[Callable[[], OrganismMeta]],
+    ) -> list[OrganismMeta]:
+        if not builders:
+            return []
 
+        semaphore = asyncio.Semaphore(self.max_proposal_jobs)
+
+        async def _run_builder(builder: Callable[[], OrganismMeta]) -> OrganismMeta:
+            async with semaphore:
+                return await asyncio.to_thread(builder)
+
+        return list(await asyncio.gather(*[_run_builder(builder) for builder in builders]))
+
+    async def _seed_island(self, island: Island, count: int) -> list[OrganismMeta]:
+        if count <= 0:
+            return []
         gen_dir = generation_dir(self.population_root, self.generation)
+        builders: list[Callable[[], OrganismMeta]] = []
         for _ in range(count):
             organism_id = uuid.uuid4().hex
             org_dir = organism_dir(gen_dir, organism_id, island_id=island.island_id)
-            organism = self.generator.generate_seed_organism(
-                island=island,
-                organism_id=organism_id,
-                generation=self.generation,
-                organism_dir=org_dir,
+            builders.append(
+                lambda island=island, organism_id=organism_id, org_dir=org_dir: self.generator.generate_seed_organism(
+                    island=island,
+                    organism_id=organism_id,
+                    generation=self.generation,
+                    organism_dir=org_dir,
+                )
             )
-            organisms.append(organism)
-        return organisms
+        return await self._run_proposal_builders(builders)
 
     async def _seed_initial_population(self) -> list[OrganismMeta]:
         newborns: list[OrganismMeta] = []
@@ -446,25 +458,15 @@ class EvolutionLoop:
     def _create_mutation_offspring(
         self,
         *,
-        active_by_island: dict[str, list[OrganismMeta]],
-        mutation_operator: MutationOperator,
-        gen_dir: Path,
+        parent: OrganismMeta,
+        organism_id: str,
+        org_dir: Path,
+        operator_seed: int,
     ) -> OrganismMeta:
-        candidate_islands = self._eligible_island_ids_for_route(_ROUTE_MUTATION, active_by_island)
-        island_id = self._sample_island_ids(
-            route=_ROUTE_MUTATION,
-            candidate_island_ids=candidate_islands,
-            count=1,
-            distinct=False,
-        )[0]
-        parent = softmax_select_organisms(
-            active_by_island[island_id],
-            score_field="simple_reward",
-            temperature=self.mutation_parent_selection_softmax_temperature,
-            k=1,
-            rng=self.rng,
-        )[0]
-        organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=island_id)
+        mutation_operator = MutationOperator(
+            q=self.mutation_gene_removal_probability,
+            seed=operator_seed,
+        )
         return mutation_operator.produce(
             parent=parent,
             organism_id=organism_id,
@@ -476,30 +478,19 @@ class EvolutionLoop:
     def _create_within_island_crossover_offspring(
         self,
         *,
-        active_by_island: dict[str, list[OrganismMeta]],
-        crossover_operator: CrossbreedingOperator,
-        gen_dir: Path,
+        mother: OrganismMeta,
+        father: OrganismMeta,
+        organism_id: str,
+        org_dir: Path,
+        operator_seed: int,
     ) -> OrganismMeta:
-        candidate_islands = self._eligible_island_ids_for_route(_ROUTE_WITHIN_ISLAND_CROSSOVER, active_by_island)
-        island_id = self._sample_island_ids(
-            route=_ROUTE_WITHIN_ISLAND_CROSSOVER,
-            candidate_island_ids=candidate_islands,
-            count=1,
-            distinct=False,
-        )[0]
-        primary_parent, secondary_parent = softmax_select_distinct_organisms(
-            active_by_island[island_id],
-            score_field="simple_reward",
-            temperature=self.crossover_parent_selection_softmax_temperature,
-            k=2,
-            rng=self.rng,
+        crossover_operator = CrossbreedingOperator(
+            p=self.crossover_primary_parent_gene_inheritance_probability,
+            seed=operator_seed,
         )
-        if primary_parent.organism_id == secondary_parent.organism_id:
-            raise ValueError("Within-island crossover sampled duplicate parents; expected distinct organisms.")
-        organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=island_id)
         return crossover_operator.produce(
-            mother=primary_parent,
-            father=secondary_parent,
+            mother=mother,
+            father=father,
             organism_id=organism_id,
             generation=self.generation,
             org_dir=org_dir,
@@ -509,42 +500,26 @@ class EvolutionLoop:
     def _create_inter_island_crossover_offspring(
         self,
         *,
-        active_by_island: dict[str, list[OrganismMeta]],
-        crossover_operator: CrossbreedingOperator,
-        gen_dir: Path,
+        mother: OrganismMeta,
+        father: OrganismMeta,
+        organism_id: str,
+        org_dir: Path,
+        operator_seed: int,
     ) -> OrganismMeta:
-        candidate_islands = self._eligible_island_ids_for_route(_ROUTE_INTER_ISLAND_CROSSOVER, active_by_island)
-        primary_island_id, secondary_island_id = self._sample_island_ids(
-            route=_ROUTE_INTER_ISLAND_CROSSOVER,
-            candidate_island_ids=candidate_islands,
-            count=2,
-            distinct=True,
+        crossover_operator = CrossbreedingOperator(
+            p=self.crossover_primary_parent_gene_inheritance_probability,
+            seed=operator_seed,
         )
-        primary_parent = softmax_select_organisms(
-            active_by_island[primary_island_id],
-            score_field="simple_reward",
-            temperature=self.crossover_parent_selection_softmax_temperature,
-            k=1,
-            rng=self.rng,
-        )[0]
-        secondary_parent = softmax_select_organisms(
-            active_by_island[secondary_island_id],
-            score_field="simple_reward",
-            temperature=self.crossover_parent_selection_softmax_temperature,
-            k=1,
-            rng=self.rng,
-        )[0]
-        organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=primary_island_id)
         return crossover_operator.produce(
-            mother=primary_parent,
-            father=secondary_parent,
+            mother=mother,
+            father=father,
             organism_id=organism_id,
             generation=self.generation,
             org_dir=org_dir,
             generator=self.generator,
         )
 
-    def _produce_offspring(
+    async def _produce_offspring(
         self,
         active_by_island: dict[str, list[OrganismMeta]],
     ) -> list[OrganismMeta]:
@@ -552,39 +527,97 @@ class EvolutionLoop:
             return []
 
         gen_dir = generation_dir(self.population_root, self.generation)
-        mutation_operator = MutationOperator(
-            q=self.mutation_gene_removal_probability,
-            seed=self.rng.randint(0, 2**31 - 1),
-        )
-        crossover_operator = CrossbreedingOperator(
-            p=self.crossover_primary_parent_gene_inheritance_probability,
-            seed=self.rng.randint(0, 2**31 - 1),
-        )
-        offspring: list[OrganismMeta] = []
+        builders: list[Callable[[], OrganismMeta]] = []
         for route in self._planned_reproduction_routes(active_by_island):
             if route == _ROUTE_MUTATION:
-                child = self._create_mutation_offspring(
-                    active_by_island=active_by_island,
-                    mutation_operator=mutation_operator,
-                    gen_dir=gen_dir,
+                candidate_islands = self._eligible_island_ids_for_route(_ROUTE_MUTATION, active_by_island)
+                island_id = self._sample_island_ids(
+                    route=_ROUTE_MUTATION,
+                    candidate_island_ids=candidate_islands,
+                    count=1,
+                    distinct=False,
+                )[0]
+                parent = softmax_select_organisms(
+                    active_by_island[island_id],
+                    score_field="simple_score",
+                    temperature=self.mutation_parent_selection_softmax_temperature,
+                    k=1,
+                    rng=self.rng,
+                )[0]
+                organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=island_id)
+                operator_seed = self.rng.randint(0, 2**31 - 1)
+                builders.append(
+                    lambda parent=parent, organism_id=organism_id, org_dir=org_dir, operator_seed=operator_seed: self._create_mutation_offspring(
+                        parent=parent,
+                        organism_id=organism_id,
+                        org_dir=org_dir,
+                        operator_seed=operator_seed,
+                    )
                 )
             elif route == _ROUTE_WITHIN_ISLAND_CROSSOVER:
-                child = self._create_within_island_crossover_offspring(
-                    active_by_island=active_by_island,
-                    crossover_operator=crossover_operator,
-                    gen_dir=gen_dir,
+                candidate_islands = self._eligible_island_ids_for_route(_ROUTE_WITHIN_ISLAND_CROSSOVER, active_by_island)
+                island_id = self._sample_island_ids(
+                    route=_ROUTE_WITHIN_ISLAND_CROSSOVER,
+                    candidate_island_ids=candidate_islands,
+                    count=1,
+                    distinct=False,
+                )[0]
+                primary_parent, secondary_parent = softmax_select_distinct_organisms(
+                    active_by_island[island_id],
+                    score_field="simple_score",
+                    temperature=self.crossover_parent_selection_softmax_temperature,
+                    k=2,
+                    rng=self.rng,
+                )
+                if primary_parent.organism_id == secondary_parent.organism_id:
+                    raise ValueError("Within-island crossover sampled duplicate parents; expected distinct organisms.")
+                organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=island_id)
+                operator_seed = self.rng.randint(0, 2**31 - 1)
+                builders.append(
+                    lambda mother=primary_parent, father=secondary_parent, organism_id=organism_id, org_dir=org_dir, operator_seed=operator_seed: self._create_within_island_crossover_offspring(
+                        mother=mother,
+                        father=father,
+                        organism_id=organism_id,
+                        org_dir=org_dir,
+                        operator_seed=operator_seed,
+                    )
                 )
             elif route == _ROUTE_INTER_ISLAND_CROSSOVER:
-                child = self._create_inter_island_crossover_offspring(
-                    active_by_island=active_by_island,
-                    crossover_operator=crossover_operator,
-                    gen_dir=gen_dir,
+                candidate_islands = self._eligible_island_ids_for_route(_ROUTE_INTER_ISLAND_CROSSOVER, active_by_island)
+                primary_island_id, secondary_island_id = self._sample_island_ids(
+                    route=_ROUTE_INTER_ISLAND_CROSSOVER,
+                    candidate_island_ids=candidate_islands,
+                    count=2,
+                    distinct=True,
+                )
+                primary_parent = softmax_select_organisms(
+                    active_by_island[primary_island_id],
+                    score_field="simple_score",
+                    temperature=self.crossover_parent_selection_softmax_temperature,
+                    k=1,
+                    rng=self.rng,
+                )[0]
+                secondary_parent = softmax_select_organisms(
+                    active_by_island[secondary_island_id],
+                    score_field="simple_score",
+                    temperature=self.crossover_parent_selection_softmax_temperature,
+                    k=1,
+                    rng=self.rng,
+                )[0]
+                organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=primary_island_id)
+                operator_seed = self.rng.randint(0, 2**31 - 1)
+                builders.append(
+                    lambda mother=primary_parent, father=secondary_parent, organism_id=organism_id, org_dir=org_dir, operator_seed=operator_seed: self._create_inter_island_crossover_offspring(
+                        mother=mother,
+                        father=father,
+                        organism_id=organism_id,
+                        org_dir=org_dir,
+                        operator_seed=operator_seed,
+                    )
                 )
             else:
                 raise ValueError(f"Unsupported reproduction route '{route}'")
-            offspring.append(child)
-
-        return offspring
+        return await self._run_proposal_builders(builders)
 
     async def _evaluate_phase(
         self,
@@ -623,9 +656,9 @@ class EvolutionLoop:
                 continue
 
             if phase == "simple":
-                organism.simple_reward = summary.aggregate_score
+                organism.simple_score = summary.aggregate_score
             elif phase == "hard":
-                organism.hard_reward = summary.aggregate_score
+                organism.hard_score = summary.aggregate_score
             else:
                 raise ValueError(f"Unsupported phase '{phase}'")
 
@@ -636,7 +669,6 @@ class EvolutionLoop:
                 phase_score=summary.aggregate_score,
                 selected_experiments=summary.selected_experiments,
             )
-            save_organism_artifacts(organism)
             write_organism_meta(organism)
             self._write_phase_summary(organism, summary)
 
@@ -649,6 +681,20 @@ class EvolutionLoop:
         phase_results = existing.get("phase_results", {})
         if not isinstance(phase_results, dict):
             phase_results = {}
+
+        experiment_index = dict(organism.experiment_report_index)
+        phase_index = dict(experiment_index.get(summary.phase, {}))
+        for exp_name, exp_payload in summary.per_experiment.items():
+            raw_report = exp_payload.get("raw_report", exp_payload) if isinstance(exp_payload, dict) else exp_payload
+            if not isinstance(raw_report, dict):
+                raw_report = {}
+            phase_index[exp_name] = {
+                "path": str(phase_result_path(organism.organism_dir, summary.phase, exp_name)),
+                "status": raw_report.get("status", exp_payload.get("status") if isinstance(exp_payload, dict) else None),
+                "score": raw_report.get("score", exp_payload.get("score") if isinstance(exp_payload, dict) else None),
+            }
+        experiment_index[summary.phase] = phase_index
+        organism.experiment_report_index = experiment_index
 
         phase_results[summary.phase] = {
             "aggregate_score": summary.aggregate_score,
@@ -668,11 +714,13 @@ class EvolutionLoop:
             "current_generation_active": organism.current_generation_active,
             "operator": organism.operator,
             "status": organism.status,
-            "simple_reward": organism.simple_reward,
-            "hard_reward": organism.hard_reward,
+            "simple_score": organism.simple_score,
+            "hard_score": organism.hard_score,
+            "experiment_report_index": experiment_index,
             "phase_results": phase_results,
         }
         write_organism_summary(organism.organism_dir, payload)
+        write_organism_meta(organism)
 
     def _mark_eliminated(
         self,
@@ -688,54 +736,60 @@ class EvolutionLoop:
 
     async def run(self) -> dict[str, Any]:
         max_generations = int(self._require_cfg_value("evolver.max_generations"))
+        if self._owns_llm_registry:
+            self.llm_registry.start()
 
-        state = self._load_state()
-        if state is not None and bool(self.evolver_cfg.get("resume", True)):
-            self.generation = int(state.get("current_generation", 0))
-            self.population = self._restore_population_from_manifest(self.generation)
-        else:
-            self.generation = 0
-            newborns = await self._seed_initial_population()
-            await self._evaluate_phase(newborns, phase="simple")
-            self.population = select_top_k_per_island(newborns, self._simple_top_k(), score_field="simple_reward")
-            self._mark_eliminated(newborns, self.population)
-            self._save_state()
-
-        for generation in range(self.generation + 1, max_generations + 1):
-            self.generation = generation
-            active_by_island = self._group_by_island(self.population)
-            offspring = self._produce_offspring(active_by_island)
-
-            await self._evaluate_phase(offspring, phase="simple")
-            candidate_pool = list(self.population) + offspring
-            simple_survivors = select_top_k_per_island(
-                candidate_pool,
-                self._simple_top_k(),
-                score_field="simple_reward",
-            )
-            self._mark_eliminated(candidate_pool, simple_survivors)
-
-            if self._should_run_great_filter(generation):
-                await self._evaluate_phase(simple_survivors, phase="hard")
-                self.population = select_top_h_per_island(
-                    simple_survivors,
-                    self._great_filter_top_h(),
-                    score_field="hard_reward",
-                )
-                self._mark_eliminated(simple_survivors, self.population)
+        try:
+            state = self._load_state()
+            if state is not None and bool(self.evolver_cfg.get("resume", True)):
+                self.generation = int(state.get("current_generation", 0))
+                self.population = self._restore_population_from_state(self.generation)
             else:
-                for organism in simple_survivors:
-                    organism.current_generation_active = self.generation
-                    write_organism_meta(organism)
-                self.population = simple_survivors
+                self.generation = 0
+                newborns = await self._seed_initial_population()
+                await self._evaluate_phase(newborns, phase="simple")
+                self.population = select_top_k_per_island(newborns, self._simple_top_k(), score_field="simple_score")
+                self._mark_eliminated(newborns, self.population)
+                self._save_state()
 
-            self._save_state()
+            for generation in range(self.generation + 1, max_generations + 1):
+                self.generation = generation
+                active_by_island = self._group_by_island(self.population)
+                offspring = await self._produce_offspring(active_by_island)
 
-        best = self._best_active_organism()
-        return {
-            "total_generations": self.generation,
-            "active_population_size": len(self.population),
-            "best_organism_id": best.organism_id if best is not None else None,
-            "best_simple_reward": best.simple_reward if best is not None else None,
-            "best_optimizer_path": best.optimizer_path if best is not None else None,
-        }
+                await self._evaluate_phase(offspring, phase="simple")
+                candidate_pool = list(self.population) + offspring
+                simple_survivors = select_top_k_per_island(
+                    candidate_pool,
+                    self._simple_top_k(),
+                    score_field="simple_score",
+                )
+                self._mark_eliminated(candidate_pool, simple_survivors)
+
+                if self._should_run_great_filter(generation):
+                    await self._evaluate_phase(simple_survivors, phase="hard")
+                    self.population = select_top_h_per_island(
+                        simple_survivors,
+                        self._great_filter_top_h(),
+                        score_field="hard_score",
+                    )
+                    self._mark_eliminated(simple_survivors, self.population)
+                else:
+                    for organism in simple_survivors:
+                        organism.current_generation_active = self.generation
+                        write_organism_meta(organism)
+                    self.population = simple_survivors
+
+                self._save_state()
+
+            best = self._best_active_organism()
+            return {
+                "total_generations": self.generation,
+                "active_population_size": len(self.population),
+                "best_organism_id": best.organism_id if best is not None else None,
+                "best_simple_score": best.simple_score if best is not None else None,
+                "best_implementation_path": best.implementation_path if best is not None else None,
+            }
+        finally:
+            if self._owns_llm_registry:
+                self.llm_registry.stop()

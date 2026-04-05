@@ -1,22 +1,41 @@
-# optbench
+# Organism Framework
 
-Hydra-centric validation scaffold for benchmarking optimizers across modular ML training experiments.
+Generic AI-for-science framework with:
 
-## Key properties
+- a task-blind core in [`src/`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/src)
+- task-specific experiment/runtime code in [`experiments/`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/experiments)
+- Hydra configuration in [`conf/`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/conf)
 
-- Single-GPU design (`1x NVIDIA A100` target) with explicit per-experiment compute limits.
-- Unified experiment interface (`build_datamodule`, `build_model`, `train`, `evaluate`).
-- Dynamic optimizer loading from external Python file (`build_optimizer(model, max_steps)` returning a controller object).
-- Reproducibility defaults (seed control, deterministic toggle, resolved config snapshots).
-- Safety defaults (NaN detection, optional abort-on-NaN, grad-norm logging, grad clipping).
+## Core contracts
 
-## Project structure
+- `src` only knows organism directories and experiment reports.
+- Each experiment config is Hydra-instantiated via `_target_`.
+- Each instantiated evaluator must implement `evaluate_organism(organism_dir, cfg) -> dict`.
+- Every experiment report must contain `score`.
 
-- `conf/` Hydra configs and prompt assets
-- `optbench/` runner, schemas, registry, utils
-- `experiments/` per-experiment modules
-- `optimizer_guesses/examples/` external optimizer examples
-- `tests/` minimal tests
+## Canonical organism layout
+
+```text
+<organism_dir>/
+  implementation.py
+  genetic_code.md
+  lineage.json
+  organism.json
+  llm_request.json
+  llm_response.json
+  summary.json
+  results/
+  logs/
+```
+
+`organism.json` is the source of truth for core orchestration. Population-level resume state lives in `population_state.json`.
+
+## Layout
+
+- `src/`: generic runtime, validation worker, and organism-first evolution engine
+- `experiments/optimization_survey/`: optimization-specific experiments and runtime helpers
+- `conf/experiments/optimization_survey/`: optimization-specific experiment configs and prompts
+- `tests/`: contract and integration coverage
 
 ## Install
 
@@ -33,164 +52,48 @@ pip install -e .[lora]
 pip install -e .[evolve]
 ```
 
-## Run
+## Validation runtime
 
-Smoke run for all enabled experiments:
-
-```bash
-python -m optbench.main mode=smoke
-```
-
-Baseline stats with each experiment's default optimizer:
+Smoke enabled experiments:
 
 ```bash
-python -m optbench.main mode=stats
+python -m src.main mode=smoke
 ```
 
-Run with external optimizer file:
+Collect baseline stats:
 
 ```bash
-python -m optbench.main mode=run optimizer_path=optimizer_guesses/examples/sgd_baseline.py
+python -m src.main mode=stats
 ```
 
-Run the canonical organism-first evolution pipeline:
+Run experiments against a concrete organism:
+
+```bash
+python -m src.main mode=run organism_dir=/absolute/path/to/organism
+```
+
+## Evolution
 
 ```bash
 export OPENAI_API_KEY=...
 python -m src.main mode=evolve
 ```
 
-Standalone canonical evolve entrypoint:
+The evolution engine is task-blind. It operates on organism folders and delegates all task-specific behavior to the configured experiments.
 
-```bash
-python -m src.evolve.run mode=evolve
-```
+## Optimization survey
 
-Defaults for evolve LLM:
-- `evolver.llm.provider=chatgpt` (OpenAI Python SDK)
-- `evolver.llm.model=gpt-5.4-pro` (latest pro-thinking default in this repo)
-- `evolver.llm.reasoning_effort=xhigh`
-
-You can also use model alias:
-
-```bash
-python -m src.main mode=evolve evolver.llm.model=latest_pro_thinking
-```
-
-Run evolve with simple-phase partial benchmark evaluation (Neyman allocation):
-
-```bash
-python -m src.main mode=evolve \
-  evolver.phases.simple.allocation.enabled=true \
-  evolver.phases.simple.allocation.sample_size=1
-```
-
-`mode=evolve` always runs the multi-generation organism-first `EvolutionLoop`.
-The canonical loop reads only the `evolver.*` schema from `conf/evolver/default.yaml`.
-
-## Useful Hydra overrides
-
-Disable a specific experiment:
-
-```bash
-python -m optbench.main mode=smoke experiments.audio_transformer.enabled=false
-```
-
-Force CPU / fp32:
-
-```bash
-python -m optbench.main mode=smoke device=cpu precision=fp32
-```
-
-Override experiment budget:
-
-```bash
-python -m optbench.main mode=smoke experiments.cifar_convnet.compute.smoke_steps=50
-```
-
-Run-only validation cutoffs for candidate optimizer:
-
-```bash
-python -m optbench.main mode=run \
-  optimizer_path=optimizer_guesses/examples/sgd_baseline.py \
-  experiments.cifar_convnet.run_validation.max_steps=100 \
-  experiments.cifar_convnet.run_validation.target_quality=0.85
-```
-
-## Notes on optional dependencies
-
-- `audio_transformer` requires `.[audio]`.
-- `minigpt_wikitext2` requires `.[hf]`.
-- `lora_sft` requires `.[lora]`.
-- `mode=evolve` with OpenAI provider requires `.[evolve]`.
-- In `mode=smoke`, missing optional dependencies are recorded as `status="skipped"`.
-- In `mode=run` / `mode=stats`, missing optional dependencies raise a clear install error.
-
-## Optimizer contract
-
-External optimizers must provide:
+The shipped task package is [`experiments/optimization_survey/`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/experiments/optimization_survey). Its runtime knows how to interpret `implementation.py` as an optimizer candidate with the contract:
 
 ```python
 def build_optimizer(model, max_steps):
     ...
 ```
 
-The returned object must implement:
+and a controller exposing:
 
 ```python
-class OptimizerController:
+class CandidateController:
     def step(self, weights, grads, activations, step_fn): ...
     def zero_grad(self, set_to_none=True): ...
 ```
-
-`model` is the full `torch.nn.Module`. `max_steps` is the total optimization budget for the run.
-`step_fn()` is an optional extra forward-backward closure; each call consumes one optimization step from the same global budget.
-
-## Evolve outputs
-
-The canonical evolution pipeline is organism-first, island-aware, prompt-driven from `conf/prompts/`, and restore-driven from `population_manifest.json`. Prompt pairs are grouped by task under `conf/prompts/<task>/`, and island descriptions live in `conf/prompts/islands/`.
-Canonical resume is strict: missing `population_manifest.json`, `genetic_code.md`, or `lineage.json` is treated as corruption and fails fast.
-
-Phase defaults in the canonical path:
-- simple phase: `eval_mode=smoke`
-- Great Filter: `eval_mode=full`
-
-The Great Filter evaluates only its configured hard experiment list. `simple_reward` remains persisted on the organism; `hard_reward` is stored separately; `selection_reward` switches to the hard score only for the hard-phase selection step.
-
-Canonical organism artifacts are written to:
-
-```text
-<population_root>/
-  evolution_state.json
-  population_manifest.json
-  gen_<G>/
-    island_<island_id>/
-      org_<UUID>/
-        optimizer.py
-        genetic_code.md
-        lineage.json
-        organism.json
-        summary.json
-        llm_request.json
-        llm_response.json
-        results/
-          simple/<experiment>.json
-          hard/<experiment>.json
-        logs/
-          simple_<experiment>.out
-          simple_<experiment>.err
-          hard_<experiment>.out
-          hard_<experiment>.err
-```
-
-`summary.json` stores phase-specific evaluation results, including:
-- `simple_reward`
-- `hard_reward`
-- `selection_reward`
-- `phase_results.simple`
-- `phase_results.hard`
-
-## Single-GPU constraint
-
-All defaults are configured for single-device execution only.
-No DDP, model parallel, or multi-GPU logic is included.

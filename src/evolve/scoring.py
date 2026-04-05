@@ -1,32 +1,17 @@
-"""Aggregate experiment scores using the effective conditional inclusion probabilities."""
+"""Aggregate experiment scores using effective conditional inclusion probabilities."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from src.evolve.metrics_adapter import extract_metrics
-
 
 def mean_score(
     eval_results: dict[str, dict[str, Any]],
     selected_experiments: list[str],
-    experiment_cfgs: dict[str, dict[str, Any]],
-    baseline_profiles: dict[str, dict[str, Any]],
-    baseline_errors: dict[str, str],
     inclusion_prob: dict[str, float],
     total_experiments: int,
-    scoring_cfg: dict[str, Any],
 ) -> tuple[float | None, str, dict[str, dict[str, Any]]]:
-    """Estimate the full-experiment mean of `exp_score`.
-
-    The estimator is:
-
-        (1 / N) * sum_{i in selected} exp_score_i / pi_i
-
-    where `N` is the full phase experiment count and `pi_i` is the inclusion
-    probability from the conditional non-empty sampling design recorded in the
-    allocation snapshot. Selected failed experiments contribute zero.
-    """
+    """Estimate the full-experiment mean of experiment-reported scores."""
 
     per_experiment: dict[str, dict[str, Any]] = {}
     weighted_sum = 0.0
@@ -36,28 +21,31 @@ def mean_score(
         payload = eval_results.get(exp_name)
         if payload is None:
             normalized = {
-                "raw_metric": None,
-                "metric_direction": str(experiment_cfgs.get(exp_name, {}).get("primary_metric", {}).get("direction", "max")),
-                "quality_ratio": None,
-                "steps_ratio": None,
-                "exp_score": None,
-                "time_sec": None,
-                "steps": None,
+                "score": None,
                 "status": "failed",
                 "error_msg": "missing result",
             }
         else:
-            normalized = extract_metrics(
-                payload=payload,
-                exp_cfg=experiment_cfgs.get(exp_name, {}),
-                scoring_cfg=scoring_cfg,
-                baseline_profile=baseline_profiles.get(exp_name),
-                baseline_error=baseline_errors.get(exp_name),
-            )
+            status = str(payload.get("status", "ok"))
+            score = payload.get("score")
+            try:
+                parsed_score = float(score) if score is not None else None
+            except (TypeError, ValueError):
+                parsed_score = None
+            if parsed_score is not None and parsed_score != parsed_score:
+                parsed_score = None
+            if status not in {"ok", "failed", "partial", "timeout", "skipped", "interrupted"}:
+                status = "failed"
+            normalized = {
+                "score": parsed_score,
+                "status": status,
+                "error_msg": payload.get("error_msg"),
+                "raw_report": payload,
+            }
 
         per_experiment[exp_name] = normalized
 
-        score_value = normalized.get("exp_score")
+        score_value = normalized.get("score")
         if normalized["status"] == "ok" and score_value is not None:
             try:
                 q_i = float(inclusion_prob.get(exp_name))

@@ -24,7 +24,7 @@ def uniform_select_organisms(
 
 def softmax_select_organisms(
     population: list[OrganismMeta],
-    score_field: str = "simple_reward",
+    score_field: str = "simple_score",
     temperature: float = 1.0,
     k: int = 1,
     rng: random.Random | None = None,
@@ -43,7 +43,7 @@ def softmax_select_organisms(
 
 def softmax_select_distinct_organisms(
     population: list[OrganismMeta],
-    score_field: str = "simple_reward",
+    score_field: str = "simple_score",
     temperature: float = 1.0,
     k: int = 1,
     rng: random.Random | None = None,
@@ -110,7 +110,7 @@ def _group_by_island(population: list[OrganismMeta]) -> dict[str, list[OrganismM
 def select_top_k_per_island(
     population: list[OrganismMeta],
     k: int,
-    score_field: str = "simple_reward",
+    score_field: str = "simple_score",
 ) -> list[OrganismMeta]:
     """Select top-k organisms independently inside each island."""
 
@@ -127,7 +127,7 @@ def select_top_k_per_island(
 def select_top_h_per_island(
     population: list[OrganismMeta],
     h: int,
-    score_field: str = "hard_reward",
+    score_field: str = "hard_score",
 ) -> list[OrganismMeta]:
     """Select top-h organisms independently inside each island."""
 

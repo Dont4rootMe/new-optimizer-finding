@@ -1,4 +1,4 @@
-"""Canonical organism contract and lineage tests."""
+"""Generic organism contract and lineage tests."""
 
 from __future__ import annotations
 
@@ -8,31 +8,27 @@ from pathlib import Path
 import pytest
 
 from src.evolve.storage import read_genetic_code, read_lineage, read_organism_meta, write_json
-from src.evolve.template_parser import render_template
 from src.organisms.organism import (
     build_organism_from_response,
     format_lineage_summary,
     update_latest_lineage_entry,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
 
-
-def _implementation_template() -> str:
-    return (ROOT / "conf" / "prompts" / "implementation" / "template.txt").read_text(encoding="utf-8")
-
-
-def _optimizer_code() -> str:
-    return render_template(
-        {
-            "IMPORTS": "import math",
-            "INIT_BODY": "        self.model = model\n        self.max_steps = max_steps",
-            "STEP_BODY": "        del weights, grads, activations, step_fn",
-            "ZERO_GRAD_BODY": "        pass",
-        },
-        optimizer_name="TestOpt",
-        class_name="TestOpt",
-        template_text=_implementation_template(),
+def _implementation_code() -> str:
+    return (
+        "import torch.nn as nn\n\n"
+        "OPTIMIZER_NAME = 'TestOpt'\n\n"
+        "class TestOpt:\n"
+        "    def __init__(self, model: nn.Module, max_steps: int) -> None:\n"
+        "        self.model = model\n"
+        "        self.max_steps = max_steps\n\n"
+        "    def step(self, weights, grads, activations, step_fn) -> None:\n"
+        "        del weights, grads, activations, step_fn\n\n"
+        "    def zero_grad(self, set_to_none: bool = True) -> None:\n"
+        "        del set_to_none\n\n"
+        "def build_optimizer(model: nn.Module, max_steps: int):\n"
+        "    return TestOpt(model, max_steps)\n"
     )
 
 
@@ -50,8 +46,7 @@ def _build(tmp_path: Path, parsed: dict[str, str], **overrides):
     org_dir.mkdir(parents=True, exist_ok=True)
     kwargs = {
         "parsed": parsed,
-        "optimizer_code": _optimizer_code(),
-        "implementation_template": _implementation_template(),
+        "implementation_code": _implementation_code(),
         "organism_id": "org01",
         "island_id": "gradient_methods",
         "generation": 0,
@@ -59,11 +54,14 @@ def _build(tmp_path: Path, parsed: dict[str, str], **overrides):
         "father_id": None,
         "operator": "seed",
         "org_dir": org_dir,
-        "model_name": "mock-model",
+        "llm_route_id": "mock",
+        "llm_provider": "mock",
+        "provider_model_id": "mock-model",
         "prompt_hash": "abc",
         "seed": 123,
         "timestamp": "2026-01-01T00:00:00Z",
         "parent_lineage": [],
+        "ancestor_ids": [],
     }
     kwargs.update(overrides)
     return build_organism_from_response(**kwargs)
@@ -85,21 +83,12 @@ def test_build_organism_rejects_missing_sections(tmp_path: Path) -> None:
         _build(tmp_path, parsed)
 
 
-def test_build_organism_rejects_noncanonical_gene_section_response(tmp_path: Path) -> None:
-    parsed = {
-        "GENE_POOL": "momentum; warmup; clipping",
-        "CHANGE_DESCRIPTION": "noncanonical response",
-        "IMPORTS": "import math",
-        "INIT_BODY": "self.model = model",
-        "STEP_BODY": "pass",
-        "ZERO_GRAD_BODY": "pass",
-    }
-
-    with pytest.raises(ValueError, match="CORE_GENES"):
-        _build(tmp_path, parsed)
+def test_build_organism_rejects_empty_implementation(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="non-empty implementation.py"):
+        _build(tmp_path, _base_parsed(), implementation_code="   \n")
 
 
-def test_new_lineage_write_omits_aggregate_score_and_summary_mentions_cross_island(tmp_path: Path) -> None:
+def test_new_lineage_write_omits_diff_summary_and_summary_mentions_cross_island(tmp_path: Path) -> None:
     org = _build(
         tmp_path,
         _base_parsed(),
@@ -118,17 +107,17 @@ def test_new_lineage_write_omits_aggregate_score_and_summary_mentions_cross_isla
 
     lineage = read_lineage(Path(org.lineage_path))
     latest = lineage[-1]
-    assert "aggregate_score" not in latest
     assert "gene_diff_summary" not in latest
     assert latest["cross_island"] is True
     assert latest["father_island_id"] == "second_order"
+    assert latest["simple_score"] == 1.25
 
     summary = format_lineage_summary(lineage)
     assert "cross_island=true:second_order" in summary
-    assert "genes=" not in summary
+    assert "change=Initial organism build." in summary
 
 
-def test_old_lineage_with_aggregate_score_still_loads(tmp_path: Path) -> None:
+def test_old_lineage_with_legacy_fields_still_loads(tmp_path: Path) -> None:
     org_dir = tmp_path / "org_old"
     org_dir.mkdir(parents=True, exist_ok=True)
     lineage_path = org_dir / "lineage.json"
@@ -163,26 +152,10 @@ def test_canonical_genetic_code_read_rejects_malformed_sections(tmp_path: Path) 
         read_genetic_code(path)
 
 
-def test_canonical_genetic_code_read_requires_genetic_code_md(tmp_path: Path) -> None:
-    org_dir = tmp_path / "org_missing_genes"
-    org_dir.mkdir(parents=True, exist_ok=True)
-
-    with pytest.raises(FileNotFoundError, match="genetic code"):
-        read_genetic_code(org_dir / "genetic_code.md")
-
-
-def test_canonical_lineage_read_requires_lineage_json(tmp_path: Path) -> None:
-    org_dir = tmp_path / "org_missing_lineage"
-    org_dir.mkdir(parents=True, exist_ok=True)
-
-    with pytest.raises(FileNotFoundError, match="lineage"):
-        read_lineage(org_dir / "lineage.json")
-
-
 def test_canonical_organism_meta_read_rejects_missing_canonical_artifacts(tmp_path: Path) -> None:
     org_dir = tmp_path / "org_meta"
     org_dir.mkdir(parents=True, exist_ok=True)
-    (org_dir / "optimizer.py").write_text("def build_optimizer(model, max_steps):\n    return None\n", encoding="utf-8")
+    (org_dir / "implementation.py").write_text(_implementation_code(), encoding="utf-8")
     write_json(
         org_dir / "organism.json",
         {
@@ -195,11 +168,15 @@ def test_canonical_organism_meta_read_rejects_missing_canonical_artifacts(tmp_pa
             "father_id": None,
             "operator": "seed",
             "genetic_code_path": str(org_dir / "genetic_code.md"),
-            "optimizer_path": str(org_dir / "optimizer.py"),
+            "implementation_path": str(org_dir / "implementation.py"),
             "lineage_path": str(org_dir / "lineage.json"),
             "organism_dir": str(org_dir),
+            "ancestor_ids": [],
+            "experiment_report_index": {},
             "status": "pending",
-            "model_name": "mock-model",
+            "llm_route_id": "mock",
+            "llm_provider": "mock",
+            "provider_model_id": "mock-model",
             "prompt_hash": "abc",
             "seed": 123,
         },
@@ -212,7 +189,7 @@ def test_canonical_organism_meta_read_rejects_missing_canonical_artifacts(tmp_pa
 def test_canonical_organism_meta_read_rejects_noncanonical_meta_shape(tmp_path: Path) -> None:
     org_dir = tmp_path / "org_noncanonical_meta"
     org_dir.mkdir(parents=True, exist_ok=True)
-    (org_dir / "optimizer.py").write_text("def build_optimizer(model, max_steps):\n    return None\n", encoding="utf-8")
+    (org_dir / "implementation.py").write_text(_implementation_code(), encoding="utf-8")
     write_json(
         org_dir / "organism.json",
         {
@@ -222,11 +199,13 @@ def test_canonical_organism_meta_read_rejects_noncanonical_meta_shape(tmp_path: 
             "timestamp": "2026-01-01T00:00:00Z",
             "operator": "seed",
             "genetic_code_path": str(org_dir / "genetic_code.md"),
-            "optimizer_path": str(org_dir / "optimizer.py"),
+            "implementation_path": str(org_dir / "implementation.py"),
             "lineage_path": str(org_dir / "lineage.json"),
             "organism_dir": str(org_dir),
             "status": "pending",
-            "model_name": "mock-model",
+            "llm_route_id": "mock",
+            "llm_provider": "mock",
+            "provider_model_id": "mock-model",
             "prompt_hash": "abc",
             "seed": 123,
         },
@@ -234,8 +213,3 @@ def test_canonical_organism_meta_read_rejects_noncanonical_meta_shape(tmp_path: 
 
     with pytest.raises(ValueError, match="generation_created|island_id"):
         read_organism_meta(org_dir)
-
-
-def test_build_organism_rejects_optimizer_code_with_markdown_fences(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="code fences"):
-        _build(tmp_path, _base_parsed(), optimizer_code="```python\nprint('bad')\n```")

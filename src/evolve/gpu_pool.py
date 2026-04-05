@@ -76,8 +76,8 @@ def _run_eval_subprocess(task: EvalTask, gpu_id: int) -> EvalTaskResult:
         task.entrypoint_module,
         "--experiment",
         task.experiment_name,
-        "--optimizer_path",
-        task.optimizer_path,
+        "--organism_dir",
+        task.organism_dir,
         "--output_json",
         task.output_json_path,
         "--seed",
@@ -141,7 +141,7 @@ def _run_eval_subprocess(task: EvalTask, gpu_id: int) -> EvalTaskResult:
     elapsed = time.perf_counter() - started_at
     return EvalTaskResult(
         task_id=task.task_id,
-        candidate_id=task.candidate_id,
+        organism_id=task.organism_id,
         generation=task.generation,
         experiment_name=task.experiment_name,
         status=status,

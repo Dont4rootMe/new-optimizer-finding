@@ -1,0 +1,35 @@
+Combine these two parent organisms into one child through crossover.
+
+=== INHERITED GENE POOL ===
+Maternal-biased selection of genes from both parents:
+{inherited_gene_pool}
+
+============================================================
+MOTHER (primary parent — preserve continuity with her approach)
+============================================================
+
+--- Mother genetic code ---
+{mother_genetic_code}
+
+--- Mother evolutionary history ---
+{mother_lineage_summary}
+
+--- Mother implementation code ---
+{mother_implementation_code}
+
+============================================================
+FATHER (secondary parent — contribute best complementary ideas)
+============================================================
+
+--- Father genetic code ---
+{father_genetic_code}
+
+--- Father evolutionary history ---
+{father_lineage_summary}
+
+--- Father implementation code ---
+{father_implementation_code}
+
+============================================================
+
+Analyze both parents' approaches, scores, and histories. Design a child that inherits the mother's core framework while incorporating the father's most valuable contributions. The child must be a unified, coherent implementation — not a patchwork of copied blocks.

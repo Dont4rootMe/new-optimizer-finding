@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import random
 from pathlib import Path
-from typing import Any
 
 from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
 from src.evolve.storage import utc_now_iso
@@ -13,9 +12,11 @@ from src.evolve.types import OrganismMeta
 from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
+    format_implementation_code,
     format_lineage_summary,
-    load_organism_code_sections,
     read_organism_genetic_code,
+    read_organism_implementation,
+    read_organism_lineage,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -65,24 +66,20 @@ def _build_crossbreed_prompt(
 ) -> tuple[str, str]:
     """Build `(system_prompt, user_prompt)` for crossover LLM call."""
 
-    mother_sections = load_organism_code_sections(mother)
-    father_sections = load_organism_code_sections(father)
+    mother_lineage = read_organism_lineage(mother)
+    father_lineage = read_organism_lineage(father)
+    mother_implementation = read_organism_implementation(mother)
+    father_implementation = read_organism_implementation(father)
 
     system = compose_system_prompt(prompts.project_context, prompts.crossover_system)
     user = prompts.crossover_user.format(
         inherited_gene_pool="\n".join(f"- {gene}" for gene in inherited_genes) or "(none)",
         mother_genetic_code=format_genetic_code(read_organism_genetic_code(mother)),
-        mother_lineage_summary=format_lineage_summary(mother.lineage),
-        mother_imports=mother_sections.get("IMPORTS", ""),
-        mother_init_body=mother_sections.get("INIT_BODY", ""),
-        mother_step_body=mother_sections.get("STEP_BODY", ""),
-        mother_zero_grad_body=mother_sections.get("ZERO_GRAD_BODY", ""),
+        mother_lineage_summary=format_lineage_summary(mother_lineage),
+        mother_implementation_code=format_implementation_code(mother_implementation),
         father_genetic_code=format_genetic_code(read_organism_genetic_code(father)),
-        father_lineage_summary=format_lineage_summary(father.lineage),
-        father_imports=father_sections.get("IMPORTS", ""),
-        father_init_body=father_sections.get("INIT_BODY", ""),
-        father_step_body=father_sections.get("STEP_BODY", ""),
-        father_zero_grad_body=father_sections.get("ZERO_GRAD_BODY", ""),
+        father_lineage_summary=format_lineage_summary(father_lineage),
+        father_implementation_code=format_implementation_code(father_implementation),
     )
     return system, user
 
@@ -126,17 +123,21 @@ class CrossbreedingOperator:
             father,
             generator.prompt_bundle,
         )
-        parsed, optimizer_code, prompt_hash = generator.run_creation_stages(
+        creation = generator.run_creation_stages(
             design_system_prompt=system_prompt,
             design_user_prompt=user_prompt,
             org_dir=org_dir,
             organism_id=organism_id,
             generation=generation,
         )
+        mother_lineage = read_organism_lineage(mother)
+        ancestor_ids = list(mother.ancestor_ids)
+        for parent_id in (mother.organism_id, father.organism_id, *father.ancestor_ids):
+            if parent_id and parent_id not in ancestor_ids:
+                ancestor_ids.append(parent_id)
         return build_organism_from_response(
-            parsed=parsed,
-            optimizer_code=optimizer_code,
-            implementation_template=generator.prompt_bundle.implementation_template,
+            parsed=creation.parsed_design,
+            implementation_code=creation.implementation_code,
             organism_id=organism_id,
             island_id=mother.island_id,
             generation=generation,
@@ -144,11 +145,14 @@ class CrossbreedingOperator:
             father_id=father.organism_id,
             operator="crossover",
             org_dir=org_dir,
-            model_name=generator.model_name,
-            prompt_hash=prompt_hash,
+            llm_route_id=creation.llm_route_id,
+            llm_provider=creation.llm_provider,
+            provider_model_id=creation.provider_model_id,
+            prompt_hash=creation.prompt_hash,
             seed=generator.seed,
             timestamp=utc_now_iso(),
-            parent_lineage=mother.lineage,
+            parent_lineage=mother_lineage,
+            ancestor_ids=ancestor_ids,
             cross_island=mother.island_id != father.island_id,
             father_island_id=father.island_id,
         )

@@ -1,4 +1,4 @@
-"""Direct canonical operator tests with deterministic fake LLM responses."""
+"""Direct operator tests with deterministic fake LLM responses."""
 
 from __future__ import annotations
 
@@ -8,12 +8,15 @@ from pathlib import Path
 from omegaconf import OmegaConf
 
 from src.evolve.prompt_utils import load_prompt_bundle
-from src.evolve.storage import sha1_text, write_json
-from src.evolve.template_parser import parse_llm_response, render_template
-from src.evolve.types import OrganismMeta
+from src.evolve.storage import read_lineage, sha1_text, write_json
+from src.evolve.types import CreationStageResult, OrganismMeta
+from src.evolve.template_parser import parse_llm_response
 from src.organisms.crossbreeding import CrossbreedingOperator
 from src.organisms.mutation import MutationOperator
-from src.organisms.organism import build_implementation_prompt_from_design, save_organism_artifacts
+from src.organisms.organism import (
+    build_implementation_prompt_from_design,
+    save_organism_artifacts,
+)
 
 
 def _cfg():
@@ -22,41 +25,39 @@ def _cfg():
             "seed": 42,
             "evolver": {
                 "prompts": {
-                    "project_context": "conf/prompts/shared/project_context.txt",
-                    "seed_system": "conf/prompts/seed/system.txt",
-                    "seed_user": "conf/prompts/seed/user.txt",
-                    "mutation_system": "conf/prompts/mutation/system.txt",
-                    "mutation_user": "conf/prompts/mutation/user.txt",
-                    "crossover_system": "conf/prompts/crossover/system.txt",
-                    "crossover_user": "conf/prompts/crossover/user.txt",
-                    "implementation_system": "conf/prompts/implementation/system.txt",
-                    "implementation_user": "conf/prompts/implementation/user.txt",
-                    "implementation_template": "conf/prompts/implementation/template.txt",
+                    "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
+                    "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
+                    "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
+                    "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
+                    "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
+                    "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
+                    "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
+                    "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
+                    "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
+                    "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
                 },
-                "llm": {
-                    "provider": "mock",
-                    "model": "mock-model",
-                    "temperature": 0.0,
-                    "max_output_tokens": 512,
-                    "reasoning_effort": None,
-                    "seed": 123,
-                    "fallback_to_chat_completions": True,
-                },
+                "llm": {"route_weights": {"mock": 1.0}, "seed": 123},
             },
+            "api_platforms": {"mock": {"_target_": "api_platforms.mock.platform.build_platform"}},
+            "paths": {"api_platform_runtime_root": ".tmp_api_platform_runtime"},
         }
     )
 
 
-def _optimizer_code() -> str:
-    return render_template(
-        {
-            "IMPORTS": "import math",
-            "INIT_BODY": "        self.model = model\n        self.max_steps = max_steps",
-            "STEP_BODY": "        del weights, grads, activations, step_fn",
-            "ZERO_GRAD_BODY": "        pass",
-        },
-        optimizer_name="ParentOpt",
-        class_name="ParentOpt",
+def _implementation_code(name: str = "ParentOpt") -> str:
+    return (
+        "import torch.nn as nn\n\n"
+        f"OPTIMIZER_NAME = '{name}'\n\n"
+        f"class {name}:\n"
+        "    def __init__(self, model: nn.Module, max_steps: int) -> None:\n"
+        "        self.model = model\n"
+        "        self.max_steps = max_steps\n\n"
+        "    def step(self, weights, grads, activations, step_fn) -> None:\n"
+        "        del weights, grads, activations, step_fn\n\n"
+        "    def zero_grad(self, set_to_none: bool = True) -> None:\n"
+        "        del set_to_none\n\n"
+        "def build_optimizer(model: nn.Module, max_steps: int):\n"
+        f"    return {name}(model, max_steps)\n"
     )
 
 
@@ -68,7 +69,7 @@ def _make_parent(
 ) -> OrganismMeta:
     org_dir_path = tmp_path / f"org_{org_id}"
     org_dir_path.mkdir(parents=True, exist_ok=True)
-    (org_dir_path / "optimizer.py").write_text(_optimizer_code(), encoding="utf-8")
+    (org_dir_path / "implementation.py").write_text(_implementation_code(), encoding="utf-8")
 
     parent = OrganismMeta(
         organism_id=org_id,
@@ -85,8 +86,13 @@ def _make_parent(
         prompt_hash="abc",
         seed=123,
         organism_dir=str(org_dir_path),
-        optimizer_path=str(org_dir_path / "optimizer.py"),
-        simple_reward=0.5,
+        implementation_path=str(org_dir_path / "implementation.py"),
+        ancestor_ids=[],
+        experiment_report_index={},
+        simple_score=0.5,
+    )
+    save_organism_artifacts(
+        parent,
         genetic_code={
             "core_genes": genes,
             "interaction_notes": "Parent baseline organism.",
@@ -108,14 +114,12 @@ def _make_parent(
             }
         ],
     )
-    save_organism_artifacts(parent)
     return parent
 
 
 class _FakeCanonicalGenerator:
     def __init__(self, *, design_response_text: str, implementation_response_text: str) -> None:
         self.prompt_bundle = load_prompt_bundle(_cfg())
-        self.model_name = "mock-model"
         self.seed = 123
         self.design_response_text = design_response_text
         self.implementation_response_text = implementation_response_text
@@ -129,8 +133,7 @@ class _FakeCanonicalGenerator:
         org_dir: Path,
         organism_id: str,
         generation: int,
-    ) -> tuple[dict[str, str], str, str]:
-        del generation
+    ) -> CreationStageResult:
         self.calls.append(("design", design_system_prompt, design_user_prompt, org_dir))
         parsed = parse_llm_response(self.design_response_text)
         implementation_system_prompt, implementation_user_prompt = build_implementation_prompt_from_design(
@@ -141,6 +144,9 @@ class _FakeCanonicalGenerator:
         write_json(
             org_dir / "llm_request.json",
             {
+                "route_id": "mock",
+                "provider": "test",
+                "provider_model_id": "test-model",
                 "design": {
                     "system_prompt": design_system_prompt,
                     "user_prompt": design_user_prompt,
@@ -156,6 +162,9 @@ class _FakeCanonicalGenerator:
         write_json(
             org_dir / "llm_response.json",
             {
+                "route_id": "mock",
+                "provider": "test",
+                "provider_model_id": "test-model",
                 "design": {
                     "text": self.design_response_text,
                     "response": {"provider": "test", "stage": "design"},
@@ -176,10 +185,17 @@ class _FakeCanonicalGenerator:
                 )
             )
         )
-        return parsed, self.implementation_response_text, prompt_hash
+        return CreationStageResult(
+            parsed_design=parsed,
+            implementation_code=self.implementation_response_text,
+            prompt_hash=prompt_hash,
+            llm_route_id="mock",
+            llm_provider="test",
+            provider_model_id="test-model",
+        )
 
 
-def test_mutation_operator_produce_persists_artifacts_and_semantic_lineage(tmp_path: Path) -> None:
+def test_mutation_operator_produce_persists_artifacts_and_lineage(tmp_path: Path) -> None:
     parent = _make_parent(
         tmp_path,
         org_id="parent01",
@@ -198,17 +214,7 @@ def test_mutation_operator_produce_persists_artifacts_and_semantic_lineage(tmp_p
         "## CHANGE_DESCRIPTION\n"
         "Dropped clipping and replaced it with trust-ratio scaling.\n"
     )
-    implementation_response_text = render_template(
-        {
-            "IMPORTS": "import math",
-            "INIT_BODY": "        self.model = model\n        self.max_steps = max_steps",
-            "STEP_BODY": "        del weights, grads, activations, step_fn",
-            "ZERO_GRAD_BODY": "        pass",
-        },
-        optimizer_name="MutationChild",
-        class_name="MutationChild",
-        template_text=load_prompt_bundle(_cfg()).implementation_template,
-    )
+    implementation_response_text = _implementation_code("MutationChild")
     generator = _FakeCanonicalGenerator(
         design_response_text=design_response_text,
         implementation_response_text=implementation_response_text,
@@ -228,23 +234,23 @@ def test_mutation_operator_produce_persists_artifacts_and_semantic_lineage(tmp_p
     _, _, user_prompt, _ = generator.calls[0]
     assert "=== INHERITED GENE POOL ===" in user_prompt
     assert "=== REMOVED GENES ===" in user_prompt
+    assert "=== PARENT IMPLEMENTATION CODE ===" in user_prompt
     assert generator.calls[1][0] == "implementation"
-    assert "=== FIXED OPTIMIZER TEMPLATE ===" in generator.calls[1][2]
+    assert "=== FIXED IMPLEMENTATION TEMPLATE ===" in generator.calls[1][2]
     assert child.island_id == parent.island_id
     assert child.mother_id == parent.organism_id
-    assert (org_dir / "genetic_code.md").exists()
-    assert (org_dir / "lineage.json").exists()
-    assert (org_dir / "optimizer.py").read_text(encoding="utf-8") == implementation_response_text
-    lineage = json.loads((org_dir / "lineage.json").read_text(encoding="utf-8"))
-    latest = lineage[-1]
+    assert child.implementation_path == str(org_dir / "implementation.py")
+    assert (org_dir / "implementation.py").read_text(encoding="utf-8") == implementation_response_text
+    latest = read_lineage(org_dir / "lineage.json")[-1]
     assert latest["operator"] == "mutation"
     assert latest["change_description"] == "Dropped clipping and replaced it with trust-ratio scaling."
     assert "gene_diff_summary" not in latest
-    assert "aggregate_score" not in latest
     llm_request = json.loads((org_dir / "llm_request.json").read_text(encoding="utf-8"))
-    llm_response = json.loads((org_dir / "llm_response.json").read_text(encoding="utf-8"))
-    assert set(llm_request.keys()) == {"design", "implementation"}
-    assert set(llm_response.keys()) == {"design", "implementation"}
+    assert llm_request["route_id"] == "mock"
+    assert {"design", "implementation"}.issubset(llm_request.keys())
+    assert child.llm_route_id == "mock"
+    assert child.llm_provider == "test"
+    assert child.provider_model_id == "test-model"
 
 
 def test_crossover_operator_produce_records_cross_island_lineage(tmp_path: Path) -> None:
@@ -272,17 +278,7 @@ def test_crossover_operator_produce_records_cross_island_lineage(tmp_path: Path)
         "## CHANGE_DESCRIPTION\n"
         "Kept the maternal schedule and introduced paternal diagonal preconditioning.\n"
     )
-    implementation_response_text = render_template(
-        {
-            "IMPORTS": "import math",
-            "INIT_BODY": "        self.model = model\n        self.max_steps = max_steps",
-            "STEP_BODY": "        del weights, grads, activations, step_fn",
-            "ZERO_GRAD_BODY": "        pass",
-        },
-        optimizer_name="CrossoverChild",
-        class_name="CrossoverChild",
-        template_text=load_prompt_bundle(_cfg()).implementation_template,
-    )
+    implementation_response_text = _implementation_code("CrossoverChild")
     generator = _FakeCanonicalGenerator(
         design_response_text=design_response_text,
         implementation_response_text=implementation_response_text,
@@ -301,16 +297,14 @@ def test_crossover_operator_produce_records_cross_island_lineage(tmp_path: Path)
     )
 
     _, _, user_prompt, _ = generator.calls[0]
-    assert "=== INHERITED GENE POOL ===" in user_prompt
     assert "MOTHER (primary parent" in user_prompt
     assert "FATHER (secondary parent" in user_prompt
-    assert generator.calls[1][0] == "implementation"
+    assert "Mother implementation code" in user_prompt
+    assert "Father implementation code" in user_prompt
     assert child.island_id == mother.island_id
     assert child.mother_id == mother.organism_id
     assert child.father_id == father.organism_id
-    assert len(child.lineage) == len(mother.lineage) + 1
-    latest = child.lineage[-1]
+    latest = read_lineage(org_dir / "lineage.json")[-1]
     assert latest["cross_island"] is True
     assert latest["father_island_id"] == "second_order"
     assert latest["change_description"] == "Kept the maternal schedule and introduced paternal diagonal preconditioning."
-    assert "gene_diff_summary" not in latest

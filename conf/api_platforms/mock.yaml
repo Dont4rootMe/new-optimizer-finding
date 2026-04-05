@@ -1,0 +1,7 @@
+_target_: api_platforms.mock.platform.build_platform
+temperature: 0.0
+max_output_tokens: 2048
+timeout_sec: 30
+max_retries: 0
+max_concurrency: 16
+mock_delay_sec: 0.0

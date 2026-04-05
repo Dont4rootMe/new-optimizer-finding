@@ -41,7 +41,7 @@ class LineageEntry:
 
 @dataclass(slots=True)
 class OrganismMeta:
-    """Full metadata for an organism in the island-aware population."""
+    """Thin organism.json projection for the island-aware population."""
 
     organism_id: str
     island_id: str
@@ -52,17 +52,20 @@ class OrganismMeta:
     father_id: str | None
     operator: str  # "seed" | "mutation" | "crossover"
     genetic_code_path: str
-    optimizer_path: str
+    implementation_path: str
     lineage_path: str
     organism_dir: str
-    simple_reward: float | None = None
-    hard_reward: float | None = None
+    ancestor_ids: list[str] = field(default_factory=list)
+    experiment_report_index: dict[str, Any] = field(default_factory=dict)
+    simple_score: float | None = None
+    hard_score: float | None = None
     status: str = "pending"  # "pending" | "evaluated" | "eliminated" | "archived"
-    model_name: str = ""
+    llm_route_id: str = ""
+    llm_provider: str = ""
+    provider_model_id: str = ""
+    model_name: str = ""  # Deprecated compatibility alias; new writes use provider_model_id.
     prompt_hash: str = ""
     seed: int = 0
-    genetic_code: dict[str, Any] = field(default_factory=dict, repr=False)
-    lineage: list[dict[str, Any]] = field(default_factory=list, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -75,13 +78,17 @@ class OrganismMeta:
             "father_id": self.father_id,
             "operator": self.operator,
             "genetic_code_path": self.genetic_code_path,
-            "optimizer_path": self.optimizer_path,
+            "implementation_path": self.implementation_path,
             "lineage_path": self.lineage_path,
             "organism_dir": self.organism_dir,
-            "simple_reward": self.simple_reward,
-            "hard_reward": self.hard_reward,
+            "ancestor_ids": list(self.ancestor_ids),
+            "experiment_report_index": dict(self.experiment_report_index),
+            "simple_score": self.simple_score,
+            "hard_score": self.hard_score,
             "status": self.status,
-            "model_name": self.model_name,
+            "llm_route_id": self.llm_route_id,
+            "llm_provider": self.llm_provider,
+            "provider_model_id": self.provider_model_id or self.model_name,
             "prompt_hash": self.prompt_hash,
             "seed": self.seed,
         }
@@ -104,19 +111,19 @@ class ManifestEntry(TypedDict):
     organism_dir: str
     generation_created: int
     current_generation_active: int
-    simple_reward: float | None
-    hard_reward: float | None
+    simple_score: float | None
+    hard_score: float | None
 
 
 @dataclass(slots=True)
 class EvalTask:
-    """Single evaluation task mapped to one experiment and one candidate."""
+    """Single evaluation task mapped to one experiment and one organism directory."""
 
     task_id: str
-    candidate_id: str
+    organism_id: str
     generation: int
     experiment_name: str
-    optimizer_path: str
+    organism_dir: str
     output_json_path: str
     stdout_path: str
     stderr_path: str
@@ -135,11 +142,23 @@ class EvalTask:
 
 
 @dataclass(slots=True)
+class CreationStageResult:
+    """Output of one two-stage organism creation request."""
+
+    parsed_design: dict[str, str]
+    implementation_code: str
+    prompt_hash: str
+    llm_route_id: str
+    llm_provider: str
+    provider_model_id: str
+
+
+@dataclass(slots=True)
 class EvalTaskResult:
     """Outcome of one subprocess evaluation task."""
 
     task_id: str
-    candidate_id: str
+    organism_id: str
     generation: int
     experiment_name: str
     status: str

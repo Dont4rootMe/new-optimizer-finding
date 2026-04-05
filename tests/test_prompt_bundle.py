@@ -12,14 +12,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_load_prompt_bundle_from_default_conf_assets() -> None:
-    cfg = OmegaConf.create({"evolver": {"llm": {"provider": "mock"}}})
+    cfg = OmegaConf.create(
+        {
+            "evolver": {
+                "prompts": {
+                    "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
+                    "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
+                    "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
+                    "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
+                    "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
+                    "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
+                    "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
+                    "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
+                    "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
+                    "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                }
+            }
+        }
+    )
 
     bundle = load_prompt_bundle(cfg)
 
     assert "automated evolutionary search for novel optimizers" in bundle.project_context
     assert "## CORE_GENES" in bundle.seed_system
     assert "{island_description}" in bundle.seed_user
-    assert "Return only the final `optimizer.py` text." in bundle.implementation_user
+    assert "Return only the final `implementation.py` text." in bundle.implementation_user
 
 
 def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:

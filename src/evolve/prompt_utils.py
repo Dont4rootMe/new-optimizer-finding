@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-
 from omegaconf import DictConfig
 
 
@@ -21,28 +19,7 @@ class PromptBundle:
     implementation_user: str
     implementation_template: str
 
-
-def _default_conf_prompts_dir() -> Path:
-    return Path(__file__).resolve().parents[2] / "conf" / "prompts"
-
-
-def _default_prompt_relative_path(key: str) -> Path:
-    mapping = {
-        "project_context": Path("shared/project_context.txt"),
-        "seed_system": Path("seed/system.txt"),
-        "seed_user": Path("seed/user.txt"),
-        "mutation_system": Path("mutation/system.txt"),
-        "mutation_user": Path("mutation/user.txt"),
-        "crossover_system": Path("crossover/system.txt"),
-        "crossover_user": Path("crossover/user.txt"),
-        "implementation_system": Path("implementation/system.txt"),
-        "implementation_user": Path("implementation/user.txt"),
-        "implementation_template": Path("implementation/template.txt"),
-    }
-    try:
-        return mapping[key]
-    except KeyError as exc:
-        raise KeyError(f"Unknown prompt bundle key: {key}") from exc
+from pathlib import Path
 
 
 def _read_path(path: Path) -> str:
@@ -51,22 +28,18 @@ def _read_path(path: Path) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
-def _resolve_prompt_path(
-    cfg: DictConfig,
-    key: str,
-) -> Path:
+def _resolve_prompt_path(cfg: DictConfig, key: str) -> Path:
     prompts_cfg = cfg.evolver.get("prompts")
-    if prompts_cfg is not None and key in prompts_cfg:
-        candidate = Path(str(prompts_cfg[key])).expanduser()
-        if candidate.exists():
-            return candidate.resolve()
-        raise FileNotFoundError(f"Configured prompt file for '{key}' was not found: {candidate}")
-
-    return (_default_conf_prompts_dir() / _default_prompt_relative_path(key)).resolve()
+    if prompts_cfg is None or key not in prompts_cfg:
+        raise KeyError(f"evolver.prompts is missing required key '{key}'.")
+    candidate = Path(str(prompts_cfg[key])).expanduser()
+    if candidate.exists():
+        return candidate.resolve()
+    raise FileNotFoundError(f"Configured prompt file for '{key}' was not found: {candidate}")
 
 
 def load_prompt_bundle(cfg: DictConfig) -> PromptBundle:
-    """Load canonical prompt texts from `conf/prompts/**` or explicit overrides."""
+    """Load canonical prompt texts from explicit config paths."""
 
     project_context_path = _resolve_prompt_path(cfg, "project_context")
     project_context = _read_path(project_context_path)

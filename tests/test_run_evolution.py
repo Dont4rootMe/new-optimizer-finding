@@ -12,17 +12,17 @@ def _cfg() -> object:
         {
             "evolver": {
                 "enabled": True,
-                "llm": {
-                    "provider": "mock",
-                    "model": "mock-model",
-                    "temperature": 0.0,
-                    "max_output_tokens": 16,
-                    "reasoning_effort": None,
-                    "seed": 1,
-                    "fallback_to_chat_completions": True,
-                },
+                "llm": {"route_weights": {"mock": 1.0}, "seed": 1},
             },
-            "paths": {"population_root": "/tmp/pop"},
+            "paths": {
+                "population_root": "/tmp/pop",
+                "api_platform_runtime_root": "/tmp/api_platform_runtime",
+            },
+            "api_platforms": {
+                "mock": {
+                    "_target_": "api_platforms.mock.platform.build_platform",
+                }
+            },
             "resources": {"num_gpus": 1, "gpu_ids": [0]},
             "seed": 1,
             "precision": "fp32",
@@ -36,8 +36,9 @@ def test_run_evolution_always_uses_evolution_loop(monkeypatch) -> None:
     called = {"loop": False}
 
     class DummyLoop:
-        def __init__(self, received_cfg):
+        def __init__(self, received_cfg, llm_registry=None):
             assert received_cfg is cfg
+            assert llm_registry is not None
 
         async def run(self):
             called["loop"] = True

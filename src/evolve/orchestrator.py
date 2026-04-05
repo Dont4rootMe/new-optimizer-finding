@@ -26,7 +26,6 @@ from src.evolve.types import (
     OrganismEvaluationRequest,
     OrganismEvaluationSummary,
 )
-from optbench.utils.baselines import load_baseline_profile
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,9 +37,19 @@ class EvolverOrchestrator:
         self.cfg = cfg
         self.evolver_cfg = cfg.evolver
         self.population_root = Path(str(cfg.paths.population_root)).expanduser().resolve()
+        self.eval_config_dir = self._persist_eval_config_snapshot()
 
         self.gpu_ids = self._resolve_gpu_ids()
         self.pool = GpuJobPool(gpu_ids=self.gpu_ids)
+
+    def _persist_eval_config_snapshot(self) -> Path:
+        """Persist the active runtime config for subprocess evaluators."""
+
+        config_dir = self.population_root / ".eval_config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        config_path = config_dir / "config.yaml"
+        config_path.write_text(OmegaConf.to_yaml(self.cfg, resolve=True), encoding="utf-8")
+        return config_dir
 
     def _resolve_gpu_ids(self) -> list[int]:
         configured = self.cfg.resources.get("gpu_ids")
@@ -58,22 +67,6 @@ class EvolverOrchestrator:
             raise ValueError("No GPU ids resolved from resources.num_gpus/resources.gpu_ids")
 
         return gpu_ids
-
-    def _load_baseline_profiles_for(
-        self,
-        experiments: list[str],
-    ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
-        profiles: dict[str, dict[str, Any]] = {}
-        errors: dict[str, str] = {}
-        stats_root = self.cfg.paths.stats_root
-
-        for exp_name in experiments:
-            try:
-                profiles[exp_name] = load_baseline_profile(stats_root, exp_name)
-            except (FileNotFoundError, ValueError) as exc:
-                errors[exp_name] = str(exc)
-
-        return profiles, errors
 
     def _validate_requested_experiments(self, experiments: list[str]) -> None:
         config_experiments = set(self.cfg.get("experiments", {}).keys())
@@ -108,10 +101,10 @@ class EvolverOrchestrator:
         organism_dir = Path(request.organism_dir)
         return EvalTask(
             task_id=uuid.uuid4().hex,
-            candidate_id=request.organism_id,
+            organism_id=request.organism_id,
             generation=0,
             experiment_name=exp_name,
-            optimizer_path=str(organism_dir / "optimizer.py"),
+            organism_dir=str(organism_dir),
             output_json_path=str(phase_result_path(organism_dir, request.phase, exp_name)),
             stdout_path=str(phase_stdout_path(organism_dir, request.phase, exp_name)),
             stderr_path=str(phase_stderr_path(organism_dir, request.phase, exp_name)),
@@ -119,7 +112,7 @@ class EvolverOrchestrator:
             device="cuda",
             precision=str(self.cfg.precision),
             mode=request.eval_mode,
-            config_path="conf",
+            config_path=str(self.eval_config_dir),
             entrypoint_module=str(self.evolver_cfg.eval_entrypoint_module),
             timeout_sec=int(request.timeout_sec),
             max_retries=int(self.evolver_cfg.get("max_retries_per_eval", 0)),
@@ -153,11 +146,6 @@ class EvolverOrchestrator:
         request_states: dict[str, dict[str, Any]] = {}
         requested_experiments = sorted({exp for request in requests for exp in request.experiments})
         self._validate_requested_experiments(requested_experiments)
-        experiment_cfgs: dict[str, dict[str, Any]] = {
-            exp_name: OmegaConf.to_container(self.cfg.experiments[exp_name], resolve=True)
-            for exp_name in requested_experiments
-        }
-        baseline_profiles, baseline_errors = self._load_baseline_profiles_for(requested_experiments)
 
         total_tasks = 0
         completed_tasks = 0
@@ -191,7 +179,7 @@ class EvolverOrchestrator:
                     result.status,
                     result.error_msg,
                 )
-                state = request_states.get(result.candidate_id)
+                state = request_states.get(result.organism_id)
                 if state is not None:
                     state["results"][result.experiment_name] = payload
                 completed_tasks += 1
@@ -204,12 +192,8 @@ class EvolverOrchestrator:
                 aggregate_score, status, per_experiment = mean_score(
                     eval_results=state["results"],
                     selected_experiments=selected_experiments,
-                    experiment_cfgs=experiment_cfgs,
-                    baseline_profiles=baseline_profiles,
-                    baseline_errors=baseline_errors,
                     inclusion_prob=allocation_snapshot.get("inclusion_prob", {}),
                     total_experiments=len(request.experiments),
-                    scoring_cfg=request.allocation_cfg,
                 )
                 summaries.append(
                     OrganismEvaluationSummary(

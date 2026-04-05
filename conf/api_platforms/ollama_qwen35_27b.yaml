@@ -1,0 +1,13 @@
+_target_: api_platforms.ollama_qwen35_27b.platform.build_platform
+base_url: ${oc.env:OLLAMA_BASE_URL,http://localhost:11434/api}
+temperature: 1.0
+max_output_tokens: 4096
+top_p: 0.95
+top_k: 20
+timeout_sec: 1800
+max_retries: 0
+max_concurrency: 4
+keep_alive: 30m
+think: false
+request_options:
+  num_ctx: 65536

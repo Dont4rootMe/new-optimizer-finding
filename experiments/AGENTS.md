@@ -4,43 +4,27 @@ This file applies to `experiments/` unless a deeper `AGENTS.md` overrides it.
 
 ## Purpose
 
-Each experiment package implements the protocol consumed by `optbench.registry`:
+Each experiment package implements task-specific behavior. The evaluator referenced by the experiment YAML must expose:
 
-- `build_datamodule(cfg) -> dict`
-- `build_model(cfg) -> torch.nn.Module`
-- `train(cfg, model, datamodule, optimizer_factory) -> dict`
-- `evaluate(cfg, model, datamodule) -> dict[str, float]`
+- `evaluate_organism(organism_dir, cfg) -> dict`
 
-The package `__init__.py` typically exposes a `<Name>Experiment` class that delegates to those functions.
+That evaluator may delegate to package-local helpers such as:
 
-## Common Layout
-
-Most experiments use some subset of:
-
-- `data.py`
-- `model.py`
-- `train.py`
-- `metrics.py`
-- `__init__.py`
-
-Parameter-only experiments may omit data loaders and return an empty datamodule from `__init__.py`.
+- `build_datamodule(cfg)`
+- `build_model(cfg)`
+- `train(cfg, model, datamodule, implementation_factory)`
+- `evaluate(cfg, model, datamodule)`
 
 ## Rules
 
-- Reuse `experiments/_shared/` train loops where possible instead of cloning them.
-- Keep train-loop return payloads compatible with the runtime and evolve-side consumers:
-  - `final_metrics`
-  - `best_metrics`
-  - `objective_*`
-  - `steps`
-  - `wall_time_sec`
-  - `samples_or_tokens_seen`
-  - `status`
-- Optional dependency experiments should raise `optbench.schemas.OptionalDependencyError` with a clear extra name and install hint.
+- Keep task-specific runtime helpers inside the owning experiment family, not in `src/`.
+- Reuse `experiments/optimization_survey/_shared/` train loops where possible instead of cloning them.
+- Returned reports must include `score`. Everything else is opaque to `src`.
+- Optional dependency experiments should raise [`OptionalDependencyError`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/experiments/optimization_survey/_runtime/errors.py) with a clear install hint.
 - If you add a new experiment package, also update:
-  - `conf/experiments/<name>.yaml`
+  - `conf/experiments/<family>/<name>.yaml`
   - `conf/config.yaml`
-  - `optbench/registry.py`
+  - the experiment YAML `_target_`
   - tests
 
 ## Verification

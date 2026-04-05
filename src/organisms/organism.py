@@ -1,4 +1,4 @@
-"""Helpers for canonical organism validation, persistence, and lineage tracking."""
+"""Helpers for generic organism validation, persistence, and lineage tracking."""
 
 from __future__ import annotations
 
@@ -9,16 +9,14 @@ from typing import Any
 from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
 from src.evolve.storage import (
     genetic_code_path,
+    implementation_path,
     lineage_path,
     organism_meta_path,
     read_genetic_code,
+    read_lineage,
     write_genetic_code,
     write_json,
     write_lineage,
-)
-from src.evolve.template_parser import (
-    extract_editable_sections,
-    validate_rendered_code,
 )
 from src.evolve.types import LineageEntry, OrganismMeta
 
@@ -33,21 +31,29 @@ _REQUIRED_RESPONSE_SECTIONS = (
 )
 
 
-def load_organism_code_sections(org: OrganismMeta) -> dict[str, str]:
-    """Load editable code sections from an organism's optimizer.py."""
+def read_organism_implementation(org: OrganismMeta) -> str:
+    """Return the raw implementation.py text for one organism."""
 
-    code = Path(org.optimizer_path).read_text(encoding="utf-8")
-    return extract_editable_sections(code)
+    return Path(org.implementation_path).read_text(encoding="utf-8")
+
+
+def format_implementation_code(code: str) -> str:
+    """Format raw implementation code for prompt inclusion."""
+
+    rendered = str(code).rstrip()
+    return rendered or "(empty)"
 
 
 def read_organism_genetic_code(org: OrganismMeta) -> dict[str, Any]:
-    """Return canonical genetic code, loading it from disk when needed."""
+    """Return canonical genetic code for one organism."""
 
-    if org.genetic_code:
-        return dict(org.genetic_code)
-    genetic_code = read_genetic_code(org.genetic_code_path)
-    org.genetic_code = dict(genetic_code)
-    return genetic_code
+    return read_genetic_code(org.genetic_code_path)
+
+
+def read_organism_lineage(org: OrganismMeta) -> list[dict[str, Any]]:
+    """Return canonical lineage entries for one organism."""
+
+    return read_lineage(org.lineage_path)
 
 
 def format_genetic_code(genetic_code: dict[str, Any]) -> str:
@@ -108,12 +114,17 @@ def format_lineage_summary(
     return "\n".join(lines)
 
 
-def save_organism_artifacts(org: OrganismMeta) -> None:
+def save_organism_artifacts(
+    org: OrganismMeta,
+    *,
+    genetic_code: dict[str, Any],
+    lineage: list[dict[str, Any]],
+) -> None:
     """Persist organism metadata, genetic code, and lineage to disk."""
 
     write_json(organism_meta_path(org.organism_dir), org.to_dict())
-    write_genetic_code(genetic_code_path(org.organism_dir), org.genetic_code)
-    write_lineage(lineage_path(org.organism_dir), org.lineage)
+    write_genetic_code(genetic_code_path(org.organism_dir), genetic_code)
+    write_lineage(lineage_path(org.organism_dir), lineage)
 
 
 def update_latest_lineage_entry(
@@ -125,10 +136,11 @@ def update_latest_lineage_entry(
 ) -> None:
     """Backfill the latest lineage entry after evaluation."""
 
-    if not org.lineage:
+    lineage = read_organism_lineage(org)
+    if not lineage:
         return
 
-    entry = dict(org.lineage[-1])
+    entry = dict(lineage[-1])
     if phase == "simple":
         entry["selected_simple_experiments"] = list(selected_experiments)
         entry["simple_score"] = phase_score
@@ -138,8 +150,8 @@ def update_latest_lineage_entry(
     else:
         raise ValueError(f"Unsupported lineage phase '{phase}'")
 
-    org.lineage[-1] = entry
-    write_lineage(org.lineage_path, org.lineage)
+    lineage[-1] = entry
+    write_lineage(org.lineage_path, lineage)
 
 
 def _normalize_gene_lines(core_genes_raw: str) -> list[str]:
@@ -203,8 +215,7 @@ def build_implementation_prompt_from_design(
 
 def build_organism_from_response(
     parsed: dict[str, str],
-    optimizer_code: str,
-    implementation_template: str,
+    implementation_code: str,
     organism_id: str,
     island_id: str,
     generation: int,
@@ -212,15 +223,18 @@ def build_organism_from_response(
     father_id: str | None,
     operator: str,
     org_dir: Path,
-    model_name: str,
+    llm_route_id: str,
+    llm_provider: str,
+    provider_model_id: str,
     prompt_hash: str,
     seed: int,
     timestamp: str,
     parent_lineage: list[dict[str, Any]] | None = None,
+    ancestor_ids: list[str] | None = None,
     cross_island: bool = False,
     father_island_id: str | None = None,
 ) -> OrganismMeta:
-    """Build `OrganismMeta` from a canonical design response and full optimizer source."""
+    """Build `OrganismMeta` from a canonical design response and raw implementation text."""
 
     for key in _REQUIRED_RESPONSE_SECTIONS:
         if key not in parsed:
@@ -228,13 +242,11 @@ def build_organism_from_response(
 
     genetic_code = _build_genetic_code(parsed)
     change_description = _require_section(parsed, "CHANGE_DESCRIPTION")
+    if not str(implementation_code).strip():
+        raise ValueError("Implementation stage must return non-empty implementation.py text.")
 
-    is_valid, error = validate_rendered_code(optimizer_code, implementation_template)
-    if not is_valid:
-        raise ValueError(f"Generated code failed validation: {error}")
-
-    optimizer_file = Path(org_dir) / "optimizer.py"
-    optimizer_file.write_text(optimizer_code, encoding="utf-8")
+    implementation_file = implementation_path(org_dir)
+    implementation_file.write_text(implementation_code, encoding="utf-8")
 
     lineage = list(parent_lineage or [])
     lineage.append(
@@ -249,6 +261,11 @@ def build_organism_from_response(
         ).to_dict()
     )
 
+    parent_ancestors = list(ancestor_ids or [])
+    for parent_id in (mother_id, father_id):
+        if parent_id and parent_id not in parent_ancestors:
+            parent_ancestors.append(parent_id)
+
     org = OrganismMeta(
         organism_id=organism_id,
         island_id=island_id,
@@ -259,15 +276,17 @@ def build_organism_from_response(
         father_id=father_id,
         operator=operator,
         genetic_code_path=str(genetic_code_path(org_dir)),
-        optimizer_path=str(optimizer_file),
+        implementation_path=str(implementation_file),
         lineage_path=str(lineage_path(org_dir)),
         organism_dir=str(org_dir),
-        model_name=model_name,
+        ancestor_ids=parent_ancestors,
+        experiment_report_index={},
+        llm_route_id=llm_route_id,
+        llm_provider=llm_provider,
+        provider_model_id=provider_model_id,
         prompt_hash=prompt_hash,
         seed=seed,
-        genetic_code=genetic_code,
-        lineage=lineage,
     )
 
-    save_organism_artifacts(org)
+    save_organism_artifacts(org, genetic_code=genetic_code, lineage=lineage)
     return org

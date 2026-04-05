@@ -1,4 +1,4 @@
-"""Tests for manifest-driven evolution resume."""
+"""Tests for population-state-driven evolution resume."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from src.evolve.evolution_loop import EvolutionLoop
 from src.evolve.storage import (
     generation_dir,
     organism_dir,
-    read_population_manifest,
+    read_population_state,
     write_json,
-    write_population_manifest,
+    write_population_state,
 )
 from src.evolve.types import OrganismMeta
 from src.organisms.organism import save_organism_artifacts
@@ -27,12 +27,18 @@ def _make_cfg(tmp_path: Path) -> object:
         {
             "seed": 123,
             "precision": "fp32",
+            "deterministic": False,
+            "num_workers": 0,
             "paths": {
                 "population_root": str(tmp_path / "populations"),
                 "stats_root": str(tmp_path / "stats"),
+                "data_root": str(tmp_path / "data"),
+                "runs_root": str(tmp_path / "runs"),
+                "api_platform_runtime_root": str(tmp_path / ".api_platform_runtime"),
             },
             "resources": {"num_gpus": 1, "gpu_ids": [0]},
             "experiments": {},
+            "api_platforms": {"mock": {"_target_": "api_platforms.mock.platform.build_platform"}},
             "evolver": {
                 "generation": 3,
                 "resume": True,
@@ -42,6 +48,18 @@ def _make_cfg(tmp_path: Path) -> object:
                     "dir": str(islands_dir),
                     "seed_organisms_per_island": 2,
                     "max_organisms_per_island": 2,
+                },
+                "prompts": {
+                    "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
+                    "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
+                    "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
+                    "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
+                    "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
+                    "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
+                    "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
+                    "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
+                    "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
+                    "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
                 },
                 "reproduction": {
                     "offspring_per_generation": 1,
@@ -85,15 +103,7 @@ def _make_cfg(tmp_path: Path) -> object:
                         "allocation": {},
                     },
                 },
-                "llm": {
-                    "provider": "mock",
-                    "model": "mock-model",
-                    "temperature": 0.0,
-                    "max_output_tokens": 512,
-                    "reasoning_effort": None,
-                    "seed": 123,
-                    "fallback_to_chat_completions": True,
-                },
+                "llm": {"route_weights": {"mock": 1.0}, "seed": 123},
             },
         }
     )
@@ -102,7 +112,7 @@ def _make_cfg(tmp_path: Path) -> object:
 def _write_organism(pop_root: Path, generation: int, organism_id: str) -> OrganismMeta:
     gen_dir = generation_dir(pop_root, generation)
     org_dir = organism_dir(gen_dir, organism_id, island_id="gradient_methods")
-    (org_dir / "optimizer.py").write_text(
+    (org_dir / "implementation.py").write_text(
         "import torch.nn as nn\n\n"
         "class Dummy:\n"
         "    def __init__(self, model: nn.Module, max_steps: int):\n"
@@ -116,6 +126,7 @@ def _write_organism(pop_root: Path, generation: int, organism_id: str) -> Organi
         "    return Dummy(model, max_steps)\n",
         encoding="utf-8",
     )
+
     organism = OrganismMeta(
         organism_id=organism_id,
         island_id="gradient_methods",
@@ -126,10 +137,15 @@ def _write_organism(pop_root: Path, generation: int, organism_id: str) -> Organi
         father_id=None,
         operator="seed",
         genetic_code_path=str(org_dir / "genetic_code.md"),
-        optimizer_path=str(org_dir / "optimizer.py"),
+        implementation_path=str(org_dir / "implementation.py"),
         lineage_path=str(org_dir / "lineage.json"),
         organism_dir=str(org_dir),
-        simple_reward=0.8,
+        ancestor_ids=[],
+        experiment_report_index={},
+        simple_score=0.8,
+    )
+    save_organism_artifacts(
+        organism,
         genetic_code={
             "core_genes": [
                 f"adaptive rule {organism_id}",
@@ -141,34 +157,33 @@ def _write_organism(pop_root: Path, generation: int, organism_id: str) -> Organi
         },
         lineage=[],
     )
-    save_organism_artifacts(organism)
     return organism
 
 
-def test_restore_population_from_manifest_reads_older_generation_survivor(tmp_path: Path) -> None:
+def test_restore_population_from_state_reads_older_generation_survivor(tmp_path: Path) -> None:
     cfg = _make_cfg(tmp_path)
     pop_root = Path(str(cfg.paths.population_root))
     pop_root.mkdir(parents=True, exist_ok=True)
 
     older = _write_organism(pop_root, generation=0, organism_id="older")
     newer = _write_organism(pop_root, generation=3, organism_id="newer")
-    write_population_manifest(pop_root, generation=3, organisms=[older, newer])
+    write_population_state(pop_root, generation=3, organisms=[older, newer])
 
     loop = EvolutionLoop(cfg)
-    restored = loop._restore_population_from_manifest(generation=3)
+    restored = loop._restore_population_from_state(generation=3)
 
     assert [organism.organism_id for organism in restored] == ["older", "newer"]
     assert restored[0].generation_created == 0
     assert restored[1].generation_created == 3
 
 
-def test_manifest_duplicate_entry_is_rejected(tmp_path: Path) -> None:
+def test_population_state_duplicate_entry_is_rejected(tmp_path: Path) -> None:
     pop_root = tmp_path / "populations"
     pop_root.mkdir(parents=True, exist_ok=True)
     write_json(
-        pop_root / "population_manifest.json",
+        pop_root / "population_state.json",
         {
-            "generation": 1,
+            "current_generation": 1,
             "active_organisms": [
                 {
                     "organism_id": "dup",
@@ -189,16 +204,16 @@ def test_manifest_duplicate_entry_is_rejected(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ValueError, match="duplicate organism_id"):
-        read_population_manifest(pop_root)
+        read_population_state(pop_root)
 
 
-def test_manifest_malformed_entry_is_rejected(tmp_path: Path) -> None:
+def test_population_state_malformed_entry_is_rejected(tmp_path: Path) -> None:
     pop_root = tmp_path / "populations"
     pop_root.mkdir(parents=True, exist_ok=True)
     write_json(
-        pop_root / "population_manifest.json",
+        pop_root / "population_state.json",
         {
-            "generation": 1,
+            "current_generation": 1,
             "active_organisms": [
                 {
                     "organism_id": "broken",
@@ -211,22 +226,22 @@ def test_manifest_malformed_entry_is_rejected(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ValueError, match="island_id|organism_dir|generation_created"):
-        read_population_manifest(pop_root)
+        read_population_state(pop_root)
 
 
-def test_canonical_resume_requires_manifest(tmp_path: Path) -> None:
+def test_canonical_resume_requires_population_state(tmp_path: Path) -> None:
     cfg = _make_cfg(tmp_path)
     loop = EvolutionLoop(cfg)
 
-    with pytest.raises(FileNotFoundError, match="Population manifest is required"):
-        loop._restore_population_from_manifest(generation=3)
+    with pytest.raises(FileNotFoundError, match="population_state.json"):
+        loop._restore_population_from_state(generation=3)
 
 
-def test_manifest_missing_organism_dir_fails_resume(tmp_path: Path) -> None:
+def test_population_state_missing_organism_dir_fails_resume(tmp_path: Path) -> None:
     cfg = _make_cfg(tmp_path)
     pop_root = Path(str(cfg.paths.population_root))
     pop_root.mkdir(parents=True, exist_ok=True)
-    write_population_manifest(
+    write_population_state(
         pop_root,
         generation=3,
         organisms=[
@@ -242,32 +257,32 @@ def test_manifest_missing_organism_dir_fails_resume(tmp_path: Path) -> None:
 
     loop = EvolutionLoop(cfg)
     with pytest.raises(FileNotFoundError, match="missing organism dir"):
-        loop._restore_population_from_manifest(generation=3)
+        loop._restore_population_from_state(generation=3)
 
 
-def test_manifest_missing_genetic_code_fails_resume(tmp_path: Path) -> None:
+def test_population_state_missing_genetic_code_fails_resume(tmp_path: Path) -> None:
     cfg = _make_cfg(tmp_path)
     pop_root = Path(str(cfg.paths.population_root))
     pop_root.mkdir(parents=True, exist_ok=True)
 
     organism = _write_organism(pop_root, generation=3, organism_id="broken_genes")
     Path(organism.genetic_code_path).unlink()
-    write_population_manifest(pop_root, generation=3, organisms=[organism])
+    write_population_state(pop_root, generation=3, organisms=[organism])
 
     loop = EvolutionLoop(cfg)
     with pytest.raises(FileNotFoundError, match="genetic code"):
-        loop._restore_population_from_manifest(generation=3)
+        loop._restore_population_from_state(generation=3)
 
 
-def test_manifest_missing_lineage_fails_resume(tmp_path: Path) -> None:
+def test_population_state_missing_lineage_fails_resume(tmp_path: Path) -> None:
     cfg = _make_cfg(tmp_path)
     pop_root = Path(str(cfg.paths.population_root))
     pop_root.mkdir(parents=True, exist_ok=True)
 
     organism = _write_organism(pop_root, generation=3, organism_id="broken_lineage")
     Path(organism.lineage_path).unlink()
-    write_population_manifest(pop_root, generation=3, organisms=[organism])
+    write_population_state(pop_root, generation=3, organisms=[organism])
 
     loop = EvolutionLoop(cfg)
     with pytest.raises(FileNotFoundError, match="lineage"):
-        loop._restore_population_from_manifest(generation=3)
+        loop._restore_population_from_state(generation=3)

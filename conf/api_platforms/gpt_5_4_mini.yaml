@@ -1,0 +1,9 @@
+_target_: api_platforms.gpt_5_4_mini.platform.build_platform
+api_key_env: OPENAI_API_KEY
+base_url: ${oc.env:OPENAI_BASE_URL,null}
+temperature: 0.5
+max_output_tokens: 8000
+reasoning_effort: medium
+timeout_sec: 300
+max_retries: 2
+max_concurrency: 8

@@ -1,0 +1,14 @@
+_target_: api_platforms.qwen35_35b_a3b.platform.build_platform
+model_name_or_path: Qwen/Qwen3.5-35B-A3B
+tokenizer_name: null
+gpu_ranks: 0
+torch_dtype: bf16
+attn_implementation: sdpa
+trust_remote_code: true
+temperature: 0.5
+top_p: 0.95
+do_sample: true
+max_output_tokens: 2048
+timeout_sec: 1200
+max_retries: 0
+max_concurrency: 1

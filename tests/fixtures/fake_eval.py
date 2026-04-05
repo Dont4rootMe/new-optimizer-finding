@@ -11,7 +11,7 @@ from pathlib import Path
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--experiment", required=True)
-    parser.add_argument("--optimizer_path", required=True)
+    parser.add_argument("--organism_dir", required=True)
     parser.add_argument("--output_json", required=True)
     parser.add_argument("--seed", required=True, type=int)
     parser.add_argument("--device", default="cpu")
@@ -25,7 +25,7 @@ def main() -> None:
 
     payload = {
         "status": "ok",
-        "final_score": final_score,
+        "score": final_score,
         "objective_name": "train_loss",
         "objective_direction": "min",
         "objective_last": final_score,

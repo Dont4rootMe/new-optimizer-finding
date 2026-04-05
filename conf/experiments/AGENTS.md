@@ -4,34 +4,23 @@ This file applies to `conf/experiments/`.
 
 ## Required Shape
 
-Each experiment config should define the fields that the runtime expects:
+Each experiment config should define the fields that its evaluator expects. In practice the common shape includes:
 
+- `_target_`
 - `enabled`
 - `name`
-- `data`
-- `model`
-- `train`
 - `compute`
-- `safety`
-- `primary_metric`
-- `target`
-- `run_validation`
-- `normalization`
-- `optimizer_defaults`
-
-Some experiments use empty or minimal blocks, but the runtime contract should still remain consistent.
+- optional task-specific blocks such as `data`, `model`, `train`, `normalization`, `baseline`, `optimizer_defaults`
 
 ## Important Constraints
 
-- `name` must match the experiment key used in Hydra and the registry.
+- `name` must match the experiment key used in Hydra composition.
 - `compute.device`, `precision`, `smoke_steps`, and `max_steps` must reflect real single-device limits.
-- `optimizer_defaults.params` must be a mapping.
-- `optimizer_defaults.scheduler.type` must stay compatible with the builtin scheduler logic in `optbench/runner.py`.
-- `primary_metric` and `target` must agree on direction semantics.
+- Optimization-survey configs that use builtin optimizers must keep `optimizer_defaults.params` as a mapping.
 - Optional dependency experiments should still compose cleanly even when their Python extras are absent.
 
 ## Change Discipline
 
 - Prefer updating existing config keys over inventing parallel variants.
 - If a new config field is consumed in code, add tests that exercise both default composition and runtime override behavior.
-- If you add a new experiment config, update `conf/config.yaml`, `experiments/`, and `optbench/registry.py` in the same change.
+- If you add a new experiment config, update `conf/config.yaml`, the matching experiment package, and the YAML `_target_` in the same change.

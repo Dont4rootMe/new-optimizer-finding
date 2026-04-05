@@ -5,13 +5,13 @@ This file applies to `src/validate/`.
 ## Purpose
 
 - `run_one.py` is the subprocess entrypoint used by evolution-time evaluation jobs.
-- It composes Hydra config, resolves one experiment, imports one optimizer, runs training, and writes one result JSON.
+- It loads one config snapshot, resolves one experiment, runs one evaluator against one organism directory, and writes one result JSON.
 
 ## Rules
 
 - Keep the CLI contract stable:
   - `--experiment`
-  - `--optimizer_path`
+  - `--organism_dir`
   - `--output_json`
   - `--seed`
   - `--device`
@@ -20,7 +20,7 @@ This file applies to `src/validate/`.
   - `--config_path`
   - `--override`
 - Always write `output_json`, including failure cases.
-- Keep the output payload shape compatible with `src/evolve/orchestrator.py` and downstream scoring.
+- The written payload must be a dict with at least `score`.
 - This worker should prepare and run one experiment only. Heavy orchestration belongs elsewhere.
 
 ## Verification

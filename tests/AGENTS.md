@@ -8,8 +8,8 @@ The suite protects strict contracts across runtime, prompt loading, organism art
 
 ## What The Tests Intentionally Enforce
 
-- Hydra composition and canonical config shape
-- strict optimizer import signatures
+- Hydra composition and flat runtime config shape
+- score-only experiment report contract
 - prompt bundle layout and placeholder wiring
 - canonical organism artifact structure and lineage semantics
 - canonical evolution entrypoints and resume behavior
@@ -21,10 +21,10 @@ The suite protects strict contracts across runtime, prompt loading, organism art
 - Do not update tests merely to bless accidental regressions in contracts or artifact layout.
 - If you change:
   - config shape: update Hydra tests
-  - optimizer contract: update import/schema/template tests
+  - optimization implementation contract: update import/schema tests
   - prompt layout: update prompt bundle and generator tests
   - organism artifacts: update organism contract and evolution resume tests
-  - outdated config rejection: update evolve-loop and entrypoint tests
+  - score aggregation: update scoring and integration tests
 
 ## Useful Test Targets
 

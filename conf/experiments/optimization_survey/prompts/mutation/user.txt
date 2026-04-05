@@ -1,0 +1,25 @@
+Mutate this parent organism into an improved child.
+
+=== INHERITED GENE POOL ===
+These genes were selected to carry forward into the child:
+{inherited_gene_pool}
+
+=== REMOVED GENES ===
+These genes were deliberately dropped. Do not reintroduce without strong justification:
+{removed_gene_pool}
+
+=== PARENT GENETIC CODE ===
+Structured description of the parent's algorithmic design:
+{parent_genetic_code}
+
+=== PARENT EVOLUTIONARY HISTORY ===
+Recent lineage entries, most recent last:
+{parent_lineage_summary}
+
+=== PARENT IMPLEMENTATION CODE ===
+Study this raw implementation carefully before making changes.
+{parent_implementation_code}
+
+===
+
+Analyze the parent's strengths and weaknesses based on scores, history, and code. Produce a child that addresses the most impactful weakness or amplifies the strongest trait.

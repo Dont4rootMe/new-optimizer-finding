@@ -1,0 +1,75 @@
+_target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExperimentEvaluator
+experiment_target: experiments.optimization_survey.audio_transformer.AudioTransformerExperiment
+enabled: false
+name: audio_transformer
+
+
+baseline:
+  profile_path: ${paths.stats_root}/optimization_survey/${..name}/baseline.json
+data:
+  root: ${paths.data_root}/speechcommands
+  sample_rate: 16000
+  clip_seconds: 1.0
+  n_mels: 64
+  win_length: 400
+  hop_length: 160
+  specaugment: true
+  freq_mask_param: 8
+  time_mask_param: 12
+
+model:
+  input_dim: 64
+  d_model: 256
+  n_layers: 6
+  n_heads: 4
+  d_ff: 1024
+  dropout: 0.1
+  pooling: mean
+  num_classes: 35
+
+train:
+  eval_every_steps: 200
+  log_every_steps: 20
+
+compute:
+  device: cuda
+  precision: bf16
+  batch_size: 128
+  max_tokens_per_batch: null
+  grad_accum_steps: 1
+  max_steps: 30000
+  max_epochs: 80
+  num_workers: 8
+  gradient_checkpointing: false
+  smoke_steps: 100
+
+safety:
+  detect_nan: true
+  abort_on_nan: true
+  grad_clip_norm: 1.0
+  log_grad_norm: true
+
+primary_metric:
+  name: val_acc
+  direction: max
+
+target:
+  value: 0.94
+  patience: 5
+
+run_validation:
+  max_steps: null
+  target_quality: null
+
+normalization:
+  eps: 1.0e-8
+
+optimizer_defaults:
+  name: adamw
+  params:
+    lr: 0.0003
+    betas: [0.9, 0.98]
+    weight_decay: 0.01
+  scheduler:
+    type: warmup_cosine
+    warmup_ratio: 0.05

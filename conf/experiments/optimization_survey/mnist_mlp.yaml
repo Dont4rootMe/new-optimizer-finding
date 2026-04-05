@@ -1,0 +1,68 @@
+_target_: experiments.optimization_survey._runtime.runner.OptimizationSurveyExperimentEvaluator
+experiment_target: experiments.optimization_survey.mnist_mlp.MnistMlpExperiment
+enabled: true
+name: mnist_mlp
+
+
+baseline:
+  profile_path: ${paths.stats_root}/optimization_survey/${..name}/baseline.json
+data:
+  root: ${paths.data_root}/mnist
+  class_a: 0
+  class_b: 1
+  val_split: 500
+
+model:
+  input_dim: 784
+  hidden_dim: 64
+  num_classes: 2
+
+train:
+  eval_every_steps: 100
+  log_every_steps: 20
+
+compute:
+  device: cpu
+  precision: fp32
+  batch_size: 64
+  max_tokens_per_batch: null
+  grad_accum_steps: 1
+  max_steps: 1000
+  max_epochs: null
+  num_workers: 0
+  gradient_checkpointing: false
+  smoke_steps: 200
+
+safety:
+  detect_nan: true
+  abort_on_nan: true
+  grad_clip_norm: null
+  log_grad_norm: true
+
+primary_metric:
+  name: val_acc
+  direction: max
+
+target:
+  metric: val_acc
+  direction: max
+  value: 0.95
+  patience: 3
+
+run_validation:
+  max_steps: null
+  target_quality: null
+
+normalization:
+  eps: 1.0e-8
+
+optimizer_defaults:
+  name: sgd
+  params:
+    lr: 0.01
+    momentum: 0.9
+    weight_decay: 0.0
+    nesterov: false
+  scheduler:
+    type: cosine
+    warmup_steps: 0

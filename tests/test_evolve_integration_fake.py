@@ -13,7 +13,7 @@ from src.evolve.storage import read_json
 
 
 def _write_baseline(stats_root: Path, exp_name: str, objective_last: float = 1.0, steps: int = 10) -> None:
-    exp_dir = stats_root / exp_name
+    exp_dir = stats_root / "optimization_survey" / exp_name
     exp_dir.mkdir(parents=True, exist_ok=True)
     (exp_dir / "baseline.json").write_text(
         json.dumps(
@@ -58,19 +58,26 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                 "data_root": str(tmp_path / "data"),
                 "stats_root": str(stats_root),
                 "runs_root": str(tmp_path / "runs"),
-                "optimizer_guesses_root": str(tmp_path / "optimizer_guesses"),
-                "optimizer_results_dirname": "results",
+                "candidate_results_dirname": "results",
+                "api_platform_runtime_root": str(tmp_path / ".api_platform_runtime"),
             },
+            "api_platforms": {"mock": {"_target_": "api_platforms.mock.platform.build_platform"}},
             "experiments": {
                 "simple_a": {
                     "enabled": True,
-                    "primary_metric": {"direction": "min"},
+                    "name": "simple_a",
+                    "_target_": "tests.fixtures.fake_runner.FakeExperimentEvaluator",
+                    "baseline": {"profile_path": str(stats_root / "optimization_survey" / "simple_a" / "baseline.json")},
                     "normalization": {"eps": 1.0e-8},
+                    "compute": {"device": "cpu", "precision": "fp32", "num_workers": 0, "smoke_steps": 5, "max_steps": 5},
                 },
                 "hard_b": {
                     "enabled": True,
-                    "primary_metric": {"direction": "min"},
+                    "name": "hard_b",
+                    "_target_": "tests.fixtures.fake_runner.FakeExperimentEvaluator",
+                    "baseline": {"profile_path": str(stats_root / "optimization_survey" / "hard_b" / "baseline.json")},
                     "normalization": {"eps": 1.0e-8},
+                    "compute": {"device": "cpu", "precision": "fp32", "num_workers": 0, "smoke_steps": 5, "max_steps": 5},
                 },
             },
             "evolver": {
@@ -80,7 +87,7 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                 "max_generations": max_generations,
                 "fail_fast": False,
                 "max_generation_attempts": 1,
-                "eval_entrypoint_module": "tests.fixtures.fake_eval",
+                "eval_entrypoint_module": "src.validate.run_one",
                 "timeout_sec_per_eval": 60,
                 "max_retries_per_eval": 0,
                 "max_evaluation_jobs": 1,
@@ -88,6 +95,18 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                     "dir": str(islands_dir),
                     "seed_organisms_per_island": 1,
                     "max_organisms_per_island": 1,
+                },
+                "prompts": {
+                    "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
+                    "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
+                    "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
+                    "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
+                    "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
+                    "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
+                    "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
+                    "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
+                    "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
+                    "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
                 },
                 "reproduction": {
                     "offspring_per_generation": 2,
@@ -131,15 +150,7 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                         "allocation": {"enabled": False},
                     },
                 },
-                "llm": {
-                    "provider": "mock",
-                    "model": "mock-model",
-                    "temperature": 0.0,
-                    "max_output_tokens": 512,
-                    "reasoning_effort": None,
-                    "seed": 123,
-                    "fallback_to_chat_completions": True,
-                },
+                "llm": {"route_weights": {"mock": 1.0}, "seed": 123},
             },
         }
     )
@@ -154,14 +165,14 @@ def test_canonical_organism_first_pipeline_fake(tmp_path: Path) -> None:
     assert summary["active_population_size"] == 2
 
     pop_root = Path(str(cfg.paths.population_root))
-    manifest = read_json(pop_root / "population_manifest.json")
-    assert manifest["generation"] == 1
-    assert len(manifest["active_organisms"]) == 2
+    state = read_json(pop_root / "population_state.json")
+    assert state["current_generation"] == 1
+    assert len(state["active_organisms"]) == 2
 
-    active_dirs = [Path(entry["organism_dir"]) for entry in manifest["active_organisms"]]
+    active_dirs = [Path(entry["organism_dir"]) for entry in state["active_organisms"]]
     for org_dir in active_dirs:
         assert org_dir.exists()
-        assert (org_dir / "optimizer.py").exists()
+        assert (org_dir / "implementation.py").exists()
         assert (org_dir / "genetic_code.md").exists()
         assert (org_dir / "lineage.json").exists()
         assert (org_dir / "summary.json").exists()
@@ -172,11 +183,11 @@ def test_canonical_organism_first_pipeline_fake(tmp_path: Path) -> None:
         assert list(phase_results["hard"]["selected_experiments"]) == ["hard_b"]
         assert phase_results["simple"]["allocation_snapshot"]["inclusion_prob"]["simple_a"] == 1.0
         assert phase_results["hard"]["allocation_snapshot"]["inclusion_prob"]["hard_b"] == 1.0
-        assert summary_payload["simple_reward"] is not None
-        assert summary_payload["hard_reward"] is not None
+        assert summary_payload["simple_score"] is not None
+        assert summary_payload["hard_score"] is not None
 
 
-def test_canonical_multigeneration_resume_keeps_manifest_and_island_boundaries(tmp_path: Path) -> None:
+def test_canonical_multigeneration_resume_keeps_population_state_and_island_boundaries(tmp_path: Path) -> None:
     cfg_first = _canonical_cfg(tmp_path, max_generations=1, resume=False)
     asyncio.run(EvolutionLoop(cfg_first).run())
 
@@ -186,11 +197,11 @@ def test_canonical_multigeneration_resume_keeps_manifest_and_island_boundaries(t
     assert summary["total_generations"] == 2
 
     pop_root = Path(str(cfg_resume.paths.population_root))
-    manifest = read_json(pop_root / "population_manifest.json")
-    assert manifest["generation"] == 2
-    assert {entry["island_id"] for entry in manifest["active_organisms"]} == {
+    state = read_json(pop_root / "population_state.json")
+    assert state["current_generation"] == 2
+    assert {entry["island_id"] for entry in state["active_organisms"]} == {
         "gradient_methods",
         "second_order",
     }
-    for entry in manifest["active_organisms"]:
+    for entry in state["active_organisms"]:
         assert "/island_" in entry["organism_dir"]

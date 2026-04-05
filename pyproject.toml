@@ -3,12 +3,12 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "optbench"
+name = "organism-framework"
 version = "0.1.0"
-description = "Validation module for optimizer benchmarking across modular training experiments"
+description = "Generic AI-for-science experiment runtime with organism-first evolution"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "optbench" }]
+authors = [{ name = "organism-framework" }]
 dependencies = [
   "hydra-core>=1.3.2",
   "omegaconf>=2.3.0",
@@ -21,13 +21,21 @@ dependencies = [
 audio = ["torchaudio>=2.2.0"]
 hf = ["datasets>=2.18.0", "transformers>=4.40.0"]
 lora = ["datasets>=2.18.0", "transformers>=4.40.0", "peft>=0.11.0", "bitsandbytes>=0.43.0"]
-evolve = ["openai>=1.40.0", "psutil>=5.9.8"]
+evolve = [
+  "openai>=1.40.0",
+  "anthropic>=0.49.0",
+  "psutil>=5.9.8",
+  "transformers>=4.40.0",
+  "accelerate>=0.33.0",
+  "safetensors>=0.4.3",
+  "sentencepiece>=0.2.0",
+]
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["optbench*", "experiments*", "src*"]
+include = ["api_platforms*", "experiments*", "src*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

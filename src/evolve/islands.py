@@ -8,7 +8,7 @@ from src.evolve.types import Island
 
 
 def load_islands(islands_dir: str | Path) -> list[Island]:
-    """Load canonical island definitions from `conf/prompts/islands/*.txt`."""
+    """Load canonical island definitions from the configured task-family island directory."""
 
     root = Path(islands_dir).expanduser().resolve()
     if not root.exists() or not root.is_dir():

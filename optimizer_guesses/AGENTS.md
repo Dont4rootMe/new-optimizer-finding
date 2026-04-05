@@ -4,12 +4,12 @@ This file applies to `optimizer_guesses/`.
 
 ## Purpose
 
-- This directory contains example external optimizers used by docs, smoke checks, and contract tests.
-- Files here are not special-cased by the runtime; they are imported through the same strict path-based loader as user-provided optimizers.
+- This directory contains example optimizer implementations for the `optimization_survey` task family.
+- Files here are not special-cased by `src`; they are loaded only by optimization-specific runtime code under `experiments/optimization_survey/_runtime/`.
 
 ## Rules
 
-- Example optimizers must satisfy the strict runtime contract:
+- Example optimizers must satisfy the optimization-survey runtime contract:
   - `build_optimizer(model, max_steps)`
   - controller `step(weights, grads, activations, step_fn)`
   - controller `zero_grad(set_to_none=True)`
@@ -20,4 +20,3 @@ This file applies to `optimizer_guesses/`.
 ## Verification
 
 - `pytest -q tests/test_import_optimizer.py`
-- `python -m optbench.main mode=run optimizer_path=optimizer_guesses/examples/sgd_baseline.py`

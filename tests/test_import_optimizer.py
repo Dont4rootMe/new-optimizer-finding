@@ -5,17 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import torch
 import torch.nn as nn
 
-from optbench.utils.import_utils import load_optimizer_builder
+from experiments.optimization_survey._runtime.candidate_loader import load_candidate_builder
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_import_optimizer_factory() -> None:
-    optimizer_path = ROOT / "optimizer_guesses" / "examples" / "sgd_baseline.py"
-    builder, resolved_path, optimizer_name = load_optimizer_builder(str(optimizer_path))
+def test_import_candidate_factory() -> None:
+    implementation_path = ROOT / "optimizer_guesses" / "examples" / "sgd_baseline.py"
+    builder, resolved_path, candidate_name = load_candidate_builder(str(implementation_path))
 
     assert callable(builder)
 
@@ -25,13 +24,13 @@ def test_import_optimizer_factory() -> None:
     assert callable(getattr(controller, "step", None))
     assert callable(getattr(controller, "zero_grad", None))
 
-    assert resolved_path == optimizer_path.resolve()
-    assert optimizer_name == "SGDBaselineController"
+    assert resolved_path == implementation_path.resolve()
+    assert candidate_name == "SGDBaselineController"
 
 
-def test_import_optimizer_rejects_invalid_builder_signature(tmp_path: Path) -> None:
-    optimizer_path = tmp_path / "invalid_builder.py"
-    optimizer_path.write_text(
+def test_import_candidate_rejects_invalid_builder_signature(tmp_path: Path) -> None:
+    implementation_path = tmp_path / "invalid_builder.py"
+    implementation_path.write_text(
         (
             "class InvalidBuilderController:\n"
             "    def __init__(self, cfg):\n"
@@ -47,12 +46,12 @@ def test_import_optimizer_rejects_invalid_builder_signature(tmp_path: Path) -> N
     )
 
     with pytest.raises(TypeError, match="build_optimizer"):
-        load_optimizer_builder(str(optimizer_path))
+        load_candidate_builder(str(implementation_path))
 
 
-def test_import_optimizer_rejects_missing_step_fn(tmp_path: Path) -> None:
-    optimizer_path = tmp_path / "missing_step_fn.py"
-    optimizer_path.write_text(
+def test_import_candidate_rejects_missing_step_fn(tmp_path: Path) -> None:
+    implementation_path = tmp_path / "missing_step_fn.py"
+    implementation_path.write_text(
         (
             "class MissingStepFnController:\n"
             "    def __init__(self, model, max_steps):\n"
@@ -69,11 +68,10 @@ def test_import_optimizer_rejects_missing_step_fn(tmp_path: Path) -> None:
     )
 
     with pytest.raises(TypeError, match="controller.step"):
-        builder, _, _ = load_optimizer_builder(str(optimizer_path))
+        builder, _, _ = load_candidate_builder(str(implementation_path))
         builder(nn.Linear(4, 2), 100)
 
+def test_candidate_loader_no_outdated_builder_alias() -> None:
+    import experiments.optimization_survey._runtime.candidate_loader as candidate_loader
 
-def test_import_utils_no_outdated_builder_alias() -> None:
-    import optbench.utils.import_utils as import_utils
-
-    assert not hasattr(import_utils, "BuildOptimizerCallable")
+    assert not hasattr(candidate_loader, "BuildOptimizerCallable")

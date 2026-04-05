@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from optbench.utils.baselines import load_baseline_profile
+from experiments.optimization_survey._runtime.baselines import load_baseline_profile
 
 
 def test_load_baseline_profile_roundtrip(tmp_path: Path) -> None:
-    path = tmp_path / "stats" / "exp_a"
+    path = tmp_path / "stats" / "optimization_survey" / "exp_a"
     path.mkdir(parents=True, exist_ok=True)
     baseline_file = path / "baseline.json"
     baseline_file.write_text(
@@ -26,18 +26,18 @@ def test_load_baseline_profile_roundtrip(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    payload = load_baseline_profile(tmp_path / "stats", "exp_a")
+    payload = load_baseline_profile(tmp_path / "stats", "optimization_survey", "exp_a")
     assert payload["objective_last"] == 0.25
     assert payload["steps"] == 42
 
 
 def test_load_baseline_profile_missing(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
-        load_baseline_profile(tmp_path / "stats", "exp_missing")
+        load_baseline_profile(tmp_path / "stats", "optimization_survey", "exp_missing")
 
 
 def test_load_baseline_profile_invalid(tmp_path: Path) -> None:
-    path = tmp_path / "stats" / "exp_bad"
+    path = tmp_path / "stats" / "optimization_survey" / "exp_bad"
     path.mkdir(parents=True, exist_ok=True)
     baseline_file = path / "baseline.json"
     baseline_file.write_text(
@@ -53,4 +53,4 @@ def test_load_baseline_profile_invalid(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ValueError):
-        load_baseline_profile(tmp_path / "stats", "exp_bad")
+        load_baseline_profile(tmp_path / "stats", "optimization_survey", "exp_bad")

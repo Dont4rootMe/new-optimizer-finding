@@ -30,13 +30,13 @@ def _make_organism(org_id: str, score: float | None = None) -> OrganismMeta:
         model_name="mock",
         prompt_hash="abc",
         seed=0,
-        optimizer_path=str(org_dir / "optimizer.py"),
+        implementation_path=str(org_dir / "implementation.py"),
         lineage_path=str(org_dir / "lineage.json"),
         organism_dir=str(org_dir),
-        simple_reward=score,
-        hard_reward=score,
-        genetic_code={"core_genes": ["test"], "interaction_notes": "", "compute_notes": ""},
-        lineage=[],
+        ancestor_ids=[],
+        experiment_report_index={},
+        simple_score=score,
+        hard_score=score,
     )
 
 
@@ -47,7 +47,7 @@ def test_uniform_select_organisms_returns_requested_count() -> None:
     assert {pick.organism_id for pick in picks}.issubset({"0", "1", "2"})
 
 
-def test_softmax_select_biases_toward_higher_reward() -> None:
+def test_softmax_select_biases_toward_higher_score() -> None:
     pop = [
         _make_organism("low", 0.1),
         _make_organism("mid", 0.5),
@@ -55,7 +55,7 @@ def test_softmax_select_biases_toward_higher_reward() -> None:
     ]
     picks = softmax_select_organisms(
         pop,
-        score_field="simple_reward",
+        score_field="simple_score",
         temperature=0.2,
         k=200,
         rng=random.Random(0),
@@ -74,7 +74,7 @@ def test_softmax_select_distinct_organisms_samples_without_replacement() -> None
     ]
     picks = softmax_select_distinct_organisms(
         pop,
-        score_field="simple_reward",
+        score_field="simple_score",
         temperature=0.2,
         k=3,
         rng=random.Random(0),
@@ -95,7 +95,7 @@ def test_select_top_k_per_island_keeps_boundaries() -> None:
     pop[2].island_id = "island_b"
     pop[3].island_id = "island_b"
 
-    selected = select_top_k_per_island(pop, k=1, score_field="simple_reward")
+    selected = select_top_k_per_island(pop, k=1, score_field="simple_score")
     assert {organism.organism_id for organism in selected} == {"a1", "b1"}
 
 

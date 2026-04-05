@@ -4,31 +4,27 @@ This file applies to the whole repository unless a deeper `AGENTS.md` overrides 
 
 ## What This Repo Contains
 
-- `optbench/`: validation and benchmarking runtime for `run`, `smoke`, and `stats`.
-- `src/evolve/` + `src/organisms/`: canonical organism-first optimizer evolution pipeline.
-- `experiments/`: concrete ML tasks that share a common experiment protocol.
-- `conf/`: Hydra composition, experiment configs, and prompt assets.
-- `tests/`: contract, regression, and integration coverage for both runtime and evolution.
+- `src/`: task-blind runtime, validation worker, and organism-first evolution engine
+- `experiments/`: task-specific experiment packages and runtimes
+- `conf/`: Hydra composition, experiment configs, and task-specific prompt assets
+- `tests/`: contract, regression, and integration coverage
 
 ## Global Invariants
 
 - The project is single-device by design. Do not introduce DDP, model parallelism, or hidden multi-GPU assumptions.
-- External optimizers must implement `build_optimizer(model, max_steps)` and return a controller with:
-  - `step(weights, grads, activations, step_fn)`
-  - `zero_grad(set_to_none=True)`
+- `src` must stay blind to task-specific runtime details. It operates on organism folders, experiment lists, and report `score`s.
+- Every experiment evaluator must implement `evaluate_organism(organism_dir, cfg) -> dict` and every returned report must include `score`.
 - Canonical evolution is organism-first and island-aware. `run_evolution(...)` must remain wired to the current `EvolutionLoop`.
-- Canonical prompt assets live under `conf/prompts/`:
-  - `shared/` for shared system context
-  - `seed/`, `mutation/`, `crossover/` for paired task prompts
-  - `islands/` for research directions
 - Canonical organism artifacts are first-class data. Keep these filenames and meanings stable:
-  - `optimizer.py`
+  - `implementation.py`
   - `genetic_code.md`
   - `lineage.json`
   - `organism.json`
   - `summary.json`
   - `llm_request.json`
   - `llm_response.json`
+- Population resume state is stored in `population_state.json`.
+- Optimization-specific contracts such as `build_optimizer(model, max_steps)` belong only under `experiments/optimization_survey/`.
 
 ## Editing Rules
 
@@ -36,9 +32,9 @@ This file applies to the whole repository unless a deeper `AGENTS.md` overrides 
 - Prefer extending existing shared helpers before adding one-off implementations.
 - If you add a new experiment, update all of:
   - `conf/config.yaml`
-  - `conf/experiments/<name>.yaml`
-  - `experiments/<name>/`
-  - `optbench/registry.py`
+  - `conf/experiments/<family>/<name>.yaml`
+  - `experiments/<family>/<name>/`
+  - the experiment YAML `_target_`
   - relevant tests
 - If you change prompt placeholders, prompt file layout, or structured response sections, update the prompt builders and parser/contract tests together.
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from hydra import compose, initialize_config_dir
 
-from optbench.runner import ExperimentRunner
+from src.validate.runner import ExperimentRunner
 
 ROOT = Path(__file__).resolve().parents[1]
 

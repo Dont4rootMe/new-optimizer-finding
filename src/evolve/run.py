@@ -8,7 +8,10 @@ import logging
 import hydra
 from omegaconf import DictConfig
 
+from api_platforms import ApiPlatformRegistry
+
 LOGGER = logging.getLogger(__name__)
+
 
 def run_evolution(cfg: DictConfig) -> dict:
     """Run canonical organism-first multi-generation evolution loop."""
@@ -19,10 +22,15 @@ def run_evolution(cfg: DictConfig) -> dict:
 
     from src.evolve.evolution_loop import EvolutionLoop
 
-    loop = EvolutionLoop(cfg)
-    result = asyncio.run(loop.run())
-    LOGGER.info("Evolution complete: %s", result)
-    return result
+    registry = ApiPlatformRegistry(cfg)
+    try:
+        registry.start()
+        loop = EvolutionLoop(cfg, llm_registry=registry)
+        result = asyncio.run(loop.run())
+        LOGGER.info("Evolution complete: %s", result)
+        return result
+    finally:
+        registry.stop()
 
 
 @hydra.main(config_path="../../conf", config_name="config", version_base=None)

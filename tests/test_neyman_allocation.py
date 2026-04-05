@@ -152,15 +152,15 @@ def test_allocation_history_ignores_noncanonical_candidate_dirs(tmp_path: Path) 
     organism_dir.mkdir(parents=True, exist_ok=True)
     (organism_dir / "summary.json").write_text(
         json.dumps(
-            {
-                "phase_results": {
-                    "simple": {
-                        "experiments": {
-                            "exp_a": {"status": "ok", "exp_score": 1.0},
-                            "exp_b": {"status": "ok", "exp_score": 3.0},
+                {
+                    "phase_results": {
+                        "simple": {
+                            "experiments": {
+                                "exp_a": {"status": "ok", "score": 1.0},
+                                "exp_b": {"status": "ok", "score": 3.0},
+                            }
                         }
                     }
-                }
             }
         ),
         encoding="utf-8",
