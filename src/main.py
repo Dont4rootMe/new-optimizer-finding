@@ -8,7 +8,7 @@ import hydra
 from omegaconf import DictConfig
 
 
-@hydra.main(config_path="../conf", config_name="config", version_base=None)
+@hydra.main(config_path="../conf", config_name="config_optimization_survey", version_base=None)
 def main(cfg: DictConfig) -> None:
     """Dispatch to validate or evolve mode based on config."""
 

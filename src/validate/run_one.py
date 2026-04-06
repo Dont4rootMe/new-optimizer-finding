@@ -16,6 +16,19 @@ from src.evolve.storage import write_json
 LOGGER = logging.getLogger(__name__)
 
 
+def _detect_root_config_name(conf_dir: Path) -> str:
+    """Pick the Hydra config name for a given config directory."""
+
+    if (conf_dir / "config.yaml").exists():
+        return "config"
+    if (conf_dir / "config_optimization_survey.yaml").exists():
+        return "config_optimization_survey"
+    raise FileNotFoundError(
+        f"Could not find a supported root config in {conf_dir}. "
+        "Expected config.yaml or config_optimization_survey.yaml."
+    )
+
+
 def _prepare_experiment_cfg(
     cfg: DictConfig,
     experiment_name: str,
@@ -80,7 +93,7 @@ def main() -> None:
     try:
         conf_dir = Path(args.config_path).expanduser().resolve()
         with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
-            cfg = compose(config_name="config", overrides=list(args.override))
+            cfg = compose(config_name=_detect_root_config_name(conf_dir), overrides=list(args.override))
 
         experiment_name = str(args.experiment)
         if experiment_name not in cfg.experiments:

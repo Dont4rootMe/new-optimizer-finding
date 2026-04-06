@@ -1,0 +1,54 @@
+defaults:
+  - evolver: circle_packing_shinka
+  - api_platforms@api_platforms.ollama_qwen35_27b: ollama_qwen35_27b
+  - api_platforms@api_platforms.ollama_gemma4_26b: ollama_gemma4_26b
+  - experiments@experiments.unit_square_26: circle_packing_shinka/unit_square_26
+  - _self_
+
+mode: run
+organism_dir: null
+seed: 42
+deterministic: false
+device: cpu
+precision: fp32
+num_workers: 0
+
+resources:
+  evaluation:
+    gpu_ranks: []
+    cpu_parallel_jobs: 5
+
+safety:
+  detect_nan: true
+  abort_on_nan: true
+  grad_clip_norm: null
+  log_grad_norm: true
+
+paths:
+  data_root: ${oc.env:VALOPT_DATA_ROOT,./data}
+  stats_root: ${oc.env:VALOPT_STATS_ROOT,./stats}
+  runs_root: ${oc.env:VALOPT_RUNS_ROOT,./runs}
+  candidate_results_dirname: results
+  population_root: ${oc.env:POP_ROOT,./populations}
+  api_platform_runtime_root: ${oc.env:API_PLATFORM_RUNTIME_ROOT,./.api_platform_runtime}
+
+evolver:
+  llm:
+    route_weights:
+      ollama_qwen35_27b: 1.0
+      ollama_gemma4_26b: 1.0
+
+api_platforms:
+  ollama_qwen35_27b:
+    base_url: ${oc.env:OLLAMA_BASE_URL,http://localhost:11434/api}
+    max_concurrency: 5
+  ollama_gemma4_26b:
+    base_url: ${oc.env:OLLAMA_BASE_URL,http://localhost:11434/api}
+    max_concurrency: 5
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  output_subdir: hydra
+  job:
+    chdir: false

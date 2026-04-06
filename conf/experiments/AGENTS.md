@@ -23,4 +23,4 @@ Each experiment config should define the fields that its evaluator expects. In p
 
 - Prefer updating existing config keys over inventing parallel variants.
 - If a new config field is consumed in code, add tests that exercise both default composition and runtime override behavior.
-- If you add a new experiment config, update `conf/config.yaml`, the matching experiment package, and the YAML `_target_` in the same change.
+- If you add a new experiment config, update the relevant top-level preset (for optimizer-search this is `conf/config_optimization_survey.yaml`), the matching experiment package, and the YAML `_target_` in the same change.

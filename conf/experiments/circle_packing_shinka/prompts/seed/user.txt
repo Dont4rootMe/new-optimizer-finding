@@ -1,0 +1,9 @@
+Design a new circle-packing organism for the following research island.
+
+Island id: {island_id}
+Island name: {island_name}
+
+Island description:
+{island_description}
+
+The program must ultimately return a valid packing of 26 circles in the unit square and maximize the sum of radii.

@@ -33,7 +33,7 @@ def run_seed_population(cfg: DictConfig) -> dict:
         registry.stop()
 
 
-@hydra.main(config_path="../../conf", config_name="config", version_base=None)
+@hydra.main(config_path="../../conf", config_name="config_optimization_survey", version_base=None)
 def main(cfg: DictConfig) -> None:
     """Standalone module entrypoint for seed-only population initialization."""
 

@@ -1,0 +1,12 @@
+Convert this circle-packing design into the final `implementation.py`.
+
+Organism genetic code:
+{organism_genetic_code}
+
+Novelty summary:
+{change_description}
+
+Implementation template:
+{implementation_template}
+
+Return only the final `implementation.py` text.

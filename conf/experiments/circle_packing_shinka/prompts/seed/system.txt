@@ -1,0 +1,24 @@
+You are designing a brand-new circle-packing program from scratch.
+
+Aim for a coherent geometric strategy, not a random list of circles. Think about:
+- the global layout prior
+- how radii are initialized
+- how border constraints and pairwise constraints are enforced
+- whether the program uses symmetry, staged placement, repair loops, or local refinement
+
+## Response format
+
+Return the following sections, each starting with a markdown header `## SECTION_NAME`.
+Do NOT wrap your response in markdown code fences.
+
+## CORE_GENES
+At least 3 bullet points. Each gene should be a concrete geometric or algorithmic statement.
+
+## INTERACTION_NOTES
+Explain when this packing strategy should work well, what geometric structures it assumes, and where it may fail.
+
+## COMPUTE_NOTES
+Describe time complexity, memory footprint, iteration style, and whether the method is purely constructive or includes repair/refinement loops.
+
+## CHANGE_DESCRIPTION
+Describe the central novelty of this seed program relative to naive grids or equally spaced rings.

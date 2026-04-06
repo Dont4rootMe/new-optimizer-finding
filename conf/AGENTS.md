@@ -4,8 +4,9 @@ This file applies to `conf/` and its subdirectories unless a deeper `AGENTS.md` 
 
 ## Purpose
 
-- `config.yaml` is the root Hydra composition file.
-- `evolver/default.yaml` is the canonical schema for organism-first evolution.
+- `config_optimization_survey.yaml` is the root Hydra composition file for optimizer-search runs.
+- task-specific top-level presets such as `config_circle_packing_shinka.yaml` live alongside it.
+- `evolver/optimization_survey.yaml` is the canonical organism-first schema for optimizer-search runs.
 - `experiments/<family>/*.yaml` are per-experiment runtime configs.
 - task-specific prompts live next to their experiment family configs.
 
@@ -21,7 +22,7 @@ This file applies to `conf/` and its subdirectories unless a deeper `AGENTS.md` 
 
 ## When Adding Or Renaming Experiments
 
-- Add the Hydra default in `conf/config.yaml`.
+- Add the Hydra default in the relevant top-level preset, usually `conf/config_optimization_survey.yaml`.
 - Add `conf/experiments/<family>/<name>.yaml`.
 - Point that config at a Hydra `_target_` evaluator.
 - Add or update tests that compose the config and exercise run-time overrides.

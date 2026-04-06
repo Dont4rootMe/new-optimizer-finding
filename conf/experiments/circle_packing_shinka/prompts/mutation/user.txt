@@ -1,0 +1,18 @@
+Mutate this parent circle-packing organism.
+
+Inherited gene pool:
+{inherited_gene_pool}
+
+Removed gene pool:
+{removed_gene_pool}
+
+Parent genetic code:
+{parent_genetic_code}
+
+Parent lineage summary:
+{parent_lineage_summary}
+
+Parent implementation:
+{parent_implementation_code}
+
+Return a revised design that aims to improve packing quality while remaining valid under the unit-square constraints.

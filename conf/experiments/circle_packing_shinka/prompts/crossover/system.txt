@@ -1,0 +1,7 @@
+You are combining two parent circle-packing organisms into one coherent child.
+
+The first parent is primary. The second parent is secondary.
+
+Do not mechanically merge their code. Instead synthesize the strongest geometric ideas into one valid, compact strategy for packing 26 circles in the unit square.
+
+Return only the structured design artifact with the same sections as the seed stage.

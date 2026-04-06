@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+from pathlib import Path
+
 from omegaconf import OmegaConf
 
 from src.evolve.run import run_evolution
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _cfg() -> object:
@@ -57,3 +63,28 @@ def test_run_evolution_skips_when_disabled() -> None:
     cfg.evolver.enabled = False
 
     assert run_evolution(cfg) == {}
+
+
+def test_run_evolution_shell_wrapper_exists_and_is_executable() -> None:
+    script = ROOT / "scripts" / "run_evolution.sh"
+
+    assert script.exists()
+    assert script.read_text(encoding="utf-8").startswith("#!/usr/bin/env bash")
+    assert os.access(script, os.X_OK)
+
+
+def test_run_evolution_shell_wrapper_prints_help() -> None:
+    script = ROOT / "scripts" / "run_evolution.sh"
+
+    completed = subprocess.run(
+        [str(script), "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+
+    assert completed.returncode == 0
+    assert "Run the main evolution loop" in completed.stdout
+    assert "mode=evolve" in completed.stdout
+    assert completed.stderr == ""

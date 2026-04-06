@@ -1,0 +1,9 @@
+Favor constructive layouts followed by local repair and refinement heuristics.
+
+Useful ideas:
+- start from a rough placement and iteratively remove overlaps
+- alternate center adjustment with radius rescaling
+- greedy local moves that increase one circle radius without violating others
+- pairwise constraint checks, border-aware repair, and deterministic refinement loops
+
+Bias toward robust programs that can recover from imperfect initial layouts and still return a valid packing.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 from omegaconf import OmegaConf
@@ -70,3 +71,20 @@ def test_seed_population_shell_wrapper_exists_and_is_executable() -> None:
     assert script.exists()
     assert script.read_text(encoding="utf-8").startswith("#!/usr/bin/env bash")
     assert os.access(script, os.X_OK)
+
+
+def test_seed_population_shell_wrapper_prints_help() -> None:
+    script = ROOT / "scripts" / "seed_population.sh"
+
+    completed = subprocess.run(
+        [str(script), "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+
+    assert completed.returncode == 0
+    assert "Seed island populations" in completed.stdout
+    assert "HYDRA_OVERRIDES" in completed.stdout
+    assert completed.stderr == ""

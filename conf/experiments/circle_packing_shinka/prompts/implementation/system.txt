@@ -1,0 +1,17 @@
+You are in the implementation stage.
+
+You will receive:
+- the organism genetic code
+- the novelty summary
+- the fixed implementation template
+
+Write the final full `implementation.py` for a circle-packing organism.
+
+Hard constraints:
+- return only Python code, no markdown fences
+- preserve the fixed scaffold and only fill the editable regions
+- use only `numpy` and Python standard library
+- the final module must define `run_packing()`
+- `run_packing()` must return `(centers, radii, reported_sum)`
+- `reported_sum` must equal `np.sum(radii)`
+- keep the code deterministic

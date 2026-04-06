@@ -34,7 +34,9 @@ Generic AI-for-science framework with:
 
 - `src/`: generic runtime, validation worker, and organism-first evolution engine
 - `experiments/optimization_survey/`: optimization-specific experiments and runtime helpers
+- `experiments/circle_packing_shinka/`: circle-packing task package inspired by ShinkaEvolve
 - `conf/experiments/optimization_survey/`: optimization-specific experiment configs and prompts
+- `conf/experiments/circle_packing_shinka/`: circle-packing configs and prompts
 - `tests/`: contract and integration coverage
 
 ## Install
@@ -97,3 +99,31 @@ class CandidateController:
     def step(self, weights, grads, activations, step_fn): ...
     def zero_grad(self, set_to_none=True): ...
 ```
+
+## Circle Packing Shinka
+
+The repository also ships [`experiments/circle_packing_shinka/`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/experiments/circle_packing_shinka), a task family based on the ShinkaEvolve circle-packing benchmark.
+
+Use the dedicated preset:
+
+```bash
+python -m src.main --config-name config_circle_packing_shinka mode=run organism_dir=/absolute/path/to/organism
+./scripts/seed_population.sh --config-name config_circle_packing_shinka
+./scripts/run_evolution.sh --config-name config_circle_packing_shinka
+```
+
+For the paper-aligned dual-Ollama run with `qwen3.5:27b` and `gemma4:26b`, use:
+
+```bash
+./scripts/seed_population.sh --config-name config_circle_packing_shinka_ollama_dual
+./scripts/run_evolution.sh --config-name config_circle_packing_shinka_ollama_dual
+```
+
+Its organism contract is:
+
+```python
+def run_packing():
+    return centers, radii, reported_sum
+```
+
+where `centers.shape == (26, 2)`, `radii.shape == (26,)`, and `reported_sum == sum(radii)`.

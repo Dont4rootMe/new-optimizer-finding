@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - evolver: default
+  - evolver: optimization_survey
   - api_platforms@api_platforms.mock: mock
   - experiments@experiments.cifar_convnet: optimization_survey/cifar_convnet
   - experiments@experiments.audio_transformer: optimization_survey/audio_transformer

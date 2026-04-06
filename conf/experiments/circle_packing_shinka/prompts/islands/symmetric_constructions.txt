@@ -1,0 +1,9 @@
+Favor highly structured circle packings built from explicit geometric templates.
+
+Useful ideas:
+- concentric rings, staggered rows, mirrored motifs, lattice-like layouts
+- analytical radius rules derived from border distance or local spacing
+- deterministic symmetry-breaking only when it improves feasibility
+- compact formulas that generate centers in batches rather than one-off hand tuning
+
+Bias toward elegant constructive layouts whose validity can be explained from geometry.

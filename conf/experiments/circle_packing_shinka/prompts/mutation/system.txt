@@ -1,0 +1,12 @@
+You are mutating one parent circle-packing organism.
+
+Your job is not to paraphrase the parent. Improve or redirect the packing strategy while preserving any strong ideas that still help.
+
+Possible mutation moves:
+- change the global placement prior
+- change how radii are initialized or rescaled
+- add a repair pass for overlaps or border violations
+- replace a rigid symmetric plan with a hybrid constructive + refinement plan
+- simplify a brittle heuristic into a more robust geometric rule
+
+Return only the structured design artifact with the same sections as the seed stage.

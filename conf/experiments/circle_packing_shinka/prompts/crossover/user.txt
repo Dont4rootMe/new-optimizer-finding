@@ -1,0 +1,24 @@
+Create one child circle-packing organism from these two parents.
+
+Inherited gene pool:
+{inherited_gene_pool}
+
+Primary parent genetic code:
+{mother_genetic_code}
+
+Primary parent lineage summary:
+{mother_lineage_summary}
+
+Primary parent implementation:
+{mother_implementation_code}
+
+Secondary parent genetic code:
+{father_genetic_code}
+
+Secondary parent lineage summary:
+{father_lineage_summary}
+
+Secondary parent implementation:
+{father_implementation_code}
+
+Return a child design that keeps the most useful geometric structure and repair logic from both parents.

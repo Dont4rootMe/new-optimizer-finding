@@ -17,6 +17,31 @@ def _utc_now_iso() -> str:
 
 
 def _render_mock_implementation(template: str, organism_id: str, generation: int, seed: int) -> str:
+    if "def run_packing():" in template:
+        return template.format(
+            imports="",
+            helpers=(
+                "def _build_centers():\n"
+                "    rows = [\n"
+                "        (0.15, [0.10, 0.24, 0.38, 0.52, 0.66, 0.80, 0.94]),\n"
+                "        (0.33, [0.17, 0.31, 0.45, 0.59, 0.73, 0.87]),\n"
+                "        (0.51, [0.10, 0.24, 0.38, 0.52, 0.66, 0.80, 0.94]),\n"
+                "        (0.69, [0.17, 0.31, 0.45, 0.59, 0.73, 0.87]),\n"
+                "    ]\n"
+                "    centers = []\n"
+                "    for y_coord, xs in rows:\n"
+                "        for x_coord in xs:\n"
+                "            centers.append((x_coord, y_coord))\n"
+                "    return np.asarray(centers, dtype=float)\n"
+            ),
+            run_packing_body=(
+                "    centers = _build_centers()\n"
+                "    radii = np.full(26, 0.04, dtype=float)\n"
+                "    reported_sum = float(np.sum(radii))\n"
+                "    return centers, radii, reported_sum"
+            ),
+        )
+
     base = seed + generation + sum(ord(ch) for ch in organism_id[:8])
     use_sgd = (base % 2) == 0
     opt_type = "SGD" if use_sgd else "AdamW"
@@ -59,6 +84,25 @@ def build_mock_text(request: LlmRequest) -> str:
     base = int(request.seed) + generation + sum(ord(ch) for ch in organism_id[:8])
     use_sgd = (base % 2) == 0
     opt_type = "SGD" if use_sgd else "AdamW"
+    joined_prompt = f"{request.system_prompt}\n{request.user_prompt}".lower()
+    if "circle-packing" in joined_prompt or "circle packing" in joined_prompt or "run_packing" in joined_prompt:
+        if request.stage == "design":
+            return (
+                "## CORE_GENES\n"
+                "- Deterministic staggered-row layout with alternating long and short rows inside the unit square\n"
+                "- Uniform radius assignment chosen conservatively so border constraints and pairwise distances remain valid\n"
+                "- Geometry-first construction that computes centers from explicit row templates instead of random search\n\n"
+                "## INTERACTION_NOTES\n"
+                "This design favors stable valid packings with simple geometry and should work well as a seed for later refinements.\n\n"
+                "## COMPUTE_NOTES\n"
+                "The method is purely constructive, uses O(n) memory, and performs no iterative repair loops.\n\n"
+                "## CHANGE_DESCRIPTION\n"
+                "A deterministic staggered packing program that starts from a valid geometric template for 26 circles.\n"
+            )
+        template = str(request.metadata.get("implementation_template", "")).strip()
+        if template:
+            return _render_mock_implementation(template, organism_id, generation, request.seed)
+
     if request.stage == "design":
         return (
             "## CORE_GENES\n"

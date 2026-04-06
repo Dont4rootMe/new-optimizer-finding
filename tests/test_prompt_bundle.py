@@ -11,7 +11,7 @@ from src.evolve.prompt_utils import compose_system_prompt, load_prompt_bundle
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_load_prompt_bundle_from_default_conf_assets() -> None:
+def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
     cfg = OmegaConf.create(
         {
             "evolver": {
