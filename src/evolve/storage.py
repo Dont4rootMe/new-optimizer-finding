@@ -183,6 +183,7 @@ def write_population_state(
     *,
     best_organism_id: str | None = None,
     best_simple_score: float | None = None,
+    inflight_seed: dict[str, Any] | None = None,
     inflight_generation: dict[str, Any] | None = None,
 ) -> Path:
     payload = {
@@ -192,6 +193,7 @@ def write_population_state(
         "best_simple_score": best_simple_score,
         "timestamp": utc_now_iso(),
         "relationship_history": _build_relationship_history(population_root),
+        "inflight_seed": inflight_seed,
         "inflight_generation": inflight_generation,
     }
     return write_json(population_state_path(population_root), payload)
@@ -281,6 +283,7 @@ def read_population_state(population_root: str | Path) -> dict[str, Any] | None:
         "best_simple_score": payload.get("best_simple_score"),
         "timestamp": payload.get("timestamp"),
         "relationship_history": payload.get("relationship_history", []),
+        "inflight_seed": payload.get("inflight_seed"),
         "inflight_generation": payload.get("inflight_generation"),
     }
 

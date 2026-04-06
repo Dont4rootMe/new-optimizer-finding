@@ -6,7 +6,6 @@ import asyncio
 import logging
 import random
 import uuid
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +33,6 @@ from src.evolve.storage import (
     read_organism_summary,
     read_population_state,
     utc_now_iso,
-    write_json,
     write_organism_meta,
     write_organism_summary,
     write_population_state,
@@ -43,7 +41,7 @@ from src.evolve.types import (
     Island,
     OrganismEvaluationRequest,
     OrganismMeta,
-    PlannedOffspring,
+    PlannedOrganismCreation,
     PlannedPhaseEvaluation,
 )
 from src.organisms.crossbreeding import CrossbreedingOperator
@@ -253,6 +251,7 @@ class EvolutionLoop:
         self,
         *,
         finalized_generation: int | None = None,
+        inflight_seed: dict[str, Any] | None = None,
         inflight_generation: dict[str, Any] | None = None,
     ) -> None:
         active_generation = self.generation if finalized_generation is None else finalized_generation
@@ -267,6 +266,7 @@ class EvolutionLoop:
             self.population,
             best_organism_id=best.organism_id if best is not None else None,
             best_simple_score=best.simple_score if best is not None else None,
+            inflight_seed=inflight_seed,
             inflight_generation=inflight_generation,
         )
 
@@ -305,44 +305,10 @@ class EvolutionLoop:
             organisms.append(organism)
         return organisms
 
-    async def _run_proposal_builders(
-        self,
-        builders: list[Callable[[], OrganismMeta]],
-    ) -> list[OrganismMeta]:
-        if not builders:
-            return []
-
-        semaphore = asyncio.Semaphore(self.max_proposal_jobs)
-
-        async def _run_builder(builder: Callable[[], OrganismMeta]) -> OrganismMeta:
-            async with semaphore:
-                return await asyncio.to_thread(builder)
-
-        return list(await asyncio.gather(*[_run_builder(builder) for builder in builders]))
-
-    async def _seed_island(self, island: Island, count: int) -> list[OrganismMeta]:
-        if count <= 0:
-            return []
-        gen_dir = generation_dir(self.population_root, self.generation)
-        builders: list[Callable[[], OrganismMeta]] = []
-        for _ in range(count):
-            organism_id = uuid.uuid4().hex
-            org_dir = organism_dir(gen_dir, organism_id, island_id=island.island_id)
-            builders.append(
-                lambda island=island, organism_id=organism_id, org_dir=org_dir: self.generator.generate_seed_organism(
-                    island=island,
-                    organism_id=organism_id,
-                    generation=self.generation,
-                    organism_dir=org_dir,
-                )
-            )
-        return await self._run_proposal_builders(builders)
-
     async def _seed_initial_population(self) -> list[OrganismMeta]:
-        newborns: list[OrganismMeta] = []
-        for island in self.islands:
-            newborns.extend(await self._seed_island(island, self.seed_organisms_per_island))
-        return newborns
+        """Compatibility helper that uses the shared queued seed pipeline."""
+
+        return await self._execute_planned_creations(self._plan_seed_population(), state_kind="seed")
 
     def _group_by_island(self, organisms: list[OrganismMeta]) -> dict[str, list[OrganismMeta]]:
         grouped: dict[str, list[OrganismMeta]] = {island.island_id: [] for island in self.islands}
@@ -557,7 +523,7 @@ class EvolutionLoop:
             created_at=created_at,
         )
 
-    def _write_planned_organism_stub(self, plan: PlannedOffspring) -> None:
+    def _write_planned_organism_stub(self, plan: PlannedOrganismCreation) -> None:
         placeholder = OrganismMeta(
             organism_id=plan.organism_id,
             island_id=plan.island_id,
@@ -581,47 +547,79 @@ class EvolutionLoop:
         )
         write_organism_meta(placeholder)
 
-    def _serialize_inflight_generation(
+    def _serialize_planned_creation_state(
         self,
-        planned_offspring: list[PlannedOffspring],
+        planned_organisms: list[PlannedOrganismCreation],
+        *,
+        planned_key: str,
+        include_parent_snapshot: bool,
     ) -> dict[str, Any]:
-        return {
+        payload = {
             "target_generation": self.generation,
-            "parent_snapshot": [organism.to_dict() for organism in self.population],
-            "planned_offspring": [plan.to_dict() for plan in planned_offspring],
+            planned_key: [plan.to_dict() for plan in planned_organisms],
             "creation_queue": {
-                "pending": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "planned_creation"],
-                "active": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "creating"],
+                "pending": [plan.organism_id for plan in planned_organisms if plan.pipeline_state == "planned_creation"],
+                "active": [plan.organism_id for plan in planned_organisms if plan.pipeline_state == "creating"],
                 "completed": [
                     plan.organism_id
-                    for plan in planned_offspring
+                    for plan in planned_organisms
                     if plan.pipeline_state
                     in {"pending_simple_eval", "running_simple_eval", "simple_complete", "failed_simple_eval"}
                 ],
-                "failed": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "failed_creation"],
+                "failed": [plan.organism_id for plan in planned_organisms if plan.pipeline_state == "failed_creation"],
             },
             "simple_eval_queue": {
-                "pending": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "pending_simple_eval"],
-                "active": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "running_simple_eval"],
-                "completed": [plan.organism_id for plan in planned_offspring if plan.pipeline_state == "simple_complete"],
+                "pending": [plan.organism_id for plan in planned_organisms if plan.pipeline_state == "pending_simple_eval"],
+                "active": [plan.organism_id for plan in planned_organisms if plan.pipeline_state == "running_simple_eval"],
+                "completed": [plan.organism_id for plan in planned_organisms if plan.pipeline_state == "simple_complete"],
                 "failed": [
-                    plan.organism_id for plan in planned_offspring if plan.pipeline_state == "failed_simple_eval"
+                    plan.organism_id for plan in planned_organisms if plan.pipeline_state == "failed_simple_eval"
                 ],
             },
             "completed": all(
                 plan.pipeline_state in {"simple_complete", "failed_creation", "failed_simple_eval"}
-                for plan in planned_offspring
+                for plan in planned_organisms
             ),
             "failed": any(
-                plan.pipeline_state in {"failed_creation", "failed_simple_eval"} for plan in planned_offspring
+                plan.pipeline_state in {"failed_creation", "failed_simple_eval"} for plan in planned_organisms
             ),
             "finalized": False,
         }
+        if include_parent_snapshot:
+            payload["parent_snapshot"] = [organism.to_dict() for organism in self.population]
+        return payload
 
-    def _persist_inflight_generation(self, planned_offspring: list[PlannedOffspring]) -> None:
+    def _serialize_inflight_generation(
+        self,
+        planned_offspring: list[PlannedOrganismCreation],
+    ) -> dict[str, Any]:
+        return self._serialize_planned_creation_state(
+            planned_offspring,
+            planned_key="planned_offspring",
+            include_parent_snapshot=True,
+        )
+
+    def _serialize_inflight_seed(
+        self,
+        planned_organisms: list[PlannedOrganismCreation],
+    ) -> dict[str, Any]:
+        return self._serialize_planned_creation_state(
+            planned_organisms,
+            planned_key="planned_organisms",
+            include_parent_snapshot=False,
+        )
+
+    def _persist_inflight_generation(self, planned_offspring: list[PlannedOrganismCreation]) -> None:
         self._save_state(
             finalized_generation=max(0, self.generation - 1),
             inflight_generation=self._serialize_inflight_generation(planned_offspring),
+        )
+
+    def _persist_inflight_seed(self, planned_organisms: list[PlannedOrganismCreation]) -> None:
+        self._save_state(
+            finalized_generation=0,
+            inflight_seed=self._serialize_inflight_seed(planned_organisms),
+            inflight_generation=None,
         )
 
     def _resolve_parent_meta(
@@ -640,15 +638,53 @@ class EvolutionLoop:
             return read_organism_meta(parent_dir)
         raise FileNotFoundError(f"Unable to resolve parent organism '{parent_id}' for inflight generation.")
 
+    def _plan_seed_population(self) -> list[PlannedOrganismCreation]:
+        if self.seed_organisms_per_island <= 0:
+            return []
+
+        gen_dir = generation_dir(self.population_root, 0)
+        planned_organisms: list[PlannedOrganismCreation] = []
+        for island in self.islands:
+            for _ in range(self.seed_organisms_per_island):
+                organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=island.island_id)
+                operator_seed = self.rng.randint(0, 2**31 - 1)
+                timestamp = utc_now_iso()
+                phase_plan = self.orchestrator.plan_phase_evaluation(
+                    self._simple_evaluation_request(
+                        organism_id=organism_id,
+                        organism_dir_path=org_dir,
+                        created_at=timestamp,
+                    )
+                )
+                plan = PlannedOrganismCreation(
+                    organism_id=organism_id,
+                    organism_dir=str(org_dir),
+                    island_id=island.island_id,
+                    generation=0,
+                    route="seed",
+                    operator="seed",
+                    mother_id=None,
+                    mother_organism_dir=None,
+                    father_id=None,
+                    father_organism_dir=None,
+                    father_island_id=None,
+                    operator_seed=operator_seed,
+                    timestamp=timestamp,
+                    planned_phase_evaluations={"simple": phase_plan},
+                )
+                self._write_planned_organism_stub(plan)
+                planned_organisms.append(plan)
+        return planned_organisms
+
     def _plan_offspring_generation(
         self,
         active_by_island: dict[str, list[OrganismMeta]],
-    ) -> list[PlannedOffspring]:
+    ) -> list[PlannedOrganismCreation]:
         if self.offspring_per_generation <= 0:
             return []
 
         gen_dir = generation_dir(self.population_root, self.generation)
-        planned_offspring: list[PlannedOffspring] = []
+        planned_offspring: list[PlannedOrganismCreation] = []
         for route in self._planned_reproduction_routes(active_by_island):
             if route == _ROUTE_MUTATION:
                 candidate_islands = self._eligible_island_ids_for_route(_ROUTE_MUTATION, active_by_island)
@@ -675,7 +711,7 @@ class EvolutionLoop:
                         created_at=timestamp,
                     )
                 )
-                plan = PlannedOffspring(
+                plan = PlannedOrganismCreation(
                     organism_id=organism_id,
                     organism_dir=str(org_dir),
                     island_id=island_id,
@@ -718,7 +754,7 @@ class EvolutionLoop:
                         created_at=timestamp,
                     )
                 )
-                plan = PlannedOffspring(
+                plan = PlannedOrganismCreation(
                     organism_id=organism_id,
                     organism_dir=str(org_dir),
                     island_id=island_id,
@@ -766,7 +802,7 @@ class EvolutionLoop:
                         created_at=timestamp,
                     )
                 )
-                plan = PlannedOffspring(
+                plan = PlannedOrganismCreation(
                     organism_id=organism_id,
                     organism_dir=str(org_dir),
                     island_id=primary_island_id,
@@ -808,9 +844,9 @@ class EvolutionLoop:
             }
         return existing
 
-    def _materialize_planned_offspring(
+    def _materialize_planned_organism(
         self,
-        plan: PlannedOffspring,
+        plan: PlannedOrganismCreation,
         active_by_id: dict[str, OrganismMeta],
     ) -> OrganismMeta:
         mother = self._resolve_parent_meta(
@@ -825,7 +861,17 @@ class EvolutionLoop:
         )
         org_dir = Path(plan.organism_dir)
 
-        if plan.route == _ROUTE_MUTATION:
+        if plan.route == "seed":
+            island = self.islands_by_id.get(plan.island_id)
+            if island is None:
+                raise ValueError(f"Seed plan for organism {plan.organism_id} references unknown island '{plan.island_id}'.")
+            organism = self.generator.generate_seed_organism(
+                island=island,
+                organism_id=plan.organism_id,
+                generation=plan.generation,
+                organism_dir=org_dir,
+            )
+        elif plan.route == _ROUTE_MUTATION:
             if mother is None:
                 raise ValueError(f"Mutation plan for organism {plan.organism_id} is missing parent.")
             organism = self._create_mutation_offspring(
@@ -864,7 +910,7 @@ class EvolutionLoop:
         write_organism_meta(organism)
         return organism
 
-    def _phase_request_from_plan(self, plan: PlannedOffspring, *, phase: str) -> OrganismEvaluationRequest:
+    def _phase_request_from_plan(self, plan: PlannedOrganismCreation, *, phase: str) -> OrganismEvaluationRequest:
         if phase != "simple":
             raise ValueError(f"Unsupported planned phase '{phase}'")
         return self._simple_evaluation_request(
@@ -878,7 +924,7 @@ class EvolutionLoop:
 
     def _submit_or_resume_simple_evaluation(
         self,
-        plan: PlannedOffspring,
+        plan: PlannedOrganismCreation,
         organism: OrganismMeta,
     ) -> Any:
         phase_plan = plan.planned_phase_evaluations["simple"]
@@ -901,7 +947,7 @@ class EvolutionLoop:
 
     def _apply_completed_summary(
         self,
-        plan: PlannedOffspring,
+        plan: PlannedOrganismCreation,
         organism: OrganismMeta,
         summary: Any,
     ) -> None:
@@ -931,40 +977,43 @@ class EvolutionLoop:
         write_organism_meta(organism)
         self._write_phase_summary(organism, summary)
 
-    async def _execute_planned_generation(
+    async def _execute_planned_creations(
         self,
-        planned_offspring: list[PlannedOffspring],
+        planned_organisms: list[PlannedOrganismCreation],
+        *,
+        state_kind: str,
     ) -> list[OrganismMeta]:
-        if not planned_offspring:
+        if not planned_organisms:
             return []
 
-        self._persist_inflight_generation(planned_offspring)
+        persist_state = self._persist_inflight_generation if state_kind == "generation" else self._persist_inflight_seed
+        persist_state(planned_organisms)
         active_by_id = {organism.organism_id: organism for organism in self.population}
-        plans_by_id = {plan.organism_id: plan for plan in planned_offspring}
+        plans_by_id = {plan.organism_id: plan for plan in planned_organisms}
         created_offspring: dict[str, OrganismMeta] = {}
         semaphore = asyncio.Semaphore(self.max_proposal_jobs)
 
-        async def _run_creation(plan: PlannedOffspring) -> tuple[str, OrganismMeta | None]:
+        async def _run_creation(plan: PlannedOrganismCreation) -> tuple[str, OrganismMeta | None]:
             async with semaphore:
                 plan.pipeline_state = "creating"
                 self._write_planned_organism_stub(plan)
-                self._persist_inflight_generation(planned_offspring)
+                persist_state(planned_organisms)
                 try:
-                    organism = await asyncio.to_thread(self._materialize_planned_offspring, plan, active_by_id)
+                    organism = await asyncio.to_thread(self._materialize_planned_organism, plan, active_by_id)
                 except Exception as exc:  # noqa: BLE001
                     plan.pipeline_state = "failed_creation"
                     plan.error_msg = str(exc)
                     self._write_planned_organism_stub(plan)
-                    self._persist_inflight_generation(planned_offspring)
+                    persist_state(planned_organisms)
                     return plan.organism_id, None
 
                 plan.pipeline_state = "pending_simple_eval"
                 plan.error_msg = None
-                self._persist_inflight_generation(planned_offspring)
+                persist_state(planned_organisms)
                 return plan.organism_id, organism
 
         creation_tasks: set[asyncio.Task[tuple[str, OrganismMeta | None]]] = set()
-        for plan in planned_offspring:
+        for plan in planned_organisms:
             if plan.pipeline_state in {"planned_creation", "creating"}:
                 creation_tasks.add(asyncio.create_task(_run_creation(plan)))
                 continue
@@ -975,10 +1024,10 @@ class EvolutionLoop:
             created_offspring[plan.organism_id] = organism
             if plan.pipeline_state in {"pending_simple_eval", "running_simple_eval"}:
                 immediate_summary = self._submit_or_resume_simple_evaluation(plan, organism)
-                self._persist_inflight_generation(planned_offspring)
+                persist_state(planned_organisms)
                 if immediate_summary is not None:
                     self._apply_completed_summary(plan, organism, immediate_summary)
-                    self._persist_inflight_generation(planned_offspring)
+                    persist_state(planned_organisms)
 
         try:
             while creation_tasks or self.orchestrator.has_pending_requests:
@@ -998,10 +1047,10 @@ class EvolutionLoop:
                             plans_by_id[organism_id],
                             organism,
                         )
-                        self._persist_inflight_generation(planned_offspring)
+                        persist_state(planned_organisms)
                         if immediate_summary is not None:
                             self._apply_completed_summary(plans_by_id[organism_id], organism, immediate_summary)
-                            self._persist_inflight_generation(planned_offspring)
+                            persist_state(planned_organisms)
 
                 event = await self.orchestrator.poll_result(timeout=0.05)
                 if event is not None:
@@ -1017,7 +1066,7 @@ class EvolutionLoop:
                     if summary is not None:
                         organism = created_offspring[result.organism_id]
                         self._apply_completed_summary(plan, organism, summary)
-                    self._persist_inflight_generation(planned_offspring)
+                    persist_state(planned_organisms)
 
                 if event is None:
                     await asyncio.sleep(0.01)
@@ -1032,7 +1081,10 @@ class EvolutionLoop:
     ) -> list[OrganismMeta]:
         """Compatibility shim for tests and narrow callers."""
 
-        return await self._execute_planned_generation(self._plan_offspring_generation(active_by_island))
+        return await self._execute_planned_creations(
+            self._plan_offspring_generation(active_by_island),
+            state_kind="generation",
+        )
 
     async def _evaluate_phase(
         self,
@@ -1149,24 +1201,44 @@ class EvolutionLoop:
             organism.status = "eliminated"
             write_organism_meta(organism)
 
-    def _restore_planned_offspring(self, inflight_generation: dict[str, Any]) -> list[PlannedOffspring]:
-        planned_payload = inflight_generation.get("planned_offspring", [])
+    def _restore_planned_organisms(
+        self,
+        inflight_payload: dict[str, Any],
+        *,
+        planned_key: str,
+        state_name: str,
+    ) -> list[PlannedOrganismCreation]:
+        planned_payload = inflight_payload.get(planned_key, [])
         if not isinstance(planned_payload, list):
-            raise ValueError("population_state.json inflight_generation.planned_offspring must be a list")
-        return [PlannedOffspring.from_dict(dict(entry)) for entry in planned_payload]
+            raise ValueError(f"population_state.json {state_name}.{planned_key} must be a list")
+        return [PlannedOrganismCreation.from_dict(dict(entry)) for entry in planned_payload]
+
+    def _restore_inflight_generation(self, inflight_generation: dict[str, Any]) -> list[PlannedOrganismCreation]:
+        return self._restore_planned_organisms(
+            inflight_generation,
+            planned_key="planned_offspring",
+            state_name="inflight_generation",
+        )
+
+    def _restore_inflight_seed(self, inflight_seed: dict[str, Any]) -> list[PlannedOrganismCreation]:
+        return self._restore_planned_organisms(
+            inflight_seed,
+            planned_key="planned_organisms",
+            state_name="inflight_seed",
+        )
 
     async def _run_generation(
         self,
         generation: int,
         *,
-        planned_offspring: list[PlannedOffspring] | None = None,
+        planned_offspring: list[PlannedOrganismCreation] | None = None,
     ) -> None:
         self.generation = generation
         if planned_offspring is None:
             active_by_island = self._group_by_island(self.population)
             planned_offspring = self._plan_offspring_generation(active_by_island)
 
-        offspring = await self._execute_planned_generation(planned_offspring)
+        offspring = await self._execute_planned_creations(planned_offspring, state_kind="generation")
         candidate_pool = list(self.population) + offspring
         simple_survivors = select_top_k_per_island(
             candidate_pool,
@@ -1189,7 +1261,50 @@ class EvolutionLoop:
                 write_organism_meta(organism)
             self.population = simple_survivors
 
-        self._save_state(finalized_generation=generation, inflight_generation=None)
+        self._save_state(finalized_generation=generation, inflight_seed=None, inflight_generation=None)
+
+    async def seed_population(self) -> dict[str, Any]:
+        if self._owns_llm_registry:
+            self.llm_registry.start()
+
+        try:
+            self.generation = 0
+            state = self._load_state()
+            if state is not None:
+                if isinstance(state.get("inflight_generation"), dict):
+                    raise RuntimeError(
+                        "population_state.json contains inflight_generation; continue it with run_evolution, not seed_population."
+                    )
+                inflight_seed = state.get("inflight_seed")
+                if isinstance(inflight_seed, dict):
+                    planned_organisms = self._restore_inflight_seed(inflight_seed)
+                else:
+                    raise RuntimeError(
+                        "Population is already initialized. Refusing to reseed an existing population root."
+                    )
+            else:
+                planned_organisms = self._plan_seed_population()
+
+            newborns = await self._execute_planned_creations(planned_organisms, state_kind="seed")
+            self.population = select_top_k_per_island(newborns, self._simple_top_k(), score_field="simple_score")
+            self._mark_eliminated(newborns, self.population)
+            for organism in self.population:
+                organism.current_generation_active = 0
+                write_organism_meta(organism)
+            self._save_state(finalized_generation=0, inflight_seed=None, inflight_generation=None)
+
+            best = self._best_active_organism()
+            return {
+                "total_generations": 0,
+                "active_population_size": len(self.population),
+                "best_organism_id": best.organism_id if best is not None else None,
+                "best_simple_score": best.simple_score if best is not None else None,
+                "best_implementation_path": best.implementation_path if best is not None else None,
+            }
+        finally:
+            self.orchestrator.close()
+            if self._owns_llm_registry:
+                self.llm_registry.stop()
 
     async def run(self) -> dict[str, Any]:
         max_generations = int(self._require_cfg_value("evolver.max_generations"))
@@ -1198,23 +1313,33 @@ class EvolutionLoop:
 
         try:
             state = self._load_state()
-            if state is not None and bool(self.evolver_cfg.get("resume", True)):
-                finalized_generation = int(state.get("current_generation", 0))
-                self.population = self._restore_population_from_state(finalized_generation)
-                self.generation = finalized_generation
+            if state is None:
+                raise FileNotFoundError(
+                    "population_state.json is required for seeded-only evolution. "
+                    "Run scripts/seed_population.sh first."
+                )
 
-                inflight_generation = state.get("inflight_generation")
-                if isinstance(inflight_generation, dict):
-                    target_generation = int(inflight_generation.get("target_generation", finalized_generation + 1))
-                    planned_offspring = self._restore_planned_offspring(inflight_generation)
-                    await self._run_generation(target_generation, planned_offspring=planned_offspring)
-            else:
-                self.generation = 0
-                newborns = await self._seed_initial_population()
-                await self._evaluate_phase(newborns, phase="simple")
-                self.population = select_top_k_per_island(newborns, self._simple_top_k(), score_field="simple_score")
-                self._mark_eliminated(newborns, self.population)
-                self._save_state(finalized_generation=0, inflight_generation=None)
+            inflight_seed = state.get("inflight_seed")
+            if isinstance(inflight_seed, dict):
+                raise RuntimeError(
+                    "population_state.json contains inflight_seed. "
+                    "Continue seeding with scripts/seed_population.sh before running evolution."
+                )
+
+            finalized_generation = int(state.get("current_generation", 0))
+            self.population = self._restore_population_from_state(finalized_generation)
+            if not self.population:
+                raise RuntimeError(
+                    "population_state.json contains no active organisms. "
+                    "Run scripts/seed_population.sh to initialize the population first."
+                )
+            self.generation = finalized_generation
+
+            inflight_generation = state.get("inflight_generation")
+            if isinstance(inflight_generation, dict) and bool(self.evolver_cfg.get("resume", True)):
+                target_generation = int(inflight_generation.get("target_generation", finalized_generation + 1))
+                planned_offspring = self._restore_inflight_generation(inflight_generation)
+                await self._run_generation(target_generation, planned_offspring=planned_offspring)
 
             for generation in range(self.generation + 1, max_generations + 1):
                 await self._run_generation(generation)

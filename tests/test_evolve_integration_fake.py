@@ -159,6 +159,9 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
 
 def test_canonical_organism_first_pipeline_fake(tmp_path: Path) -> None:
     cfg = _canonical_cfg(tmp_path, max_generations=1, resume=False)
+    seed_summary = asyncio.run(EvolutionLoop(cfg).seed_population())
+    assert seed_summary["total_generations"] == 0
+    assert seed_summary["active_population_size"] == 2
 
     summary = asyncio.run(EvolutionLoop(cfg).run())
 
@@ -188,8 +191,66 @@ def test_canonical_organism_first_pipeline_fake(tmp_path: Path) -> None:
         assert summary_payload["hard_score"] is not None
 
 
+def test_seed_population_writes_generation_zero_state(tmp_path: Path) -> None:
+    cfg = _canonical_cfg(tmp_path, max_generations=1, resume=False)
+
+    summary = asyncio.run(EvolutionLoop(cfg).seed_population())
+
+    assert summary["total_generations"] == 0
+    assert summary["active_population_size"] == 2
+
+    pop_root = Path(str(cfg.paths.population_root))
+    state = read_json(pop_root / "population_state.json")
+    assert state["current_generation"] == 0
+    assert state["inflight_seed"] is None
+    assert len(state["active_organisms"]) == 2
+
+
+def test_seed_population_resumes_inflight_seed_plan(tmp_path: Path) -> None:
+    cfg = _canonical_cfg(tmp_path, max_generations=1, resume=True)
+    loop = EvolutionLoop(cfg)
+    loop.generation = 0
+    planned = loop._plan_seed_population()
+    loop._save_state(finalized_generation=0, inflight_seed=loop._serialize_inflight_seed(planned), inflight_generation=None)
+
+    summary = asyncio.run(EvolutionLoop(cfg).seed_population())
+
+    assert summary["total_generations"] == 0
+    pop_root = Path(str(cfg.paths.population_root))
+    state = read_json(pop_root / "population_state.json")
+    assert state["inflight_seed"] is None
+    assert len(state["active_organisms"]) == 2
+
+
+def test_run_requires_seeded_population(tmp_path: Path) -> None:
+    cfg = _canonical_cfg(tmp_path, max_generations=1, resume=False)
+
+    try:
+        asyncio.run(EvolutionLoop(cfg).run())
+    except FileNotFoundError as exc:
+        assert "seed_population.sh" in str(exc)
+    else:
+        raise AssertionError("EvolutionLoop.run() should require a pre-seeded population state")
+
+
+def test_run_rejects_inflight_seed_state(tmp_path: Path) -> None:
+    cfg = _canonical_cfg(tmp_path, max_generations=1, resume=True)
+    loop = EvolutionLoop(cfg)
+    loop.generation = 0
+    planned = loop._plan_seed_population()
+    loop._save_state(finalized_generation=0, inflight_seed=loop._serialize_inflight_seed(planned), inflight_generation=None)
+
+    try:
+        asyncio.run(EvolutionLoop(cfg).run())
+    except RuntimeError as exc:
+        assert "seed_population.sh" in str(exc)
+    else:
+        raise AssertionError("EvolutionLoop.run() should reject unfinished inflight_seed state")
+
+
 def test_canonical_multigeneration_resume_keeps_population_state_and_island_boundaries(tmp_path: Path) -> None:
     cfg_first = _canonical_cfg(tmp_path, max_generations=1, resume=False)
+    asyncio.run(EvolutionLoop(cfg_first).seed_population())
     asyncio.run(EvolutionLoop(cfg_first).run())
 
     cfg_resume = _canonical_cfg(tmp_path, max_generations=2, resume=True)
