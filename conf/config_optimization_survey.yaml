@@ -1,5 +1,4 @@
 defaults:
-  - _self_
   - evolver: optimization_survey
   - api_platforms@api_platforms.mock: mock
   - experiments@experiments.cifar_convnet: optimization_survey/cifar_convnet
@@ -19,6 +18,7 @@ defaults:
   - experiments@experiments.linear_denoiser: optimization_survey/linear_denoiser
   - experiments@experiments.conv1d_classify: optimization_survey/conv1d_classify
   - experiments@experiments.quadratic_bowl: optimization_survey/quadratic_bowl
+  - _self_
 
 mode: run
 organism_dir: null
@@ -33,16 +33,10 @@ resources:
     gpu_ranks: [0]
     cpu_parallel_jobs: 4
 
-safety:
-  detect_nan: true
-  abort_on_nan: true
-  grad_clip_norm: null
-  log_grad_norm: true
-
 paths:
-  data_root: ${oc.env:VALOPT_DATA_ROOT,./data}
-  stats_root: ${oc.env:VALOPT_STATS_ROOT,./stats}
-  runs_root: ${oc.env:VALOPT_RUNS_ROOT,./runs}
+  data_root: ${oc.env:AIFS_DATA_ROOT,./data}
+  stats_root: ${oc.env:AIFS_STATS_ROOT,./stats}
+  runs_root: ${oc.env:AIFS_RUNS_ROOT,./runs}
   candidate_results_dirname: results
   population_root: ${oc.env:POP_ROOT,./populations}
   api_platform_runtime_root: ${oc.env:API_PLATFORM_RUNTIME_ROOT,./.api_platform_runtime}

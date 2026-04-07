@@ -7,6 +7,14 @@ You will receive:
 
 Write the final full `implementation.py` for a circle-packing organism.
 
+Priority:
+1. be faithful to the genes
+2. be faithful to the novelty summary
+3. realize those ideas within the fixed scaffold
+
+Do not invent new major ideas at implementation time.
+If the design is ambiguous, choose the most conservative implementation that still matches the supplied genes.
+
 Hard constraints:
 - return only Python code, no markdown fences
 - preserve the fixed scaffold and only fill the editable regions

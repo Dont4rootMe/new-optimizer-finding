@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from omegaconf import OmegaConf
@@ -88,3 +89,31 @@ def test_seed_population_shell_wrapper_prints_help() -> None:
     assert "Seed island populations" in completed.stdout
     assert "HYDRA_OVERRIDES" in completed.stdout
     assert completed.stderr == ""
+
+
+def test_seed_population_shell_wrapper_requires_config_name() -> None:
+    script = ROOT / "scripts" / "seed_population.sh"
+
+    completed = subprocess.run(
+        [str(script)],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+
+    assert completed.returncode == 2
+    assert "requires an explicit --config-name" in completed.stderr
+
+
+def test_seed_run_entrypoint_requires_config_name() -> None:
+    completed = subprocess.run(
+        [sys.executable, "-m", "src.evolve.seed_run"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+
+    assert completed.returncode != 0
+    assert "requires an explicit hydra preset" in completed.stderr.lower()

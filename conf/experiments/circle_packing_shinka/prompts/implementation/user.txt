@@ -1,12 +1,15 @@
 Convert this circle-packing design into the final `implementation.py`.
 
-Organism genetic code:
+=== ORGANISM GENETIC CODE ===
 {organism_genetic_code}
 
-Novelty summary:
+=== ORGANISM NOVELTY SUMMARY ===
 {change_description}
 
-Implementation template:
+=== FIXED IMPLEMENTATION TEMPLATE ===
 {implementation_template}
+
+Implement the supplied ideas faithfully.
+Do not add a new major idea that is absent from the genes and novelty summary.
 
 Return only the final `implementation.py` text.

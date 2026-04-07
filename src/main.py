@@ -7,8 +7,10 @@ import logging
 import hydra
 from omegaconf import DictConfig
 
+from src.runtime_config import ensure_root_runtime_config
 
-@hydra.main(config_path="../conf", config_name="config_optimization_survey", version_base=None)
+
+@hydra.main(config_path="../conf", config_name=None, version_base=None)
 def main(cfg: DictConfig) -> None:
     """Dispatch to validate or evolve mode based on config."""
 
@@ -16,6 +18,7 @@ def main(cfg: DictConfig) -> None:
         level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     )
+    ensure_root_runtime_config(cfg, context="src.main")
 
     mode = str(cfg.mode)
     if mode == "evolve":

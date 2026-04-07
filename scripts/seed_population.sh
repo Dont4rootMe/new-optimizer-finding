@@ -6,7 +6,7 @@ show_help() {
 Seed island populations and stop after generation 0 simple scoring.
 
 Usage:
-  ./scripts/seed_population.sh [HYDRA_OVERRIDES...]
+  ./scripts/seed_population.sh --config-name <preset> [HYDRA_OVERRIDES...]
 
 What it does:
   - runs the dedicated seed-only pipeline
@@ -15,11 +15,11 @@ What it does:
   - finalizes generation 0 and exits
 
 Common examples:
-  ./scripts/seed_population.sh
+  ./scripts/seed_population.sh --config-name config_optimization_survey
   ./scripts/seed_population.sh --config-name config_circle_packing_shinka
   ./scripts/seed_population.sh --config-name config_circle_packing_shinka_ollama_dual
   ./scripts/seed_population.sh --config-name config_circle_packing_shinka paths.population_root=/tmp/circle_pack_pop
-  ./scripts/seed_population.sh api_platforms@api_platforms.gpt_5_4=gpt_5_4 evolver.llm.route_weights='{gpt_5_4: 1.0}'
+  ./scripts/seed_population.sh --config-name config_optimization_survey api_platforms@api_platforms.gpt_5_4=gpt_5_4 evolver.llm.route_weights='{gpt_5_4: 1.0}'
 
 Notes:
   - all trailing arguments are passed directly to Hydra as overrides
@@ -31,6 +31,22 @@ EOF
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" || "${1:-}" == "help" ]]; then
   show_help
   exit 0
+fi
+
+has_config_name=0
+for arg in "$@"; do
+  case "$arg" in
+    --config-name|--config-name=*)
+      has_config_name=1
+      break
+      ;;
+  esac
+done
+
+if [[ "$has_config_name" -ne 1 ]]; then
+  echo "Error: this script requires an explicit --config-name <preset>." >&2
+  show_help >&2
+  exit 2
 fi
 
 python -m src.evolve.seed_run "$@"

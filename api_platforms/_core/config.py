@@ -6,6 +6,8 @@ from collections.abc import Sequence
 import json
 from typing import Any
 
+from omegaconf import OmegaConf
+
 from api_platforms._core.types import ApiRouteConfig
 
 
@@ -41,6 +43,10 @@ def build_route_config(
         payload["max_concurrency"] = max(1, len(payload["gpu_ranks"]) or 1)
     if "request_options" not in payload or payload["request_options"] is None:
         payload["request_options"] = {}
+    if OmegaConf.is_config(payload["request_options"]):
+        payload["request_options"] = OmegaConf.to_container(payload["request_options"], resolve=True)
+    else:
+        payload["request_options"] = dict(payload["request_options"])
     return ApiRouteConfig(**payload)
 
 

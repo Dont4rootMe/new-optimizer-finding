@@ -1,18 +1,28 @@
-Mutate this parent circle-packing organism.
+Mutate this organism into a child.
 
-Inherited gene pool:
+=== CHILD GENETIC CODE DRAFT ===
+This is the child-side draft already selected by evolution.
+This is the main object you must work on.
 {inherited_gene_pool}
 
-Removed gene pool:
+=== EXCLUDED IDEAS ===
+These ideas were deliberately removed during mutation sampling.
+Treat them as excluded-by-evolution context, not as default candidates to restore.
 {removed_gene_pool}
 
-Parent genetic code:
+=== PARENT GENETIC CODE (REFERENCE ONLY) ===
+Use this only to understand where the child draft came from.
 {parent_genetic_code}
 
-Parent lineage summary:
+=== PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
+Use this only to understand past idea changes and outcomes.
 {parent_lineage_summary}
 
-Parent implementation:
+=== PARENT IMPLEMENTATION CODE (REFERENCE ONLY) ===
+Use this only to understand how parent ideas were realized in code.
+Do not let this override the child genetic code draft.
 {parent_implementation_code}
 
-Return a revised design that aims to improve packing quality while remaining valid under the unit-square constraints.
+=== TASK ===
+Refine the child genetic code draft into a stronger, more coherent idea set for the same task.
+The result should still be gene-centric and should include one unified novelty summary for the new child.

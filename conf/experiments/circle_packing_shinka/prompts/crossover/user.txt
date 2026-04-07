@@ -1,24 +1,34 @@
-Create one child circle-packing organism from these two parents.
+Create one crossover child from these two parents.
 
-Inherited gene pool:
+=== CHILD GENETIC CODE DRAFT ===
+This merged draft was already selected by evolution.
+This is the main object you must refine.
 {inherited_gene_pool}
 
-Primary parent genetic code:
+=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ===
+Use this to understand continuity and provenance of ideas.
 {mother_genetic_code}
 
-Primary parent lineage summary:
+=== PRIMARY PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
 {mother_lineage_summary}
 
-Primary parent implementation:
+=== PRIMARY PARENT IMPLEMENTATION CODE (REFERENCE ONLY) ===
+Use this only to understand how parent ideas were realized.
+Do not let it override the child draft.
 {mother_implementation_code}
 
-Secondary parent genetic code:
+=== SECONDARY PARENT GENETIC CODE (REFERENCE ONLY) ===
+Use this to understand complementary idea sources.
 {father_genetic_code}
 
-Secondary parent lineage summary:
+=== SECONDARY PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
 {father_lineage_summary}
 
-Secondary parent implementation:
+=== SECONDARY PARENT IMPLEMENTATION CODE (REFERENCE ONLY) ===
+Use this only to understand possible realizations of secondary-parent ideas.
+Do not let it override the child draft.
 {father_implementation_code}
 
-Return a child design that keeps the most useful geometric structure and repair logic from both parents.
+=== TASK ===
+Refine the child genetic code draft into one coherent organism.
+The result should be gene-centric, internally consistent, and summarized by one unified novelty statement for lineage.

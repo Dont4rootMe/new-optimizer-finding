@@ -19,6 +19,7 @@ def test_hydra_compose_config_and_experiments() -> None:
     assert "experiments" in cfg
     assert "evolver" in cfg
     assert "api_platforms" in cfg
+    assert "safety" not in cfg
     expected = {
         "cifar_convnet",
         "audio_transformer",
@@ -134,18 +135,23 @@ def test_circle_packing_shinka_config_composes() -> None:
         cfg = compose(config_name="config_circle_packing_shinka")
 
     assert set(cfg.experiments.keys()) == {"unit_square_26"}
+    assert "safety" not in cfg
+    assert set(cfg.api_platforms.keys()) == {"mock"}
+    assert cfg.api_platforms.mock._target_ == "api_platforms.mock.platform.build_platform"
     assert cfg.experiments.unit_square_26._target_ == "experiments.circle_packing_shinka.unit_square_26.UnitSquare26CirclePackingExperiment"
     assert cfg.experiments.unit_square_26.need_cuda is False
     assert cfg.evolver.prompts.project_context == "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt"
     assert cfg.evolver.phases.simple.experiments == ["unit_square_26"]
     assert cfg.evolver.phases.great_filter.enabled is False
     assert cfg.resources.evaluation.gpu_ranks == []
+    assert cfg.resources.evaluation.cpu_parallel_jobs == 4
     assert cfg.evolver.max_generations == 150
     assert cfg.evolver.max_proposal_jobs == 5
     assert cfg.evolver.islands.seed_organisms_per_island == 1
     assert cfg.evolver.islands.max_organisms_per_island == 40
     assert cfg.evolver.phases.simple.top_k_per_island == 40
     assert cfg.evolver.reproduction.offspring_per_generation == 5
+    assert cfg.evolver.llm.route_weights.mock == 1.0
 
 
 def test_circle_packing_shinka_dual_ollama_preset_composes() -> None:
@@ -154,6 +160,7 @@ def test_circle_packing_shinka_dual_ollama_preset_composes() -> None:
         cfg = compose(config_name="config_circle_packing_shinka_ollama_dual")
 
     assert set(cfg.experiments.keys()) == {"unit_square_26"}
+    assert "safety" not in cfg
     assert set(cfg.api_platforms.keys()) == {"ollama_qwen35_27b", "ollama_gemma4_26b"}
     assert cfg.experiments.unit_square_26.need_cuda is False
     assert cfg.experiments.unit_square_26.compute.device == "cpu"

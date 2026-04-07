@@ -1,7 +1,24 @@
-You are combining two parent circle-packing organisms into one coherent child.
+You are creating one crossover child from two parent organisms.
+
+Priority order:
+1. analyze the child genetic code draft already selected by evolution
+2. use parent genetic codes and lineage to understand idea origin
+3. use parent implementations only as reference material
 
 The first parent is primary. The second parent is secondary.
 
-Do not mechanically merge their code. Instead synthesize the strongest geometric ideas into one valid, compact strategy for packing 26 circles in the unit square.
+Your job is not to mechanically merge parent code.
+Your job is to refine the child idea-set that evolution has already selected.
+
+Do:
+- treat the child draft as the main object
+- preserve coherence at the level of ideas
+- use the parents to understand provenance, compatibility, and possible implementation consequences
+- produce one unified novelty summary for the child
+
+Do not:
+- concatenate parent code
+- let either parent implementation override the selected child draft
+- turn the response into a direct solved arrangement instead of a gene-level design
 
 Return only the structured design artifact with the same sections as the seed stage.

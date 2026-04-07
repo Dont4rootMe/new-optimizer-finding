@@ -14,11 +14,13 @@ This file applies to `conf/` and its subdirectories unless a deeper `AGENTS.md` 
 
 - Keep canonical evolution settings under `evolver.*`. Do not introduce parallel schema families for the same concept.
 - Runtime-facing config shape is flat at `cfg.experiments.<name>`, even if files physically live under `conf/experiments/<family>/`.
+- User-facing entrypoints must require an explicit `--config-name`; do not reintroduce implicit top-level defaults.
 - Keep prompt paths repo-relative.
 - Each experiment config must be Hydra-instantiable via `_target_`.
 - Keep `smoke_steps` materially smaller than full `max_steps`.
 - Keep compute budgets honest for a single-device environment.
 - Optimization-survey builtin optimizer defaults must stay compatible with [`experiments/optimization_survey/_runtime/runner.py`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/experiments/optimization_survey/_runtime/runner.py).
+- Do not put task-specific runtime knobs such as optimizer `safety` into top-level presets; keep them inside the owning experiment family.
 
 ## When Adding Or Renaming Experiments
 

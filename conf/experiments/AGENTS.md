@@ -11,6 +11,7 @@ Each experiment config should define the fields that its evaluator expects. In p
 - `name`
 - `compute`
 - optional task-specific blocks such as `data`, `model`, `train`, `normalization`, `baseline`, `optimizer_defaults`
+- optional task-specific runtime blocks such as `safety`
 
 ## Important Constraints
 
@@ -18,6 +19,7 @@ Each experiment config should define the fields that its evaluator expects. In p
 - `compute.device`, `precision`, `smoke_steps`, and `max_steps` must reflect real single-device limits.
 - Optimization-survey configs that use builtin optimizers must keep `optimizer_defaults.params` as a mapping.
 - Optional dependency experiments should still compose cleanly even when their Python extras are absent.
+- Task-specific knobs belong here, not in top-level presets under `conf/`.
 
 ## Change Discipline
 

@@ -59,26 +59,26 @@ pip install -e .[evolve]
 Smoke enabled experiments:
 
 ```bash
-python -m src.main mode=smoke
+python -m src.main --config-name config_optimization_survey mode=smoke
 ```
 
 Collect baseline stats:
 
 ```bash
-python -m src.main mode=stats
+python -m src.main --config-name config_optimization_survey mode=stats
 ```
 
 Run experiments against a concrete organism:
 
 ```bash
-python -m src.main mode=run organism_dir=/absolute/path/to/organism
+python -m src.main --config-name config_optimization_survey mode=run organism_dir=/absolute/path/to/organism
 ```
 
 ## Evolution
 
 ```bash
 export OPENAI_API_KEY=...
-python -m src.main mode=evolve
+python -m src.main --config-name config_optimization_survey mode=evolve
 ```
 
 The evolution engine is task-blind. It operates on organism folders and delegates all task-specific behavior to the configured experiments.
@@ -127,3 +127,5 @@ def run_packing():
 ```
 
 where `centers.shape == (26, 2)`, `radii.shape == (26,)`, and `reported_sum == sum(radii)`.
+
+All user-facing entrypoints now require an explicit Hydra preset via `--config-name`.

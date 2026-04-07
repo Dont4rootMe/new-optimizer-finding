@@ -65,6 +65,8 @@ def test_circle_packing_config_composes() -> None:
         cfg = compose(config_name="config_circle_packing_shinka")
 
     assert set(cfg.experiments.keys()) == {"unit_square_26"}
+    assert "safety" not in cfg
+    assert set(cfg.api_platforms.keys()) == {"mock"}
     assert cfg.experiments.unit_square_26.need_cuda is False
     assert cfg.evolver.phases.simple.experiments == ["unit_square_26"]
     assert cfg.evolver.phases.great_filter.enabled is False
@@ -175,6 +177,86 @@ def test_run_one_executes_circle_packing_experiment(tmp_path: Path) -> None:
             "smoke",
             "--config_path",
             str(config_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = read_json(output_json)
+    assert payload["status"] == "ok"
+    assert payload["score"] == pytest.approx(1.04)
+
+
+def test_run_one_requires_explicit_config_name_for_repo_conf(tmp_path: Path) -> None:
+    organism_dir = _write_organism_dir(tmp_path, VALID_CODE)
+    output_json = tmp_path / "report.json"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "src.validate.run_one",
+            "--experiment",
+            "unit_square_26",
+            "--organism_dir",
+            str(organism_dir),
+            "--output_json",
+            str(output_json),
+            "--seed",
+            "123",
+            "--device",
+            "cpu",
+            "--precision",
+            "fp32",
+            "--mode",
+            "smoke",
+            "--config_path",
+            str(ROOT / "conf"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+
+    assert completed.returncode == 1
+    payload = read_json(output_json)
+    assert payload["status"] == "failed"
+    assert "pass --config_name <preset> explicitly" in payload["error_msg"].lower()
+
+
+def test_run_one_accepts_explicit_config_name_for_repo_conf(tmp_path: Path) -> None:
+    organism_dir = _write_organism_dir(tmp_path, VALID_CODE)
+    output_json = tmp_path / "report.json"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "src.validate.run_one",
+            "--experiment",
+            "unit_square_26",
+            "--organism_dir",
+            str(organism_dir),
+            "--output_json",
+            str(output_json),
+            "--seed",
+            "123",
+            "--device",
+            "cpu",
+            "--precision",
+            "fp32",
+            "--mode",
+            "smoke",
+            "--config_path",
+            str(ROOT / "conf"),
+            "--config_name",
+            "config_circle_packing_shinka",
+            "--override",
+            f"paths.data_root={tmp_path / 'data'}",
         ],
         check=False,
         capture_output=True,

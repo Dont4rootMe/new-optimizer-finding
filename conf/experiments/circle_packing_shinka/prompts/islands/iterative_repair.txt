@@ -1,9 +1,11 @@
-Favor constructive layouts followed by local repair and refinement heuristics.
+Favor a corrective and refinement-oriented research style.
 
-Useful ideas:
-- start from a rough placement and iteratively remove overlaps
-- alternate center adjustment with radius rescaling
-- greedy local moves that increase one circle radius without violating others
-- pairwise constraint checks, border-aware repair, and deterministic refinement loops
+This island explores organisms that treat an initial hypothesis as something to be checked, adjusted, and improved through deterministic revision.
 
-Bias toward robust programs that can recover from imperfect initial layouts and still return a valid packing.
+Good organisms here usually:
+- separate initial proposal from later correction
+- reason explicitly about feasibility and conflict resolution
+- improve validity and quality through deliberate refinement instead of relying on one perfect initial guess
+
+Do not treat this as a requirement to use any particular heuristic.
+The goal is a style of thinking, not a prescribed repair recipe.

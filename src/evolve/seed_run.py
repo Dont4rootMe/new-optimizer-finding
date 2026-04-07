@@ -9,12 +9,15 @@ import hydra
 from omegaconf import DictConfig
 
 from api_platforms import ApiPlatformRegistry
+from src.runtime_config import ensure_root_runtime_config
 
 LOGGER = logging.getLogger(__name__)
 
 
 def run_seed_population(cfg: DictConfig) -> dict:
     """Create and score generation-0 organisms without running later generations."""
+
+    ensure_root_runtime_config(cfg, context="src.evolve.seed_run")
 
     if not bool(cfg.evolver.enabled):
         LOGGER.info("evolver.enabled=false, skipping seed run")
@@ -33,7 +36,7 @@ def run_seed_population(cfg: DictConfig) -> dict:
         registry.stop()
 
 
-@hydra.main(config_path="../../conf", config_name="config_optimization_survey", version_base=None)
+@hydra.main(config_path="../../conf", config_name=None, version_base=None)
 def main(cfg: DictConfig) -> None:
     """Standalone module entrypoint for seed-only population initialization."""
 

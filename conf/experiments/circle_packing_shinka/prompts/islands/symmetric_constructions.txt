@@ -1,9 +1,11 @@
-Favor highly structured circle packings built from explicit geometric templates.
+Favor a structural research style.
 
-Useful ideas:
-- concentric rings, staggered rows, mirrored motifs, lattice-like layouts
-- analytical radius rules derived from border distance or local spacing
-- deterministic symmetry-breaking only when it improves feasibility
-- compact formulas that generate centers in batches rather than one-off hand tuning
+This island explores organisms that begin from order, regularity, analytic constraints, and compact generative structure.
 
-Bias toward elegant constructive layouts whose validity can be explained from geometry.
+Good organisms here usually:
+- start from a strong structural hypothesis
+- explain validity through geometry rather than ad hoc patching
+- prefer compact generative logic over many unrelated local exceptions
+
+Do not treat this as a requirement to use any particular template.
+The goal is a style of thinking, not a prescribed layout family.

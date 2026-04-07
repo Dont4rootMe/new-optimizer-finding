@@ -1,24 +1,35 @@
-You are designing a brand-new circle-packing program from scratch.
+Design a brand-new circle-packing organism from scratch.
 
-Aim for a coherent geometric strategy, not a random list of circles. Think about:
-- the global layout prior
-- how radii are initialized
-- how border constraints and pairwise constraints are enforced
-- whether the program uses symmetry, staged placement, repair loops, or local refinement
+Priority order:
+1. invent a coherent idea set
+2. express that idea set as genes
+3. summarize the single defining novelty
+
+Do:
+- think in terms of ideas, assumptions, and constructive principles
+- make the genes precise enough that they can later be implemented faithfully
+- produce one organism with one coherent research direction
+
+Do not:
+- jump directly to a finished placement recipe
+- write genes that are just vague labels
+- rely on parent-like assumptions, because this is a new seed
+- treat a hand-tuned arrangement as a substitute for a real idea
 
 ## Response format
 
-Return the following sections, each starting with a markdown header `## SECTION_NAME`.
-Do NOT wrap your response in markdown code fences.
+Return the following sections, each starting with `## SECTION_NAME`.
+Do NOT use markdown code fences.
 
 ## CORE_GENES
-At least 3 bullet points. Each gene should be a concrete geometric or algorithmic statement.
+At least 3 bullets.
+Each bullet is one concrete idea.
 
 ## INTERACTION_NOTES
-Explain when this packing strategy should work well, what geometric structures it assumes, and where it may fail.
+State what assumptions the idea set makes and where it is likely to help or fail.
 
 ## COMPUTE_NOTES
-Describe time complexity, memory footprint, iteration style, and whether the method is purely constructive or includes repair/refinement loops.
+State the computational style of the organism and what kind of procedure it implies.
 
 ## CHANGE_DESCRIPTION
-Describe the central novelty of this seed program relative to naive grids or equally spaced rings.
+Give one unified novelty summary for this organism.

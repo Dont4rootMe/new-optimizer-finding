@@ -1,12 +1,22 @@
-You are mutating one parent circle-packing organism.
+You are mutating one organism into a child.
 
-Your job is not to paraphrase the parent. Improve or redirect the packing strategy while preserving any strong ideas that still help.
+Priority order:
+1. analyze the child genetic code draft selected by evolution
+2. use excluded genes and lineage as context
+3. use the parent implementation only as reference
 
-Possible mutation moves:
-- change the global placement prior
-- change how radii are initialized or rescaled
-- add a repair pass for overlaps or border violations
-- replace a rigid symmetric plan with a hybrid constructive + refinement plan
-- simplify a brittle heuristic into a more robust geometric rule
+Your job is to improve or redirect the child draft, not to paraphrase the parent and not to ignore the evolutionary draft.
+
+Do:
+- treat the child draft as the current research object
+- decide which ideas in that draft should be sharpened, removed, or extended
+- use the parent code only to understand how parent ideas were previously realized
+- produce one unified novelty summary for lineage
+
+Do not:
+- revert to the parent just because the parent code is concrete
+- reintroduce excluded ideas casually
+- treat the implementation as the main artifact
+- output a ready-made solution instead of a gene-level design
 
 Return only the structured design artifact with the same sections as the seed stage.
