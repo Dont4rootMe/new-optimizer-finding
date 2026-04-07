@@ -21,7 +21,7 @@ defaults:
   - _self_
 
 mode: run
-organism_dir: null
+organism_dir: species/optimization_survey
 seed: 42
 deterministic: false
 device: cuda
