@@ -135,6 +135,8 @@ set -euo pipefail
 if [[ "${1:-}" == "-" ]]; then
   cat >/dev/null
   printf '%s\\n' "${POP_ROOT:?}"
+  printf 'missing_state\\n'
+  printf 'population_state.json is required for seeded-only evolution. Run scripts/seed_population.sh first.\\n'
   exit 0
 fi
 printf '%s\\n' "$*" >> "${PYTHON_CALLS_FILE:?}"
@@ -181,6 +183,8 @@ set -euo pipefail
 if [[ "${1:-}" == "-" ]]; then
   cat >/dev/null
   printf '%s\\n' "${POP_ROOT:?}"
+  printf 'ready\\n'
+  printf '\\n'
   exit 0
 fi
 printf '%s\\n' "$*" >> "${PYTHON_CALLS_FILE:?}"
@@ -208,6 +212,59 @@ exit 0
     assert "running seed_population.sh first" not in completed.stdout
     calls = calls_path.read_text(encoding="utf-8").splitlines()
     assert calls == [
+        "-m src.main --config-name config_circle_packing_shinka mode=evolve",
+    ]
+
+
+def test_run_evolution_shell_wrapper_prompts_and_reseeds_empty_population(tmp_path: Path) -> None:
+    script = ROOT / "scripts" / "run_evolution.sh"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    calls_path = tmp_path / "python_calls.log"
+    pop_root = tmp_path / "pop_empty"
+    pop_root.mkdir(parents=True, exist_ok=True)
+    (pop_root / "population_state.json").write_text("{}", encoding="utf-8")
+    fake_python = fake_bin / "python"
+    fake_python.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "-" ]]; then
+  cat >/dev/null
+  printf '%s\\n' "${POP_ROOT:?}"
+  printf 'empty_population\\n'
+  printf 'population_state.json contains no active organisms. Run scripts/seed_population.sh to initialize the population first.\\n'
+  exit 0
+fi
+printf '%s\\n' "$*" >> "${PYTHON_CALLS_FILE:?}"
+exit 0
+""",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["POP_ROOT"] = str(pop_root)
+    env["PYTHON_CALLS_FILE"] = str(calls_path)
+
+    completed = subprocess.run(
+        [str(script), "--seed", "--config-name", "config_circle_packing_shinka"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        env=env,
+        input="Y\n",
+    )
+
+    assert completed.returncode == 0
+    assert "contains no active organisms" in completed.stdout
+    assert "Backing up stale population root" in completed.stdout
+    backups = list(tmp_path.glob("pop_empty.stale.*"))
+    assert len(backups) == 1
+    calls = calls_path.read_text(encoding="utf-8").splitlines()
+    assert calls == [
+        "-m src.evolve.seed_run --config-name config_circle_packing_shinka",
         "-m src.main --config-name config_circle_packing_shinka mode=evolve",
     ]
 

@@ -68,10 +68,27 @@ if [[ "$has_config_name" -ne 1 ]]; then
   exit 2
 fi
 
+prompt_seed_now() {
+  local reply
+  if ! read -r -p "Run seed_population.sh now for this run? [Y/n] " reply; then
+    echo "No interactive input available to confirm reseeding." >&2
+    return 1
+  fi
+  case "$reply" in
+    ""|[Yy]|[Yy][Ee][Ss])
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 if [[ "$auto_seed" -eq 1 ]]; then
-  population_root="$(python - "$ROOT_DIR" "${forward_args[@]}" <<'PY'
+  mapfile -t seed_inspect < <(python - "$ROOT_DIR" "${forward_args[@]}" <<'PY'
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -105,18 +122,82 @@ def main() -> int:
 
     with initialize_config_dir(config_dir=str(root_dir / "conf"), version_base=None):
         cfg = compose(config_name=config_name, overrides=overrides)
-    print(Path(str(cfg.paths.population_root)).expanduser().resolve())
+    population_root = Path(str(cfg.paths.population_root)).expanduser().resolve()
+    state_path = population_root / "population_state.json"
+
+    status = "ready"
+    message = ""
+    if not state_path.exists():
+        if population_root.exists() and any(population_root.iterdir()):
+            status = "stale_missing_state"
+            message = (
+                "population_state.json is required for seeded-only evolution. "
+                "Run scripts/seed_population.sh first."
+            )
+        else:
+            status = "missing_state"
+            message = (
+                "population_state.json is required for seeded-only evolution. "
+                "Run scripts/seed_population.sh first."
+            )
+    else:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+        inflight_seed = payload.get("inflight_seed")
+        active_organisms = payload.get("active_organisms")
+        if isinstance(inflight_seed, dict):
+            status = "inflight_seed"
+            message = (
+                "population_state.json contains inflight_seed. "
+                "Continue seeding with scripts/seed_population.sh before running evolution."
+            )
+        elif not isinstance(active_organisms, list) or len(active_organisms) == 0:
+            status = "empty_population"
+            message = (
+                "population_state.json contains no active organisms. "
+                "Run scripts/seed_population.sh to initialize the population first."
+            )
+
+    print(population_root)
+    print(status)
+    print(message)
     return 0
 
 
 raise SystemExit(main())
 PY
-)"
+  )
+  population_root="${seed_inspect[0]}"
+  population_status="${seed_inspect[1]:-ready}"
+  population_message="${seed_inspect[2]:-}"
 
-  if [[ ! -d "${population_root}/gen_0000" ]]; then
-    echo "Generation 0 population is missing in ${population_root}; running seed_population.sh first."
-    "${SCRIPT_DIR}/seed_population.sh" "${forward_args[@]}"
-  fi
+  case "$population_status" in
+    ready)
+      ;;
+    missing_state)
+      echo "Generation 0 population is missing in ${population_root}; running seed_population.sh first."
+      "${SCRIPT_DIR}/seed_population.sh" "${forward_args[@]}"
+      ;;
+    inflight_seed)
+      echo "${population_message}"
+      "${SCRIPT_DIR}/seed_population.sh" "${forward_args[@]}"
+      ;;
+    empty_population|stale_missing_state)
+      echo "${population_message}"
+      if ! prompt_seed_now; then
+        exit 1
+      fi
+      if [[ -e "${population_root}" ]]; then
+        backup_root="${population_root}.stale.$(date +%Y%m%d-%H%M%S)"
+        echo "Backing up stale population root to ${backup_root} before reseeding."
+        mv "${population_root}" "${backup_root}"
+      fi
+      "${SCRIPT_DIR}/seed_population.sh" "${forward_args[@]}"
+      ;;
+    *)
+      echo "Unexpected seed inspection status '${population_status}' for ${population_root}." >&2
+      exit 1
+      ;;
+  esac
 fi
 
 python -m src.main "${forward_args[@]}" mode=evolve
