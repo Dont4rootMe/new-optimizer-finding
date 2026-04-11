@@ -664,6 +664,46 @@ kill_ollama_runtime() {
   _cleanup_loaded_ollama_servers
 }
 
+_verify_ollama_gpu_visible() {
+  # Inspect the managed ollama `stderr.log` and confirm the freshly-started
+  # runner actually discovered a GPU device. We call this right after the
+  # healthcheck loop in `_start_local_ollama` when a gpu_rank was requested.
+  #
+  # Why this guard matters:
+  #   When ollama falls back to CPU (e.g. a conda-forge build without bundled
+  #   CUDA runtime libs, or a missing driver) it silently prints lines like:
+  #     msg="inference compute" id=cpu library=cpu ... total="1456.0 GiB"
+  #     msg="vram-based default context" total_vram="0 B"
+  #   Inference on a 16 GB quantized model on CPU takes tens of minutes per
+  #   generation and looks exactly like a hang to the operator. Failing loud
+  #   here turns that silent fallback into an obvious startup error.
+  local stderr_log="$1"
+
+  if [[ ! -f "$stderr_log" ]]; then
+    return 0
+  fi
+
+  local attempt
+  for attempt in $(seq 1 20); do
+    if grep -q 'msg="inference compute"' "$stderr_log" 2>/dev/null; then
+      break
+    fi
+    sleep 0.25
+  done
+
+  if grep -E 'msg="inference compute" id=(cuda|rocm|vulkan|metal)' "$stderr_log" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if grep -E 'msg="inference compute" id=cpu' "$stderr_log" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  # No discovery line yet; do not block. The healthcheck already passed, so
+  # staying permissive is safer than blocking on a missing log line.
+  return 0
+}
+
 _start_local_ollama() {
   local base_url="$1"
   local runtime_root="$2"
@@ -703,16 +743,37 @@ _start_local_ollama() {
   printf '%s\n' "$!" > "${pid_file}"
 
   local attempt
+  local healthcheck_ok=0
   for attempt in $(seq 1 60); do
     if _ollama_healthcheck "$base_url"; then
-      return 0
+      healthcheck_ok=1
+      break
     fi
     sleep 1
   done
 
-  echo "Error: local Ollama server did not become ready at ${base_url}." >&2
-  echo "See logs: ${stdout_log} and ${stderr_log}" >&2
-  return 1
+  if [[ "$healthcheck_ok" -ne 1 ]]; then
+    echo "Error: local Ollama server did not become ready at ${base_url}." >&2
+    echo "See logs: ${stdout_log} and ${stderr_log}" >&2
+    return 1
+  fi
+
+  if [[ -n "$gpu_rank" ]]; then
+    if ! _verify_ollama_gpu_visible "$stderr_log"; then
+      echo "Error: Ollama at ${base_url} (gpu:${gpu_rank}) started but reported CPU-only inference." >&2
+      echo "  Running a quantized qwen35 on CPU takes tens of minutes per generation and will look like a hang." >&2
+      echo "  Inspect: tail -n 80 ${stderr_log}" >&2
+      echo "  Likely cause: this Ollama build is missing CUDA runtime libs (common with conda-forge ollama)." >&2
+      echo "  Fix: install the official binary from https://ollama.com/download, or expose CUDA libs via LD_LIBRARY_PATH before launching ${0##*/}." >&2
+      echo "  Override: set NEW_OPTIMIZER_ALLOW_OLLAMA_CPU=1 in the environment to silence this check (inference will still be slow)." >&2
+      if [[ "${NEW_OPTIMIZER_ALLOW_OLLAMA_CPU:-0}" != "1" ]]; then
+        return 1
+      fi
+      echo "  NEW_OPTIMIZER_ALLOW_OLLAMA_CPU=1 set, continuing with CPU inference." >&2
+    fi
+  fi
+
+  return 0
 }
 
 _ensure_ollama_server() {

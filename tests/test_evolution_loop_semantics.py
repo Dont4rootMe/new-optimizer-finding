@@ -322,6 +322,61 @@ def test_inter_island_weight_can_force_inter_island_crossover_only(tmp_path: Pat
     assert calls["inter"] == 2
 
 
+def _make_seed_plan(organism_id: str, island_id: str) -> object:
+    """Minimal `PlannedOrganismCreation` stub for `_assign_batch_routes` tests.
+
+    The method only reads `organism_id`, so any object exposing that attribute
+    works and we avoid pulling in the full `PlannedOrganismCreation` ctor here.
+    """
+
+    class _Plan:
+        pass
+
+    plan = _Plan()
+    plan.organism_id = organism_id
+    plan.island_id = island_id
+    return plan
+
+
+def test_assign_batch_routes_spreads_two_plans_across_two_equal_routes(
+    tmp_path: Path,
+) -> None:
+    cfg = _cfg(tmp_path)
+    loop = EvolutionLoop(cfg)
+    loop.generator.route_weights = {"route_a": 1.0, "route_b": 1.0}
+    plans = [
+        _make_seed_plan("org-aaaa", "gradient_methods"),
+        _make_seed_plan("org-bbbb", "second_order"),
+    ]
+    assignment = loop._assign_batch_routes(plans)
+    assert set(assignment.values()) == {"route_a", "route_b"}
+    # Deterministic: same inputs -> same mapping
+    assert assignment == loop._assign_batch_routes(plans)
+
+
+def test_assign_batch_routes_returns_empty_for_single_positive_route(
+    tmp_path: Path,
+) -> None:
+    cfg = _cfg(tmp_path)
+    loop = EvolutionLoop(cfg)
+    loop.generator.route_weights = {"only_route": 1.0, "zero_route": 0.0}
+    plans = [_make_seed_plan(f"org-{i}", "gradient_methods") for i in range(4)]
+    assert loop._assign_batch_routes(plans) == {}
+
+
+def test_assign_batch_routes_respects_weight_proportions(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    loop = EvolutionLoop(cfg)
+    loop.generator.route_weights = {"heavy": 3.0, "light": 1.0}
+    plans = [_make_seed_plan(f"org-{i:02d}", "gradient_methods") for i in range(8)]
+    assignment = loop._assign_batch_routes(plans)
+    counts = {"heavy": 0, "light": 0}
+    for route in assignment.values():
+        counts[route] += 1
+    # Hamilton apportionment for 8 plans with 3:1 weights => 6:2
+    assert counts == {"heavy": 6, "light": 2}
+
+
 def test_max_proposal_jobs_bounds_seed_parallelism(tmp_path: Path, monkeypatch) -> None:
     cfg = _cfg(
         tmp_path,

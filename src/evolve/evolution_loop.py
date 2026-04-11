@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import sys
 import traceback
 import uuid
 from datetime import datetime, timezone
@@ -51,6 +52,26 @@ from src.organisms.mutation import MutationOperator
 from src.organisms.organism import update_latest_lineage_entry
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _announce(message: str) -> None:
+    """Emit a progress line that is guaranteed to reach the user's terminal.
+
+    The creation pipeline runs inside worker threads spawned by Hydra-managed
+    entrypoints. Hydra reconfigures root logging at import time, which at least
+    historically swallowed per-module LOGGER output on stderr (see the comment
+    on `_record_creation_event`). We therefore write directly to stderr with an
+    explicit flush in addition to calling LOGGER.info, so that "starting
+    sampling generation N" style milestones surface live even when the logging
+    tree is uncooperative.
+    """
+
+    LOGGER.info(message)
+    try:
+        print(f"[evolve] {message}", file=sys.stderr, flush=True)
+    except Exception:  # noqa: BLE001
+        pass
+
 
 _MISSING = object()
 _ROUTE_WITHIN_ISLAND_CROSSOVER = "within_island_crossover"
@@ -686,6 +707,74 @@ class EvolutionLoop:
             return read_organism_meta(parent_dir)
         raise FileNotFoundError(f"Unable to resolve parent organism '{parent_id}' for inflight generation.")
 
+    def _assign_batch_routes(
+        self,
+        planned_organisms: list[PlannedOrganismCreation],
+    ) -> dict[str, str]:
+        """Return a balanced organism_id -> route_id assignment for a batch.
+
+        For small batches (e.g. the 2-organism seed on two islands) the
+        per-organism hash inside `BaseLlmGenerator.sample_route_id` has ~50%
+        chance of sending both organisms to the same route, which leaves one
+        Ollama server idle and doubles wallclock. Here we pre-compute a
+        deterministic, weight-proportional allocation and stride-interleave
+        the slots so that even if `max_proposal_jobs` is smaller than the
+        batch size, each wave still hits distinct routes when possible.
+
+        The allocation uses Hamilton (largest-remainder) apportionment:
+        `count_i = floor(n * w_i / sum(w))`, then the `n - sum(count_i)`
+        leftover slots go to the routes with the largest fractional
+        remainders, ties broken by route id (stable). The resulting slot
+        sequence is produced by iteratively picking the route with the
+        largest remaining quota, tie-broken by route id — this interleaves
+        slots so the first k plans hit k distinct routes whenever possible.
+        """
+
+        if not planned_organisms:
+            return {}
+
+        route_weights = self.generator.route_weights
+        positive_routes = sorted(
+            (route_id for route_id, weight in route_weights.items() if weight > 0)
+        )
+        if len(positive_routes) <= 1:
+            return {}
+
+        total_weight = sum(route_weights[route_id] for route_id in positive_routes)
+        if total_weight <= 0:
+            return {}
+
+        n = len(planned_organisms)
+        exact = [
+            (route_id, n * route_weights[route_id] / total_weight)
+            for route_id in positive_routes
+        ]
+        counts = {route_id: int(value) for route_id, value in exact}
+        leftover = n - sum(counts.values())
+        if leftover > 0:
+            remainders = sorted(
+                exact,
+                key=lambda pair: (-(pair[1] - int(pair[1])), pair[0]),
+            )
+            for idx in range(leftover):
+                counts[remainders[idx % len(remainders)][0]] += 1
+
+        slot_sequence: list[str] = []
+        remaining = dict(counts)
+        while sum(remaining.values()) > 0:
+            pick = min(
+                ((route_id, qty) for route_id, qty in remaining.items() if qty > 0),
+                key=lambda pair: (-pair[1], pair[0]),
+            )[0]
+            slot_sequence.append(pick)
+            remaining[pick] -= 1
+
+        ordered_plans = sorted(planned_organisms, key=lambda plan: plan.organism_id)
+        return {
+            plan.organism_id: slot_sequence[idx]
+            for idx, plan in enumerate(ordered_plans)
+        }
+
     def _plan_seed_population(self) -> list[PlannedOrganismCreation]:
         if self.seed_organisms_per_island <= 0:
             return []
@@ -1032,7 +1121,30 @@ class EvolutionLoop:
         state_kind: str,
     ) -> list[OrganismMeta]:
         if not planned_organisms:
+            _announce(
+                f"no organisms to create for state_kind={state_kind} (generation={self.generation})"
+            )
             return []
+
+        batch_route_assignments = self._assign_batch_routes(planned_organisms)
+        if batch_route_assignments:
+            self.generator.set_batch_route_assignments(batch_route_assignments)
+            route_counts: dict[str, int] = {}
+            for route_id in batch_route_assignments.values():
+                route_counts[route_id] = route_counts.get(route_id, 0) + 1
+            distribution = ", ".join(
+                f"{route_id}={count}" for route_id, count in sorted(route_counts.items())
+            )
+            _announce(
+                f"creating {len(planned_organisms)} organism(s) for state_kind={state_kind} "
+                f"(generation={self.generation}, concurrency={self.max_proposal_jobs}, "
+                f"route_distribution=[{distribution}])"
+            )
+        else:
+            _announce(
+                f"creating {len(planned_organisms)} organism(s) for state_kind={state_kind} "
+                f"(generation={self.generation}, concurrency={self.max_proposal_jobs})"
+            )
 
         persist_state = self._persist_inflight_generation if state_kind == "generation" else self._persist_inflight_seed
         persist_state(planned_organisms)
@@ -1054,6 +1166,10 @@ class EvolutionLoop:
                         f"generation={plan.generation})"
                     ),
                 )
+                _announce(
+                    f"creating organism {plan.organism_id} "
+                    f"(route={plan.route}, island={plan.island_id}, generation={plan.generation})"
+                )
                 try:
                     organism = await asyncio.to_thread(self._materialize_planned_organism, plan, active_by_id)
                 except Exception as exc:  # noqa: BLE001
@@ -1070,6 +1186,11 @@ class EvolutionLoop:
                         message=f"{type(exc).__name__}: {exc}",
                         include_traceback=True,
                     )
+                    _announce(
+                        f"organism {plan.organism_id} FAILED creation "
+                        f"(island={plan.island_id}, route={plan.route}): "
+                        f"{type(exc).__name__}: {exc}"
+                    )
                     plan.pipeline_state = "failed_creation"
                     plan.error_msg = str(exc)
                     self._write_planned_organism_stub(plan)
@@ -1079,6 +1200,10 @@ class EvolutionLoop:
                     plan,
                     event="completed",
                     message="creation stages finished",
+                )
+                _announce(
+                    f"organism {plan.organism_id} creation stages finished "
+                    f"(island={plan.island_id}, route={plan.route})"
                 )
 
                 plan.pipeline_state = "pending_simple_eval"
@@ -1146,6 +1271,7 @@ class EvolutionLoop:
                     await asyncio.sleep(0.01)
         finally:
             self.orchestrator.close()
+            self.generator.clear_batch_route_assignments()
 
         return list(created_offspring.values())
 
@@ -1308,6 +1434,12 @@ class EvolutionLoop:
         planned_offspring: list[PlannedOrganismCreation] | None = None,
     ) -> None:
         self.generation = generation
+        _announce(
+            f"starting sampling for generation {generation} "
+            f"(active_population={len(self.population)}, "
+            f"offspring_per_generation={self.offspring_per_generation}, "
+            f"max_proposal_jobs={self.max_proposal_jobs})"
+        )
         if planned_offspring is None:
             active_by_island = self._group_by_island(self.population)
             planned_offspring = self._plan_offspring_generation(active_by_island)
@@ -1343,6 +1475,11 @@ class EvolutionLoop:
 
         try:
             self.generation = 0
+            _announce(
+                "starting seed sampling for generation 0 "
+                f"(islands={len(self.islands)}, seed_per_island={self.seed_organisms_per_island}, "
+                f"max_proposal_jobs={self.max_proposal_jobs})"
+            )
             state = self._load_state()
             if state is not None:
                 if isinstance(state.get("inflight_generation"), dict):

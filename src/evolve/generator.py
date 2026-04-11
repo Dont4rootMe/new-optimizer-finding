@@ -3,11 +3,26 @@
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
 from omegaconf import DictConfig
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _announce(message: str) -> None:
+    """Mirror `evolution_loop._announce`: log + flushed stderr line.
+
+    Creation stages block on LLM inference for a long time. Without direct
+    stderr prints we go silent for many minutes, which looks like a hang.
+    """
+
+    LOGGER.info(message)
+    try:
+        print(f"[evolve] {message}", file=sys.stderr, flush=True)
+    except Exception:  # noqa: BLE001
+        pass
 
 from api_platforms import ApiPlatformRegistry, LlmRequest
 from src.evolve.llm_generator_base import BaseLlmGenerator
@@ -86,6 +101,9 @@ class CandidateGenerator(BaseLlmGenerator):
         """Run design and implementation stages and persist both LLM exchanges."""
 
         route_id = self.sample_route_id(organism_id=organism_id)
+        _announce(
+            f"organism {organism_id} -> route {route_id}: calling design stage (generation={generation})"
+        )
         llm_request_path = org_dir / "llm_request.json"
         llm_response_path = org_dir / "llm_response.json"
         design_response = self._call_llm_stage(
@@ -95,6 +113,11 @@ class CandidateGenerator(BaseLlmGenerator):
             design_user_prompt,
             organism_id=organism_id,
             generation=generation,
+        )
+        _announce(
+            f"organism {organism_id} design stage returned "
+            f"(route={route_id}, provider={design_response.provider}, "
+            f"model={design_response.provider_model_id})"
         )
         llm_request_payload = {
             "route_id": route_id,
@@ -140,6 +163,9 @@ class CandidateGenerator(BaseLlmGenerator):
         }
         write_json(llm_request_path, llm_request_payload)
 
+        _announce(
+            f"organism {organism_id} -> route {route_id}: calling implementation stage"
+        )
         implementation_response = self._call_llm_stage(
             route_id,
             "implementation",
@@ -148,6 +174,10 @@ class CandidateGenerator(BaseLlmGenerator):
             organism_id=organism_id,
             generation=generation,
             extra_metadata={"implementation_template": self.prompt_bundle.implementation_template},
+        )
+        _announce(
+            f"organism {organism_id} implementation stage returned "
+            f"(route={route_id})"
         )
         implementation_code = self._extract_python(implementation_response.text)
         llm_request_payload["implementation"] = {
