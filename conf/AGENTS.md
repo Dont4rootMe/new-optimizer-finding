@@ -5,7 +5,7 @@ This file applies to `conf/` and its subdirectories unless a deeper `AGENTS.md` 
 ## Purpose
 
 - `config_optimization_survey.yaml` is the canonical preset for optimizer-search runs.
-- task-specific top-level presets such as `config_circle_packing_shinka.yaml` live alongside it for canonical seed/evolve runtime and optional standalone validation overrides.
+- task-specific top-level presets such as `config_circle_packing_shinka.yaml` live alongside it for canonical seed/evolve runtime and optional standalone validation overrides via `mode=...`.
 - `evolver/optimization_survey.yaml` is the canonical organism-first schema for optimizer-search runs.
 - `experiments/<family>/*.yaml` are per-experiment runtime configs.
 - task-specific prompts live next to their experiment family configs.

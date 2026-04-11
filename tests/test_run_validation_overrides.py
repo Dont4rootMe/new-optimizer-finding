@@ -20,7 +20,7 @@ def _compose(overrides: list[str]):
 def test_run_validation_overrides_apply_only_in_run_mode() -> None:
     cfg_run = _compose(
         [
-            "+mode=run",
+            "mode=run",
             "+organism_dir=/tmp/test-organism",
             "experiments.cifar_convnet.run_validation.max_steps=123",
             "experiments.cifar_convnet.run_validation.target_quality=0.77",
@@ -36,7 +36,7 @@ def test_run_validation_overrides_apply_only_in_run_mode() -> None:
 
     cfg_stats = _compose(
         [
-            "+mode=stats",
+            "mode=stats",
             "experiments.cifar_convnet.run_validation.max_steps=123",
             "experiments.cifar_convnet.run_validation.target_quality=0.77",
         ]
@@ -51,7 +51,7 @@ def test_run_validation_overrides_apply_only_in_run_mode() -> None:
 
     cfg_smoke = _compose(
         [
-            "+mode=smoke",
+            "mode=smoke",
             "experiments.cifar_convnet.run_validation.max_steps=123",
         ]
     )

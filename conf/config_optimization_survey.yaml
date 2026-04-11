@@ -22,6 +22,7 @@ defaults:
 
 seed: 42
 deterministic: false
+mode: evolve
 device: cuda
 precision: bf16
 num_workers: 4

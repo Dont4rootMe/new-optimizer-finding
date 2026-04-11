@@ -71,7 +71,7 @@ def test_hydra_compose_config_and_experiments() -> None:
     assert "parent_sampling" not in cfg.evolver.operators.crossover
     assert "max_evaluation_jobs" not in cfg.evolver
     assert cfg.evolver.max_generations == 100
-    assert "mode" not in cfg
+    assert cfg.mode == "evolve"
     assert "organism_dir" not in cfg
     assert cfg.resources.evaluation.gpu_ranks == [0]
     assert cfg.resources.evaluation.cpu_parallel_jobs == 4
@@ -111,7 +111,7 @@ def test_optimization_survey_canonical_preset_accepts_standalone_validation_over
     with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
         cfg = compose(
             config_name="config_optimization_survey",
-            overrides=["+mode=run", "+organism_dir=/tmp/organism"],
+            overrides=["mode=run", "+organism_dir=/tmp/organism"],
         )
 
     assert cfg.mode == "run"
@@ -163,7 +163,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.resources.evaluation.cpu_parallel_jobs == 5
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
     assert cfg.evolver.max_generations == 150
-    assert "mode" not in cfg
+    assert cfg.mode == "evolve"
     assert "organism_dir" not in cfg
     assert cfg.evolver.creation.max_attempts_per_organism == 3
     assert cfg.evolver.creation.max_parallel_organisms == 5
@@ -194,7 +194,7 @@ def test_circle_packing_canonical_preset_accepts_standalone_validation_overrides
     with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
         cfg = compose(
             config_name="config_circle_packing_shinka",
-            overrides=["+mode=run", "+organism_dir=/tmp/organism"],
+            overrides=["mode=run", "+organism_dir=/tmp/organism"],
         )
 
     assert cfg.mode == "run"

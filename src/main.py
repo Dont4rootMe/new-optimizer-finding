@@ -16,15 +16,7 @@ def main(cfg: DictConfig) -> None:
     _ensure_console_logging()
     ensure_root_runtime_config(cfg, context="src.main")
 
-    if "mode" not in cfg:
-        raise ValueError(
-            "src.main requires explicit mode selection. "
-            "Use mode=evolve for canonical evolution, or add standalone validation overrides such as "
-            "+mode=run +organism_dir=/absolute/path/to/organism "
-            "(or +mode=smoke / +mode=stats)."
-        )
-
-    mode = str(cfg.mode)
+    mode = str(cfg.get("mode", "evolve"))
     if mode == "evolve":
         from src.evolve.run import run_evolution
 

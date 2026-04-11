@@ -45,7 +45,6 @@ def test_canonical_presets_no_longer_embed_validation_mode_surface() -> None:
         ROOT / "conf" / "config_circle_packing_shinka.yaml",
     ]:
         text = path.read_text(encoding="utf-8")
-        assert "\nmode:" not in text, str(path)
         assert "\norganism_dir:" not in text, str(path)
 
 

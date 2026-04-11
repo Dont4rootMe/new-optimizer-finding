@@ -59,19 +59,19 @@ pip install -e .[evolve]
 Smoke enabled experiments:
 
 ```bash
-python -m src.main --config-name config_optimization_survey +mode=smoke
+python -m src.main --config-name config_optimization_survey mode=smoke
 ```
 
 Collect baseline stats:
 
 ```bash
-python -m src.main --config-name config_optimization_survey +mode=stats
+python -m src.main --config-name config_optimization_survey mode=stats
 ```
 
 Run experiments against a concrete organism:
 
 ```bash
-python -m src.main --config-name config_optimization_survey +mode=run +organism_dir=/absolute/path/to/organism
+python -m src.main --config-name config_optimization_survey mode=run +organism_dir=/absolute/path/to/organism
 ```
 
 ## Evolution
@@ -108,7 +108,7 @@ The repository also ships [`experiments/circle_packing_shinka/`](/Users/artemon/
 Use the dedicated preset:
 
 ```bash
-python -m src.main --config-name config_circle_packing_shinka +mode=run +organism_dir=/absolute/path/to/organism
+python -m src.main --config-name config_circle_packing_shinka mode=run +organism_dir=/absolute/path/to/organism
 ./scripts/seed_population.sh --config-name config_circle_packing_shinka
 ./scripts/run_evolution.sh --config-name config_circle_packing_shinka
 ./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka

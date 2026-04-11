@@ -7,6 +7,7 @@ defaults:
 
 seed: 42
 deterministic: false
+mode: evolve
 device: cpu
 precision: fp32
 num_workers: 0
