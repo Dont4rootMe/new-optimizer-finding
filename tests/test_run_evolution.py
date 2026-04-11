@@ -31,6 +31,7 @@ def _write_fake_python(
     ).strip()
     ollama_lines = [
         "printf '%s\\n' \"API_PLATFORM_RUNTIME_ROOT=${API_PLATFORM_RUNTIME_ROOT:-/tmp/api_platform_runtime}\"",
+        "printf '%s\\n' \"OLLAMA_MODELS_DIR=${OLLAMA_MODELS_DIR:-/tmp/ollama_cache}\"",
     ]
     for route in ollama_routes or []:
         route_id, base_url, model = route[:3]
@@ -371,7 +372,7 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
     env["CURL_CALLS_FILE"] = str(curl_calls_path)
     env["OLLAMA_CALLS_FILE"] = str(ollama_calls_path)
     env["OLLAMA_STATE_DIR"] = str(tmp_path / "ollama_state")
-    env["OLLAMA_MODELS"] = str(tmp_path / "ollama_models")
+    env["OLLAMA_MODELS_DIR"] = str(tmp_path / "ollama_models")
     env["API_PLATFORM_RUNTIME_ROOT"] = str(runtime_root)
 
     completed = subprocess.run(

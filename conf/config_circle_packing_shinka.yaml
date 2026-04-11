@@ -25,6 +25,7 @@ paths:
   candidate_results_dirname: results
   population_root: ${oc.env:POP_ROOT,./populations}
   api_platform_runtime_root: ${oc.env:API_PLATFORM_RUNTIME_ROOT,./.api_platform_runtime}
+  ollama_cache_root: ${oc.env:OLLAMA_MODELS,./ollama_cache}
 
 evolver:
   llm:

@@ -14,6 +14,13 @@ from hydra import compose, initialize_config_dir
 from api_platforms._core.discovery import load_route_configs
 
 
+def _resolve_path(value: object, *, root_dir: Path) -> Path:
+    path = Path(str(value)).expanduser()
+    if not path.is_absolute():
+        path = root_dir / path
+    return path.resolve()
+
+
 def main() -> int:
     root_dir = Path(sys.argv[1]).resolve()
     cli_args = sys.argv[2:]
@@ -44,8 +51,13 @@ def main() -> int:
 
     with initialize_config_dir(config_dir=str(root_dir / "conf"), version_base=None):
         cfg = compose(config_name=config_name, overrides=overrides)
-    runtime_root = Path(str(cfg.paths.api_platform_runtime_root)).expanduser().resolve()
+    runtime_root = _resolve_path(cfg.paths.api_platform_runtime_root, root_dir=root_dir)
+    ollama_models_dir = _resolve_path(
+        getattr(cfg.paths, "ollama_cache_root", root_dir / "ollama_cache"),
+        root_dir=root_dir,
+    )
     print(f"API_PLATFORM_RUNTIME_ROOT={runtime_root}")
+    print(f"OLLAMA_MODELS_DIR={ollama_models_dir}")
     for route_id, route_cfg in sorted(load_route_configs(cfg).items()):
         if route_cfg.backend != "ollama":
             continue
@@ -104,25 +116,16 @@ _ollama_origin() {
 }
 
 _ollama_models_dir() {
+  local configured_dir="${1:-}"
+  if [[ -n "$configured_dir" ]]; then
+    printf '%s\n' "$configured_dir"
+    return
+  fi
   if [[ -n "${OLLAMA_MODELS:-}" ]]; then
     printf '%s\n' "${OLLAMA_MODELS}"
     return
   fi
-
-  case "$(uname -s)" in
-    Darwin)
-      printf '%s\n' "${HOME}/.ollama/models"
-      ;;
-    Linux)
-      printf '%s\n' "/usr/share/ollama/.ollama/models"
-      ;;
-    MINGW*|MSYS*|CYGWIN*)
-      printf '%s\n' "${USERPROFILE:-${HOME}}/.ollama/models"
-      ;;
-    *)
-      printf '%s\n' "${HOME}/.ollama/models"
-      ;;
-  esac
+  printf '%s\n' "${PWD}/ollama_cache"
 }
 
 _ollama_is_local() {
@@ -229,6 +232,7 @@ _start_local_ollama() {
   local base_url="$1"
   local runtime_root="$2"
   local gpu_rank="${3:-}"
+  local models_dir="${4:-}"
   local origin log_dir log_name stdout_log stderr_log
   local -a launch_env=()
 
@@ -238,10 +242,11 @@ _start_local_ollama() {
   fi
 
   origin="$(_ollama_origin "$base_url")"
-  launch_env=(env "OLLAMA_HOST=${origin}")
+  launch_env=(env "OLLAMA_HOST=${origin}" "OLLAMA_MODELS=${models_dir}")
   if [[ -n "$gpu_rank" ]]; then
     launch_env+=("CUDA_VISIBLE_DEVICES=${gpu_rank}")
   fi
+  mkdir -p "$models_dir"
   log_dir="${runtime_root}/ollama"
   mkdir -p "$log_dir"
   log_name="${origin//[:\/]/_}"
@@ -272,12 +277,13 @@ _ensure_ollama_server() {
   local base_url="$1"
   local runtime_root="$2"
   local gpu_rank="${3:-}"
+  local models_dir="${4:-}"
   if _ollama_healthcheck "$base_url"; then
     return 0
   fi
 
   if _ollama_is_local "$base_url"; then
-    _start_local_ollama "$base_url" "$runtime_root" "$gpu_rank" || return 1
+    _start_local_ollama "$base_url" "$runtime_root" "$gpu_rank" "$models_dir" || return 1
     return 0
   fi
 
@@ -288,12 +294,13 @@ _ensure_ollama_server() {
 _ensure_ollama_model() {
   local base_url="$1"
   local model="$2"
+  local models_dir="${3:-}"
   if _ollama_model_present "$base_url" "$model"; then
     return 0
   fi
 
   echo "Pulling Ollama model ${model} from ${base_url}."
-  echo "  local model store: $(_ollama_models_dir)"
+  echo "  local model store: $(_ollama_models_dir "$models_dir")"
   curl -fsS --no-buffer --max-time 0 \
     -H 'Content-Type: application/json' \
     -X POST \
@@ -306,11 +313,15 @@ ensure_ollama_runtime() {
   shift
 
   local runtime_root=""
+  local ollama_models_dir=""
   local -a ollama_routes=()
   while IFS= read -r line; do
     case "$line" in
       API_PLATFORM_RUNTIME_ROOT=*)
         runtime_root="${line#*=}"
+        ;;
+      OLLAMA_MODELS_DIR=*)
+        ollama_models_dir="${line#*=}"
         ;;
       OLLAMA_ROUTE=*)
         ollama_routes+=("${line#*=}")
@@ -329,6 +340,9 @@ ensure_ollama_runtime() {
 
   if [[ -z "$runtime_root" ]]; then
     runtime_root="${root_dir}/.api_platform_runtime"
+  fi
+  if [[ -z "$ollama_models_dir" ]]; then
+    ollama_models_dir="${root_dir}/ollama_cache"
   fi
 
   declare -A server_gpu_by_url=()
@@ -373,10 +387,10 @@ ensure_ollama_runtime() {
     base_url="$(_normalize_ollama_base_url "$base_url")"
     gpu_rank="${server_gpu_by_url[$base_url]-}"
     if [[ -z "${started_base_urls[$base_url]+x}" ]]; then
-      _ensure_ollama_server "$base_url" "$runtime_root" "$gpu_rank" || return 1
+      _ensure_ollama_server "$base_url" "$runtime_root" "$gpu_rank" "$ollama_models_dir" || return 1
       started_base_urls["$base_url"]=1
     fi
-    _ensure_ollama_model "$base_url" "$model" || {
+    _ensure_ollama_model "$base_url" "$model" "$ollama_models_dir" || {
       echo "Error: failed to prepare Ollama model ${model} for route ${route_id}." >&2
       return 1
     }

@@ -144,6 +144,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.phases.great_filter.enabled is False
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 5
+    assert cfg.paths.ollama_cache_root == "./ollama_cache"
     assert cfg.evolver.max_generations == 150
     assert cfg.evolver.max_proposal_jobs == 5
     assert cfg.evolver.islands.seed_organisms_per_island == 1

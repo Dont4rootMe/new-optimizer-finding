@@ -119,6 +119,7 @@ That preset isolates the two local Ollama routes by default:
 - `qwen3.5:27b` on `http://127.0.0.1:11435/api` with `gpu_ranks=[1]`
 
 The `scripts/*` wrappers auto-start one local Ollama service per distinct local `base_url`, pin it to the configured route GPU when `gpu_ranks` is set, and pull missing models before `seed` or `evolve` starts.
+By default, local Ollama weights are stored in `./ollama_cache` at the project root. Override that with `paths.ollama_cache_root=/absolute/path` or `OLLAMA_MODELS=/absolute/path`.
 
 Its organism contract is:
 
