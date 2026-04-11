@@ -50,10 +50,5 @@ def test_canonical_presets_no_longer_embed_validation_mode_surface() -> None:
 
 
 def test_validation_presets_keep_standalone_organism_surface() -> None:
-    for path in [
-        ROOT / "conf" / "config_optimization_survey_validate.yaml",
-        ROOT / "conf" / "config_circle_packing_shinka_validate.yaml",
-    ]:
-        text = path.read_text(encoding="utf-8")
-        assert "\nmode: run" in text, str(path)
-        assert "\norganism_dir:" in text, str(path)
+    assert not (ROOT / "conf" / "config_optimization_survey_validate.yaml").exists()
+    assert not (ROOT / "conf" / "config_circle_packing_shinka_validate.yaml").exists()

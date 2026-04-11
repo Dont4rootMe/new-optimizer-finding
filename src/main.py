@@ -18,8 +18,10 @@ def main(cfg: DictConfig) -> None:
 
     if "mode" not in cfg:
         raise ValueError(
-            "src.main requires explicit mode=evolve or a standalone validation preset "
-            "(for example: config_optimization_survey_validate, config_circle_packing_shinka_validate)."
+            "src.main requires explicit mode selection. "
+            "Use mode=evolve for canonical evolution, or add standalone validation overrides such as "
+            "+mode=run +organism_dir=/absolute/path/to/organism "
+            "(or +mode=smoke / +mode=stats)."
         )
 
     mode = str(cfg.mode)

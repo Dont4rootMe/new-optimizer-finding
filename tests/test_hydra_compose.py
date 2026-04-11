@@ -106,13 +106,16 @@ def test_hydra_compose_config_and_experiments() -> None:
     assert cfg.evolver.phases.great_filter.timeout_sec_per_eval == 7200
 
 
-def test_optimization_survey_validation_preset_composes() -> None:
+def test_optimization_survey_canonical_preset_accepts_standalone_validation_overrides() -> None:
     conf_dir = ROOT / "conf"
     with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
-        cfg = compose(config_name="config_optimization_survey_validate")
+        cfg = compose(
+            config_name="config_optimization_survey",
+            overrides=["+mode=run", "+organism_dir=/tmp/organism"],
+        )
 
     assert cfg.mode == "run"
-    assert cfg.organism_dir is None
+    assert cfg.organism_dir == "/tmp/organism"
     assert cfg.evolver.creation.max_attempts_per_organism == 3
     assert cfg.evolver.creation.max_parallel_organisms == 4
 
@@ -186,12 +189,15 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert gemma_route.gpu_ranks == [0]
 
 
-def test_circle_packing_validation_preset_composes() -> None:
+def test_circle_packing_canonical_preset_accepts_standalone_validation_overrides() -> None:
     conf_dir = ROOT / "conf"
     with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
-        cfg = compose(config_name="config_circle_packing_shinka_validate")
+        cfg = compose(
+            config_name="config_circle_packing_shinka",
+            overrides=["+mode=run", "+organism_dir=/tmp/organism"],
+        )
 
     assert cfg.mode == "run"
-    assert cfg.organism_dir is None
+    assert cfg.organism_dir == "/tmp/organism"
     assert cfg.evolver.creation.max_attempts_per_organism == 3
     assert cfg.evolver.creation.max_parallel_organisms == 5
