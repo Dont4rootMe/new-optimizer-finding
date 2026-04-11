@@ -486,6 +486,59 @@ def test_kill_ollama_shell_wrapper_stops_running_local_server(tmp_path: Path) ->
     assert "host=127.0.0.1:12434 gpu=0 | stopped" in ollama_calls
 
 
+def test_kill_ollama_shell_wrapper_stops_stale_runtime_server_from_old_port(tmp_path: Path) -> None:
+    script = ROOT / "scripts" / "kill_ollama.sh"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    calls_path = tmp_path / "python_calls.log"
+    ollama_calls_path = tmp_path / "ollama_calls.log"
+    runtime_root = tmp_path / "runtime"
+
+    fake_python = fake_bin / "python"
+    _write_fake_python(
+        fake_python,
+        ollama_routes=[
+            ("ollama_gemma4_26b", "http://127.0.0.1:12434/api", "gemma4:26b", "0"),
+        ],
+    )
+    _write_fake_local_ollama_commands(fake_bin)
+
+    state_dir = tmp_path / "ollama_state"
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["PYTHON_CALLS_FILE"] = str(calls_path)
+    env["OLLAMA_CALLS_FILE"] = str(ollama_calls_path)
+    env["OLLAMA_STATE_DIR"] = str(state_dir)
+    env["OLLAMA_MODELS_DIR"] = str(tmp_path / "ollama_models")
+    env["API_PLATFORM_RUNTIME_ROOT"] = str(runtime_root)
+
+    serve_proc = subprocess.Popen(
+        [str(fake_bin / "ollama"), "serve"],
+        cwd=str(ROOT),
+        env={**env, "OLLAMA_HOST": "127.0.0.1:11434", "CUDA_VISIBLE_DEVICES": "0"},
+    )
+    pid_dir = runtime_root / "ollama"
+    pid_dir.mkdir(parents=True, exist_ok=True)
+    stale_pid_file = pid_dir / "serve.127.0.0.1_11434.pid"
+    stale_pid_file.write_text(f"{serve_proc.pid}\n", encoding="utf-8")
+
+    completed = subprocess.run(
+        [str(script), "--config-name", "config_circle_packing_shinka"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        env=env,
+    )
+
+    assert completed.returncode == 0
+    serve_proc.wait(timeout=5)
+    assert not stale_pid_file.exists()
+    ollama_calls = ollama_calls_path.read_text(encoding="utf-8")
+    assert "host=127.0.0.1:11434 gpu=0 | serve" in ollama_calls
+    assert "host=127.0.0.1:11434 gpu=0 | stopped" in ollama_calls
+
+
 def test_seed_run_entrypoint_requires_config_name() -> None:
     completed = subprocess.run(
         [sys.executable, "-m", "src.evolve.seed_run"],

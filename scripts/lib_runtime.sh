@@ -288,29 +288,125 @@ for raw_line in sys.stdin:
 ' "$model"
 }
 
-_kill_pid_gracefully() {
+_pid_exists() {
   local pid="$1"
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" >/dev/null 2>&1
+}
+
+_child_pids() {
+  local parent_pid="$1"
+
+  if command -v pgrep >/dev/null 2>&1; then
+    pgrep -P "$parent_pid" 2>/dev/null | sort -u
+    return 0
+  fi
+
+  if command -v ps >/dev/null 2>&1; then
+    ps -eo pid=,ppid= 2>/dev/null | awk -v parent="$parent_pid" '$2 == parent {print $1}'
+    return 0
+  fi
+
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    python - "$parent_pid" <<'PY'
+from __future__ import annotations
+
+import os
+import sys
+
+parent_pid = sys.argv[1]
+for pid in os.listdir("/proc"):
+    if not pid.isdigit():
+        continue
+    status_path = f"/proc/{pid}/status"
+    try:
+        with open(status_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("PPid:") and line.split()[1] == parent_pid:
+                    print(pid)
+                    break
+    except OSError:
+        continue
+PY
+  fi
+}
+
+_pid_descendants() {
+  local root_pid="$1"
+  local current_pid child_pid
+  local -a queue=("$root_pid")
+  declare -A seen=()
+
+  while [[ "${#queue[@]}" -gt 0 ]]; do
+    current_pid="${queue[0]}"
+    queue=("${queue[@]:1}")
+    while IFS= read -r child_pid; do
+      [[ -n "$child_pid" ]] || continue
+      if [[ -n "${seen[$child_pid]+x}" ]]; then
+        continue
+      fi
+      seen["$child_pid"]=1
+      printf '%s\n' "$child_pid"
+      queue+=("$child_pid")
+    done < <(_child_pids "$current_pid")
+  done
+}
+
+_kill_pid_tree_gracefully() {
+  local root_pid="$1"
   local label="$2"
+  local target_pid
+  local -a tree_pids=()
+  declare -A seen=()
 
-  if [[ -z "$pid" ]]; then
+  if ! _pid_exists "$root_pid"; then
     return 0
   fi
-  if ! kill -0 "$pid" >/dev/null 2>&1; then
+
+  tree_pids+=("$root_pid")
+  while IFS= read -r target_pid; do
+    [[ -n "$target_pid" ]] || continue
+    tree_pids+=("$target_pid")
+  done < <(_pid_descendants "$root_pid")
+
+  local deduped_pid
+  local -a kill_targets=()
+  for deduped_pid in "${tree_pids[@]}"; do
+    [[ -n "$deduped_pid" ]] || continue
+    if [[ "$deduped_pid" == "$$" || -n "${seen[$deduped_pid]+x}" ]]; then
+      continue
+    fi
+    seen["$deduped_pid"]=1
+    kill_targets+=("$deduped_pid")
+  done
+
+  if [[ "${#kill_targets[@]}" -eq 0 ]]; then
     return 0
   fi
 
-  echo "Stopping Ollama server ${label} (pid=${pid})."
-  kill "$pid" >/dev/null 2>&1 || true
+  echo "Stopping Ollama server ${label} (pid=${root_pid})."
+  for target_pid in "${kill_targets[@]}"; do
+    kill "$target_pid" >/dev/null 2>&1 || true
+  done
 
-  local attempt
+  local attempt all_stopped
   for attempt in $(seq 1 40); do
-    if ! kill -0 "$pid" >/dev/null 2>&1; then
+    all_stopped=1
+    for target_pid in "${kill_targets[@]}"; do
+      if _pid_exists "$target_pid"; then
+        all_stopped=0
+        break
+      fi
+    done
+    if [[ "$all_stopped" -eq 1 ]]; then
       return 0
     fi
     sleep 0.1
   done
 
-  kill -9 "$pid" >/dev/null 2>&1 || true
+  for target_pid in "${kill_targets[@]}"; do
+    kill -9 "$target_pid" >/dev/null 2>&1 || true
+  done
 }
 
 _pids_listening_on_port() {
@@ -388,6 +484,59 @@ PY
   fi
 }
 
+_pids_opening_under_path() {
+  local target_path="$1"
+
+  if [[ ! -d "$target_path" ]]; then
+    return 0
+  fi
+
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -t +D "$target_path" 2>/dev/null | sort -u
+    return 0
+  fi
+
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -m "$target_path" 2>/dev/null | tr ' ' '\n' | sed '/^$/d' | sort -u
+    return 0
+  fi
+
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    python - "$target_path" <<'PY'
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+target_path = Path(sys.argv[1]).resolve()
+seen: set[str] = set()
+
+for pid in os.listdir("/proc"):
+    if not pid.isdigit():
+        continue
+    fd_dir = Path("/proc") / pid / "fd"
+    try:
+        fd_names = list(fd_dir.iterdir())
+    except OSError:
+        continue
+    for fd_path in fd_names:
+        try:
+            link_target = fd_path.resolve()
+        except OSError:
+            continue
+        try:
+            link_target.relative_to(target_path)
+        except ValueError:
+            continue
+        if pid not in seen:
+            print(pid)
+            seen.add(pid)
+        break
+PY
+  fi
+}
+
 _unique_local_ollama_base_urls() {
   declare -A seen=()
   local route route_id base_url model gpu_ranks_csv
@@ -410,15 +559,29 @@ _cleanup_loaded_ollama_servers() {
     return 0
   fi
 
-  local base_url pid_file pid port
+  local base_url pid_file pid port log_dir
   declare -A seen_pids=()
+  log_dir="${OLLAMA_RUNTIME_ROOT}/ollama"
+
+  if [[ -d "$log_dir" ]]; then
+    while IFS= read -r pid_file; do
+      [[ -n "$pid_file" ]] || continue
+      pid="$(tr -d '[:space:]' < "$pid_file")"
+      if [[ -n "$pid" && -z "${seen_pids[$pid]+x}" ]]; then
+        _kill_pid_tree_gracefully "$pid" "managed runtime"
+        seen_pids["$pid"]=1
+      fi
+      rm -f "$pid_file"
+    done < <(find "$log_dir" -maxdepth 1 -type f -name 'serve.*.pid' | sort)
+  fi
+
   while IFS= read -r base_url; do
     [[ -n "$base_url" ]] || continue
     pid_file="$(_ollama_pid_file "$OLLAMA_RUNTIME_ROOT" "$base_url")"
     if [[ -f "$pid_file" ]]; then
       pid="$(tr -d '[:space:]' < "$pid_file")"
       if [[ -n "$pid" && -z "${seen_pids[$pid]+x}" ]]; then
-        _kill_pid_gracefully "$pid" "$base_url"
+        _kill_pid_tree_gracefully "$pid" "$base_url"
         seen_pids["$pid"]=1
       fi
       rm -f "$pid_file"
@@ -427,13 +590,45 @@ _cleanup_loaded_ollama_servers() {
     port="$(_ollama_port "$base_url")"
     while IFS= read -r pid; do
       [[ -n "$pid" ]] || continue
+      if [[ "$pid" == "$$" ]]; then
+        continue
+      fi
       if [[ -n "${seen_pids[$pid]+x}" ]]; then
         continue
       fi
-      _kill_pid_gracefully "$pid" "$base_url"
+      _kill_pid_tree_gracefully "$pid" "$base_url"
       seen_pids["$pid"]=1
     done < <(_pids_listening_on_port "$port")
   done < <(_unique_local_ollama_base_urls)
+
+  if [[ -d "$log_dir" ]]; then
+    while IFS= read -r pid; do
+      [[ -n "$pid" ]] || continue
+      if [[ "$pid" == "$$" || -n "${seen_pids[$pid]+x}" ]]; then
+        continue
+      fi
+      _kill_pid_tree_gracefully "$pid" "runtime files in ${log_dir}"
+      seen_pids["$pid"]=1
+    done < <(_pids_opening_under_path "$log_dir")
+
+    local attempt lingering_count
+    for attempt in $(seq 1 20); do
+      lingering_count=0
+      while IFS= read -r pid; do
+        [[ -n "$pid" ]] || continue
+        if [[ "$pid" == "$$" ]]; then
+          continue
+        fi
+        lingering_count=$((lingering_count + 1))
+      done < <(_pids_opening_under_path "$log_dir")
+      if [[ "$lingering_count" -eq 0 ]]; then
+        break
+      fi
+      sleep 0.1
+    done
+
+    find "$log_dir" -maxdepth 1 -type f -name '.nfs*' -exec rm -f {} + >/dev/null 2>&1 || true
+  fi
 }
 
 _cleanup_ollama_on_exit() {
