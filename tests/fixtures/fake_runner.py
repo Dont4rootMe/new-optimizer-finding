@@ -28,3 +28,18 @@ class FakeExperimentEvaluator:
             "converged": True,
             "error_msg": None,
         }
+
+
+class AlwaysFailExperimentEvaluator:
+    """Return a deterministic failed report for seed/eval failure tests."""
+
+    def __init__(self, **_: Any) -> None:
+        pass
+
+    def evaluate_organism(self, organism_dir: str | None, cfg) -> dict[str, Any]:
+        del organism_dir, cfg
+        return {
+            "status": "failed",
+            "score": None,
+            "error_msg": "intentional evaluator failure",
+        }

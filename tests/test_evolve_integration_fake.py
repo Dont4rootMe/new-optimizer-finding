@@ -6,6 +6,7 @@ import asyncio
 import json
 from pathlib import Path
 
+import pytest
 from omegaconf import OmegaConf
 
 from src.evolve.evolution_loop import EvolutionLoop
@@ -200,6 +201,21 @@ def test_seed_population_writes_generation_zero_state(tmp_path: Path) -> None:
     assert state["current_generation"] == 0
     assert state["inflight_seed"] is None
     assert len(state["active_organisms"]) == 2
+
+
+def test_seed_population_raises_when_all_simple_evals_fail(tmp_path: Path) -> None:
+    cfg = _canonical_cfg(tmp_path, max_generations=1, resume=False)
+    cfg.experiments.simple_a._target_ = "tests.fixtures.fake_runner.AlwaysFailExperimentEvaluator"
+
+    with pytest.raises(RuntimeError, match="0 active organisms after simple evaluation"):
+        asyncio.run(EvolutionLoop(cfg).seed_population())
+
+    pop_root = Path(str(cfg.paths.population_root))
+    state = read_json(pop_root / "population_state.json")
+    assert state["active_organisms"] == []
+    assert state["inflight_seed"] is not None
+    assert state["inflight_seed"]["completed"] is True
+    assert state["inflight_seed"]["failed"] is True
 
 
 def test_seed_population_resumes_inflight_seed_plan(tmp_path: Path) -> None:

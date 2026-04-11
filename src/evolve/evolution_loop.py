@@ -1053,6 +1053,112 @@ class EvolutionLoop:
     def _simple_summary_status_to_pipeline_state(self, summary_status: str) -> str:
         return "simple_complete" if summary_status in {"ok", "partial"} else "failed_simple_eval"
 
+    def _summary_error_excerpt(self, summary: Any) -> str | None:
+        messages: list[str] = []
+        per_experiment = getattr(summary, "per_experiment", {})
+        if not isinstance(per_experiment, dict):
+            return None
+        for exp_name, payload in per_experiment.items():
+            if not isinstance(payload, dict):
+                continue
+            status = str(payload.get("status", "")).strip()
+            error_msg = payload.get("error_msg")
+            raw_report = payload.get("raw_report")
+            if not error_msg and isinstance(raw_report, dict):
+                error_msg = raw_report.get("error_msg")
+            if status == "ok" and not error_msg:
+                continue
+            detail = str(error_msg).strip() if error_msg else status or "unknown failure"
+            messages.append(f"{exp_name}: {detail}")
+        if not messages:
+            return None
+        return "; ".join(messages[:2])
+
+    def _announce_phase_summary(
+        self,
+        organism_id: str,
+        summary: Any,
+    ) -> None:
+        error_excerpt = self._summary_error_excerpt(summary)
+        if getattr(summary, "status", "") in {"ok", "partial"}:
+            _announce(
+                f"organism {organism_id} {summary.phase} eval completed "
+                f"(status={summary.status}, score={summary.aggregate_score})"
+            )
+            return
+        message = (
+            f"organism {organism_id} {summary.phase} eval FAILED "
+            f"(status={summary.status}, score={summary.aggregate_score})"
+        )
+        if error_excerpt:
+            message += f": {error_excerpt}"
+        _announce(message)
+
+    def _planned_phase_error_excerpt(self, phase_plan: PlannedPhaseEvaluation | None) -> str | None:
+        if phase_plan is None:
+            return None
+        messages: list[str] = []
+        for exp_name, task_state in phase_plan.task_states.items():
+            if not isinstance(task_state, dict):
+                continue
+            status = str(task_state.get("status", "")).strip()
+            error_msg = task_state.get("error_msg")
+            result_path = str(task_state.get("result_path", "")).strip()
+            if not error_msg and result_path and Path(result_path).exists():
+                try:
+                    payload = read_json(result_path)
+                except Exception:  # noqa: BLE001
+                    payload = None
+                if isinstance(payload, dict):
+                    error_msg = payload.get("error_msg")
+                    if not status:
+                        status = str(payload.get("status", "")).strip()
+            if status == "ok" and not error_msg:
+                continue
+            if not status and not error_msg:
+                continue
+            detail = str(error_msg).strip() if error_msg else status or "unknown failure"
+            messages.append(f"{exp_name}: {detail}")
+        if not messages:
+            return None
+        return "; ".join(messages[:2])
+
+    def _seed_failure_message(
+        self,
+        planned_organisms: list[PlannedOrganismCreation],
+        newborns: list[OrganismMeta],
+    ) -> str:
+        pipeline_counts: dict[str, int] = {}
+        for plan in planned_organisms:
+            pipeline_state = str(plan.pipeline_state or "unknown")
+            pipeline_counts[pipeline_state] = pipeline_counts.get(pipeline_state, 0) + 1
+
+        counts_text = ", ".join(
+            f"{state}={count}" for state, count in sorted(pipeline_counts.items())
+        )
+        message = (
+            "Seed population produced 0 active organisms after simple evaluation. "
+            f"planned={len(planned_organisms)}, materialized={len(newborns)}, "
+            f"pipeline_states=[{counts_text}]"
+        )
+
+        examples: list[str] = []
+        for plan in planned_organisms:
+            if plan.pipeline_state == "failed_creation":
+                detail = str(plan.error_msg).strip() if plan.error_msg else "unknown creation error"
+                examples.append(f"{plan.organism_id} creation failed: {detail}")
+            elif plan.pipeline_state == "failed_simple_eval":
+                detail = self._planned_phase_error_excerpt(plan.planned_phase_evaluations.get("simple"))
+                if not detail:
+                    detail = "see organism logs/results"
+                examples.append(f"{plan.organism_id} simple eval failed: {detail}")
+            if len(examples) >= 3:
+                break
+
+        if examples:
+            message += " Example failures: " + " | ".join(examples)
+        return message
+
     def _submit_or_resume_simple_evaluation(
         self,
         plan: PlannedOrganismCreation,
@@ -1070,6 +1176,10 @@ class EvolutionLoop:
             phase: phase_payload.to_dict() for phase, phase_payload in plan.planned_phase_evaluations.items()
         }
         write_organism_meta(organism)
+        _announce(
+            f"organism {plan.organism_id} queued simple eval "
+            f"(experiments={','.join(phase_plan.selected_experiments)})"
+        )
         return self.orchestrator.submit_planned_request(
             self._phase_request_from_plan(plan, phase="simple"),
             phase_plan,
@@ -1219,6 +1329,7 @@ class EvolutionLoop:
                 immediate_summary = self._submit_or_resume_simple_evaluation(plan, organism)
                 persist_state(planned_organisms)
                 if immediate_summary is not None:
+                    self._announce_phase_summary(organism.organism_id, immediate_summary)
                     self._apply_completed_summary(plan, organism, immediate_summary)
                     persist_state(planned_organisms)
 
@@ -1242,6 +1353,7 @@ class EvolutionLoop:
                         )
                         persist_state(planned_organisms)
                         if immediate_summary is not None:
+                            self._announce_phase_summary(organism_id, immediate_summary)
                             self._apply_completed_summary(plans_by_id[organism_id], organism, immediate_summary)
                             persist_state(planned_organisms)
 
@@ -1258,6 +1370,7 @@ class EvolutionLoop:
                     task_state["error_msg"] = payload.get("error_msg", result.error_msg)
                     if summary is not None:
                         organism = created_offspring[result.organism_id]
+                        self._announce_phase_summary(result.organism_id, summary)
                         self._apply_completed_summary(plan, organism, summary)
                     persist_state(planned_organisms)
 
@@ -1496,6 +1609,11 @@ class EvolutionLoop:
                 self.max_organisms_per_island,
                 score_field="simple_score",
             )
+            if planned_organisms and not self.population:
+                failure_message = self._seed_failure_message(planned_organisms, newborns)
+                _announce(failure_message)
+                self._persist_inflight_seed(planned_organisms)
+                raise RuntimeError(failure_message)
             self._mark_eliminated(newborns, self.population)
             for organism in self.population:
                 organism.current_generation_active = 0
