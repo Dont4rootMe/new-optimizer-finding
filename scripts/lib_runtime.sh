@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+OLLAMA_RUNTIME_ROOT=""
+OLLAMA_MODELS_DIR=""
+OLLAMA_REQUIREMENTS_LOADED=0
+OLLAMA_CLEANUP_ARMED=0
+OLLAMA_ROUTE_SPECS=()
+
 resolve_ollama_requirements() {
   local root_dir="$1"
   shift
@@ -71,6 +77,36 @@ raise SystemExit(main())
 PY
 }
 
+_load_ollama_runtime_requirements() {
+  local root_dir="$1"
+  shift
+
+  OLLAMA_RUNTIME_ROOT=""
+  OLLAMA_MODELS_DIR=""
+  OLLAMA_ROUTE_SPECS=()
+  while IFS= read -r line; do
+    case "$line" in
+      API_PLATFORM_RUNTIME_ROOT=*)
+        OLLAMA_RUNTIME_ROOT="${line#*=}"
+        ;;
+      OLLAMA_MODELS_DIR=*)
+        OLLAMA_MODELS_DIR="${line#*=}"
+        ;;
+      OLLAMA_ROUTE=*)
+        OLLAMA_ROUTE_SPECS+=("${line#*=}")
+        ;;
+    esac
+  done < <(resolve_ollama_requirements "$root_dir" "$@")
+
+  if [[ -z "$OLLAMA_RUNTIME_ROOT" ]]; then
+    OLLAMA_RUNTIME_ROOT="${root_dir}/.api_platform_runtime"
+  fi
+  if [[ -z "$OLLAMA_MODELS_DIR" ]]; then
+    OLLAMA_MODELS_DIR="${root_dir}/ollama_cache"
+  fi
+  OLLAMA_REQUIREMENTS_LOADED=1
+}
+
 _normalize_ollama_base_url() {
   local base_url="${1:-http://127.0.0.1:11434/api}"
   base_url="${base_url%/}"
@@ -126,6 +162,30 @@ _ollama_models_dir() {
     return
   fi
   printf '%s\n' "${PWD}/ollama_cache"
+}
+
+_ollama_log_name() {
+  local origin
+  origin="$(_ollama_origin "$1")"
+  printf '%s\n' "${origin//[:\/]/_}"
+}
+
+_ollama_pid_file() {
+  local runtime_root="$1"
+  local base_url="$2"
+  printf '%s\n' "${runtime_root}/ollama/serve.$(_ollama_log_name "$base_url").pid"
+}
+
+_ollama_port() {
+  local base_url="$1"
+  local origin port
+  origin="$(_ollama_origin "$base_url")"
+  if [[ "$origin" == *:* ]]; then
+    port="${origin##*:}"
+    printf '%s\n' "$port"
+    return
+  fi
+  printf '%s\n' "80"
 }
 
 _ollama_is_local() {
@@ -228,12 +288,190 @@ for raw_line in sys.stdin:
 ' "$model"
 }
 
+_kill_pid_gracefully() {
+  local pid="$1"
+  local label="$2"
+
+  if [[ -z "$pid" ]]; then
+    return 0
+  fi
+  if ! kill -0 "$pid" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "Stopping Ollama server ${label} (pid=${pid})."
+  kill "$pid" >/dev/null 2>&1 || true
+
+  local attempt
+  for attempt in $(seq 1 40); do
+    if ! kill -0 "$pid" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  kill -9 "$pid" >/dev/null 2>&1 || true
+}
+
+_pids_listening_on_port() {
+  local port="$1"
+
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null | sort -u
+    return 0
+  fi
+
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -n tcp "${port}" 2>/dev/null | tr ' ' '\n' | sed '/^$/d' | sort -u
+    return 0
+  fi
+
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    python - "$port" <<'PY'
+from __future__ import annotations
+
+import os
+import sys
+
+target_port = int(sys.argv[1])
+socket_inodes: set[str] = set()
+
+for net_path in ("/proc/net/tcp", "/proc/net/tcp6"):
+    try:
+        with open(net_path, "r", encoding="utf-8") as handle:
+            lines = handle.readlines()[1:]
+    except OSError:
+        continue
+    for line in lines:
+        fields = line.split()
+        if len(fields) < 10:
+            continue
+        local_address = fields[1]
+        state = fields[3]
+        inode = fields[9]
+        if state != "0A":
+            continue
+        try:
+            port_hex = local_address.split(":")[1]
+            port_value = int(port_hex, 16)
+        except Exception:
+            continue
+        if port_value == target_port:
+            socket_inodes.add(inode)
+
+if not socket_inodes:
+    raise SystemExit(0)
+
+seen: set[str] = set()
+for pid in os.listdir("/proc"):
+    if not pid.isdigit():
+        continue
+    fd_dir = f"/proc/{pid}/fd"
+    try:
+        fd_names = os.listdir(fd_dir)
+    except OSError:
+        continue
+    for fd_name in fd_names:
+        fd_path = os.path.join(fd_dir, fd_name)
+        try:
+            link_target = os.readlink(fd_path)
+        except OSError:
+            continue
+        if not link_target.startswith("socket:["):
+            continue
+        inode = link_target[8:-1]
+        if inode in socket_inodes and pid not in seen:
+            print(pid)
+            seen.add(pid)
+            break
+PY
+  fi
+}
+
+_unique_local_ollama_base_urls() {
+  declare -A seen=()
+  local route route_id base_url model gpu_ranks_csv
+  for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
+    IFS='|' read -r route_id base_url model gpu_ranks_csv <<<"$route"
+    base_url="$(_normalize_ollama_base_url "$base_url")"
+    if ! _ollama_is_local "$base_url"; then
+      continue
+    fi
+    if [[ -n "${seen[$base_url]+x}" ]]; then
+      continue
+    fi
+    seen["$base_url"]=1
+    printf '%s\n' "$base_url"
+  done
+}
+
+_cleanup_loaded_ollama_servers() {
+  if [[ "$OLLAMA_REQUIREMENTS_LOADED" -ne 1 ]]; then
+    return 0
+  fi
+
+  local base_url pid_file pid port
+  declare -A seen_pids=()
+  while IFS= read -r base_url; do
+    [[ -n "$base_url" ]] || continue
+    pid_file="$(_ollama_pid_file "$OLLAMA_RUNTIME_ROOT" "$base_url")"
+    if [[ -f "$pid_file" ]]; then
+      pid="$(tr -d '[:space:]' < "$pid_file")"
+      if [[ -n "$pid" && -z "${seen_pids[$pid]+x}" ]]; then
+        _kill_pid_gracefully "$pid" "$base_url"
+        seen_pids["$pid"]=1
+      fi
+      rm -f "$pid_file"
+    fi
+
+    port="$(_ollama_port "$base_url")"
+    while IFS= read -r pid; do
+      [[ -n "$pid" ]] || continue
+      if [[ -n "${seen_pids[$pid]+x}" ]]; then
+        continue
+      fi
+      _kill_pid_gracefully "$pid" "$base_url"
+      seen_pids["$pid"]=1
+    done < <(_pids_listening_on_port "$port")
+  done < <(_unique_local_ollama_base_urls)
+}
+
+_cleanup_ollama_on_exit() {
+  local status=$?
+  trap - EXIT INT TERM
+  _cleanup_loaded_ollama_servers || true
+  if [[ "$status" -ne 0 ]]; then
+    exit "$status"
+  fi
+}
+
+arm_ollama_cleanup_trap() {
+  local root_dir="$1"
+  shift
+  _load_ollama_runtime_requirements "$root_dir" "$@"
+  if [[ "${#OLLAMA_ROUTE_SPECS[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ "$OLLAMA_CLEANUP_ARMED" -eq 1 ]]; then
+    return 0
+  fi
+  trap '_cleanup_ollama_on_exit' EXIT INT TERM
+  OLLAMA_CLEANUP_ARMED=1
+}
+
+kill_ollama_runtime() {
+  local root_dir="$1"
+  shift
+  _load_ollama_runtime_requirements "$root_dir" "$@"
+  _cleanup_loaded_ollama_servers
+}
+
 _start_local_ollama() {
   local base_url="$1"
   local runtime_root="$2"
   local gpu_rank="${3:-}"
   local models_dir="${4:-}"
-  local origin log_dir log_name stdout_log stderr_log
+  local origin log_dir log_name stdout_log stderr_log pid_file
   local -a launch_env=()
 
   if ! command -v ollama >/dev/null 2>&1; then
@@ -252,6 +490,7 @@ _start_local_ollama() {
   log_name="${origin//[:\/]/_}"
   stdout_log="${log_dir}/serve.${log_name}.stdout.log"
   stderr_log="${log_dir}/serve.${log_name}.stderr.log"
+  pid_file="${log_dir}/serve.${log_name}.pid"
 
   if [[ -n "$gpu_rank" ]]; then
     echo "Starting local Ollama server for ${base_url} on gpu:${gpu_rank}."
@@ -259,6 +498,7 @@ _start_local_ollama() {
     echo "Starting local Ollama server for ${base_url}."
   fi
   nohup "${launch_env[@]}" ollama serve >"${stdout_log}" 2>"${stderr_log}" </dev/null &
+  printf '%s\n' "$!" > "${pid_file}"
 
   local attempt
   for attempt in $(seq 1 60); do
@@ -312,24 +552,9 @@ ensure_ollama_runtime() {
   local root_dir="$1"
   shift
 
-  local runtime_root=""
-  local ollama_models_dir=""
-  local -a ollama_routes=()
-  while IFS= read -r line; do
-    case "$line" in
-      API_PLATFORM_RUNTIME_ROOT=*)
-        runtime_root="${line#*=}"
-        ;;
-      OLLAMA_MODELS_DIR=*)
-        ollama_models_dir="${line#*=}"
-        ;;
-      OLLAMA_ROUTE=*)
-        ollama_routes+=("${line#*=}")
-        ;;
-    esac
-  done < <(resolve_ollama_requirements "$root_dir" "$@")
+  _load_ollama_runtime_requirements "$root_dir" "$@"
 
-  if [[ "${#ollama_routes[@]}" -eq 0 ]]; then
+  if [[ "${#OLLAMA_ROUTE_SPECS[@]}" -eq 0 ]]; then
     return 0
   fi
 
@@ -338,17 +563,10 @@ ensure_ollama_runtime() {
     return 1
   fi
 
-  if [[ -z "$runtime_root" ]]; then
-    runtime_root="${root_dir}/.api_platform_runtime"
-  fi
-  if [[ -z "$ollama_models_dir" ]]; then
-    ollama_models_dir="${root_dir}/ollama_cache"
-  fi
-
   declare -A server_gpu_by_url=()
   declare -A server_url_by_gpu=()
   local route route_id base_url model gpu_ranks_csv gpu_rank
-  for route in "${ollama_routes[@]}"; do
+  for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
     IFS='|' read -r route_id base_url model gpu_ranks_csv <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
     gpu_rank=""
@@ -382,15 +600,15 @@ ensure_ollama_runtime() {
   done
 
   declare -A started_base_urls=()
-  for route in "${ollama_routes[@]}"; do
+  for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
     IFS='|' read -r route_id base_url model gpu_ranks_csv <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
     gpu_rank="${server_gpu_by_url[$base_url]-}"
     if [[ -z "${started_base_urls[$base_url]+x}" ]]; then
-      _ensure_ollama_server "$base_url" "$runtime_root" "$gpu_rank" "$ollama_models_dir" || return 1
+      _ensure_ollama_server "$base_url" "$OLLAMA_RUNTIME_ROOT" "$gpu_rank" "$OLLAMA_MODELS_DIR" || return 1
       started_base_urls["$base_url"]=1
     fi
-    _ensure_ollama_model "$base_url" "$model" "$ollama_models_dir" || {
+    _ensure_ollama_model "$base_url" "$model" "$OLLAMA_MODELS_DIR" || {
       echo "Error: failed to prepare Ollama model ${model} for route ${route_id}." >&2
       return 1
     }

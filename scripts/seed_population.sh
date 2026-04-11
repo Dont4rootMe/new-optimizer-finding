@@ -53,6 +53,8 @@ if [[ "$has_config_name" -ne 1 ]]; then
   exit 2
 fi
 
+arm_ollama_cleanup_trap "$ROOT_DIR" "$@"
+kill_ollama_runtime "$ROOT_DIR" "$@"
 ensure_ollama_runtime "$ROOT_DIR" "$@"
 
 python -m src.evolve.seed_run "$@"

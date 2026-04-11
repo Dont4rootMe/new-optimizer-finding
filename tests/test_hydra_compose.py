@@ -161,9 +161,9 @@ def test_circle_packing_shinka_config_composes() -> None:
     gemma_route = instantiate(cfg.api_platforms.ollama_gemma4_26b, _recursive_=False)
     assert qwen_route.route_id == "ollama_qwen35_27b"
     assert qwen_route.provider_model_id == "qwen3.5:27b"
-    assert qwen_route.base_url == "http://127.0.0.1:11435/api"
+    assert qwen_route.base_url == "http://127.0.0.1:12435/api"
     assert qwen_route.gpu_ranks == [1]
     assert gemma_route.route_id == "ollama_gemma4_26b"
     assert gemma_route.provider_model_id == "gemma4:26b"
-    assert gemma_route.base_url == "http://127.0.0.1:11434/api"
+    assert gemma_route.base_url == "http://127.0.0.1:12434/api"
     assert gemma_route.gpu_ranks == [0]

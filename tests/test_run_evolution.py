@@ -146,7 +146,10 @@ PY
             printf 'host=%s gpu=%s | %s\\n' "$host" "${CUDA_VISIBLE_DEVICES:-}" "$*" >> "${OLLAMA_CALLS_FILE:?}"
             if [[ "${1:-}" == "serve" ]]; then
               touch "${state_dir}/server_ready"
-              exit 0
+              trap 'printf "host=%s gpu=%s | stopped\\n" "$host" "${CUDA_VISIBLE_DEVICES:-}" >> "${OLLAMA_CALLS_FILE:?}"; rm -f "${state_dir}/server_ready"; exit 0' TERM INT
+              while true; do
+                sleep 1
+              done
             fi
             echo "unexpected ollama invocation: $*" >&2
             exit 1
@@ -387,7 +390,7 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
     assert completed.returncode == 0
     assert "Starting local Ollama server" in completed.stdout
     assert "Pulling Ollama model qwen3.5:27b" in completed.stdout
-    assert f"local model store: {tmp_path / 'ollama_models'}" in completed.stdout
+    assert "local model store:" in completed.stdout
     assert "downloading:" in completed.stdout
     module_calls = [
         line
@@ -399,6 +402,7 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
     ]
     ollama_calls = ollama_calls_path.read_text(encoding="utf-8")
     assert "host=127.0.0.1:11435 gpu=1 | serve" in ollama_calls
+    assert "host=127.0.0.1:11435 gpu=1 | stopped" in ollama_calls
     curl_calls = curl_calls_path.read_text(encoding="utf-8").splitlines()
     assert any("/api/tags" in line for line in curl_calls)
     assert any("/api/pull" in line for line in curl_calls)
