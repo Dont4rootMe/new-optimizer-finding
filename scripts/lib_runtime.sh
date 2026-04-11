@@ -141,6 +141,68 @@ raise SystemExit(0 if model in names else 1)
 ' "$model"
 }
 
+_stream_ollama_pull_progress() {
+  local model="$1"
+  python -c '
+from __future__ import annotations
+
+import json
+import sys
+
+model = sys.argv[1]
+last_status = None
+last_progress_key = None
+
+def _format_bytes(value: int | float) -> str:
+    units = ["B", "KiB", "MiB", "GiB", "TiB"]
+    size = float(value)
+    unit = 0
+    while size >= 1024.0 and unit < len(units) - 1:
+        size /= 1024.0
+        unit += 1
+    if unit == 0:
+        return f"{int(size)} {units[unit]}"
+    return f"{size:.1f} {units[unit]}"
+
+for raw_line in sys.stdin:
+    line = raw_line.strip()
+    if not line:
+        continue
+    try:
+        payload = json.loads(line)
+    except json.JSONDecodeError:
+        print(f"  {line}", flush=True)
+        continue
+
+    error = payload.get("error")
+    if error:
+        print(f"  error while pulling {model}: {error}", file=sys.stderr, flush=True)
+        raise SystemExit(1)
+
+    status = str(payload.get("status", "")).strip()
+    completed = payload.get("completed")
+    total = payload.get("total")
+
+    if isinstance(completed, (int, float)) and isinstance(total, (int, float)) and total > 0:
+        percent = max(0, min(100, int((float(completed) / float(total)) * 100)))
+        progress_key = (status, percent)
+        if progress_key != last_progress_key:
+            print(
+                f"  {status or 'pulling'}: {percent:3d}% "
+                f"({_format_bytes(completed)} / {_format_bytes(total)})",
+                flush=True,
+            )
+            last_progress_key = progress_key
+            last_status = status
+        continue
+
+    if status and status != last_status:
+        print(f"  {status}", flush=True)
+        last_status = status
+        last_progress_key = None
+' "$model"
+}
+
 _start_local_ollama() {
   local base_url="$1"
   local runtime_root="$2"
@@ -209,11 +271,11 @@ _ensure_ollama_model() {
   fi
 
   echo "Pulling Ollama model ${model} from ${base_url}."
-  curl -fsS --max-time 0 \
+  curl -fsS --no-buffer --max-time 0 \
     -H 'Content-Type: application/json' \
     -X POST \
-    -d "{\"name\":\"${model}\",\"stream\":false}" \
-    "$(_ollama_pull_url "$base_url")" >/dev/null
+    -d "{\"model\":\"${model}\"}" \
+    "$(_ollama_pull_url "$base_url")" | _stream_ollama_pull_progress "$model"
 }
 
 ensure_ollama_runtime() {

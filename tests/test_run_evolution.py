@@ -111,12 +111,15 @@ PY
                   fi
                   prev="$arg"
                 done
-                model="$(printf '%s' "$body" | sed -E 's/.*"name":"([^"]+)".*/\\1/')"
+                model="$(printf '%s' "$body" | sed -E 's/.*"(model|name)":"([^"]+)".*/\\2/')"
                 touch "${state_dir}/server_ready"
                 touch "${state_dir}/models.txt"
                 if ! grep -Fxq "$model" "${state_dir}/models.txt"; then
                   printf '%s\\n' "$model" >> "${state_dir}/models.txt"
                 fi
+                printf '{"status":"pulling manifest"}\\n'
+                printf '{"status":"downloading","completed":1048576,"total":2097152}\\n'
+                printf '{"status":"verifying sha256 digest"}\\n'
                 printf '{"status":"success"}\\n'
                 ;;
               *)
@@ -382,6 +385,7 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
     assert completed.returncode == 0
     assert "Starting local Ollama server" in completed.stdout
     assert "Pulling Ollama model qwen3.5:27b" in completed.stdout
+    assert "downloading:" in completed.stdout
     module_calls = [
         line
         for line in calls_path.read_text(encoding="utf-8").splitlines()
