@@ -129,6 +129,7 @@ class CrossbreedingOperator:
             org_dir=org_dir,
             organism_id=organism_id,
             generation=generation,
+            island_id=mother.island_id,
         )
         mother_lineage = read_organism_lineage(mother)
         ancestor_ids = list(mother.ancestor_ids)

@@ -133,6 +133,7 @@ class _FakeCanonicalGenerator:
         org_dir: Path,
         organism_id: str,
         generation: int,
+        island_id: str | None = None,
     ) -> CreationStageResult:
         self.calls.append(("design", design_system_prompt, design_user_prompt, org_dir))
         parsed = parse_llm_response(self.design_response_text)

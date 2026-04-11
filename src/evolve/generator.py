@@ -11,6 +11,14 @@ from omegaconf import DictConfig
 LOGGER = logging.getLogger(__name__)
 
 
+def _organism_log_label(organism_id: str, island_id: str | None) -> str:
+    """Prefix for logs about a single organism; includes island when known."""
+
+    if island_id is None:
+        return f"organism {organism_id}"
+    return f"organism {organism_id} (island={island_id})"
+
+
 def _announce(message: str) -> None:
     """Mirror `evolution_loop._announce`: log + flushed stderr line.
 
@@ -97,12 +105,14 @@ class CandidateGenerator(BaseLlmGenerator):
         org_dir: Path,
         organism_id: str,
         generation: int,
+        island_id: str | None = None,
     ) -> CreationStageResult:
         """Run design and implementation stages and persist both LLM exchanges."""
 
+        org_label = _organism_log_label(organism_id, island_id)
         route_id = self.sample_route_id(organism_id=organism_id)
         _announce(
-            f"organism {organism_id} -> route {route_id}: calling design stage (generation={generation})"
+            f"{org_label} -> route {route_id}: calling design stage (generation={generation})"
         )
         llm_request_path = org_dir / "llm_request.json"
         llm_response_path = org_dir / "llm_response.json"
@@ -115,7 +125,7 @@ class CandidateGenerator(BaseLlmGenerator):
             generation=generation,
         )
         _announce(
-            f"organism {organism_id} design stage returned "
+            f"{org_label} design stage returned "
             f"(route={route_id}, provider={design_response.provider}, "
             f"model={design_response.provider_model_id})"
         )
@@ -164,7 +174,7 @@ class CandidateGenerator(BaseLlmGenerator):
         write_json(llm_request_path, llm_request_payload)
 
         _announce(
-            f"organism {organism_id} -> route {route_id}: calling implementation stage"
+            f"{org_label} -> route {route_id}: calling implementation stage"
         )
         implementation_response = self._call_llm_stage(
             route_id,
@@ -176,7 +186,7 @@ class CandidateGenerator(BaseLlmGenerator):
             extra_metadata={"implementation_template": self.prompt_bundle.implementation_template},
         )
         _announce(
-            f"organism {organism_id} implementation stage returned "
+            f"{org_label} implementation stage returned "
             f"(route={route_id})"
         )
         implementation_code = self._extract_python(implementation_response.text)
@@ -243,6 +253,7 @@ class CandidateGenerator(BaseLlmGenerator):
                     org_dir=organism_dir,
                     organism_id=organism_id,
                     generation=generation,
+                    island_id=island.island_id,
                 )
                 return build_organism_from_response(
                     parsed=creation.parsed_design,

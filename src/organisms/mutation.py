@@ -113,6 +113,7 @@ class MutationOperator:
             org_dir=org_dir,
             organism_id=organism_id,
             generation=generation,
+            island_id=parent.island_id,
         )
         parent_lineage = read_organism_lineage(parent)
         return build_organism_from_response(
