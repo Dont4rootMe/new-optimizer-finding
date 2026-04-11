@@ -34,10 +34,10 @@ evolver:
 
 api_platforms:
   ollama_qwen35_27b:
-    base_url: ${oc.env:OLLAMA_BASE_URL,http://localhost:11434/api}
+    base_url: ${oc.env:OLLAMA_BASE_URL,http://127.0.0.1:11434/api}
     max_concurrency: 5
   ollama_gemma4_26b:
-    base_url: ${oc.env:OLLAMA_BASE_URL,http://localhost:11434/api}
+    base_url: ${oc.env:OLLAMA_BASE_URL,http://127.0.0.1:11434/api}
     max_concurrency: 5
 
 hydra:

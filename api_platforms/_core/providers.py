@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 from urllib import error as urllib_error
+from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 from api_platforms._core.types import ApiRouteConfig, LlmRequest, LlmResponse
@@ -162,7 +163,11 @@ def _response_to_dict(value: Any) -> dict[str, Any]:
 
 
 def _ollama_chat_url(base_url: str | None) -> str:
-    normalized = str(base_url or "http://localhost:11434/api").rstrip("/")
+    normalized = str(base_url or "http://127.0.0.1:11434/api").rstrip("/")
+    parsed = urllib_parse.urlparse(normalized)
+    if parsed.hostname == "localhost":
+        netloc = parsed.netloc.replace("localhost", "127.0.0.1", 1)
+        normalized = urllib_parse.urlunparse(parsed._replace(netloc=netloc))
     if normalized.endswith("/chat"):
         return normalized
     if normalized.endswith("/api"):

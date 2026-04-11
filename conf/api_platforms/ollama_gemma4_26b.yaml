@@ -1,5 +1,5 @@
 _target_: api_platforms.ollama_gemma4_26b.platform.build_platform
-base_url: ${oc.env:OLLAMA_BASE_URL,http://localhost:11434/api}
+base_url: ${oc.env:OLLAMA_BASE_URL,http://127.0.0.1:11434/api}
 temperature: 1.0
 max_output_tokens: 4096
 top_p: 0.95

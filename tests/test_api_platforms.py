@@ -211,7 +211,7 @@ def test_ollama_route_posts_chat_payload_and_parses_response(monkeypatch: pytest
 
     response = generate_direct(route_cfg, request)
 
-    assert captured["url"] == "http://localhost:11434/api/chat"
+    assert captured["url"] == "http://127.0.0.1:11434/api/chat"
     assert captured["timeout"] == 45.0
     assert captured["method"] == "POST"
     assert captured["headers"] == {

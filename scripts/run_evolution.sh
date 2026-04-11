@@ -119,4 +119,4 @@ PY
   fi
 fi
 
-python -m src.main mode=evolve "${forward_args[@]}"
+python -m src.main "${forward_args[@]}" mode=evolve

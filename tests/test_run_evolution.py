@@ -163,7 +163,7 @@ exit 0
     calls = calls_path.read_text(encoding="utf-8").splitlines()
     assert calls == [
         "-m src.evolve.seed_run --config-name config_circle_packing_shinka",
-        "-m src.main mode=evolve --config-name config_circle_packing_shinka",
+        "-m src.main --config-name config_circle_packing_shinka mode=evolve",
     ]
 
 
@@ -208,7 +208,7 @@ exit 0
     assert "running seed_population.sh first" not in completed.stdout
     calls = calls_path.read_text(encoding="utf-8").splitlines()
     assert calls == [
-        "-m src.main mode=evolve --config-name config_circle_packing_shinka",
+        "-m src.main --config-name config_circle_packing_shinka mode=evolve",
     ]
 
 
