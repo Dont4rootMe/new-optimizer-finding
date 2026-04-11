@@ -664,44 +664,100 @@ kill_ollama_runtime() {
   _cleanup_loaded_ollama_servers
 }
 
-_verify_ollama_gpu_visible() {
-  # Inspect the managed ollama `stderr.log` and confirm the freshly-started
-  # runner actually discovered a GPU device. We call this right after the
-  # healthcheck loop in `_start_local_ollama` when a gpu_rank was requested.
+_summarize_ollama_compute_devices() {
+  # Parse the freshly-started ollama stderr.log and print a human-readable
+  # summary of which compute devices the runner discovered, followed by a
+  # trailing verdict line of the form:
+  #   VERDICT=<gpu|cpu|unknown> gpus=<N>
+  # on stdout. The caller reads the verdict to decide whether to warn/fail.
   #
-  # Why this guard matters:
-  #   When ollama falls back to CPU (e.g. a conda-forge build without bundled
-  #   CUDA runtime libs, or a missing driver) it silently prints lines like:
+  # Why we print devices explicitly:
+  #   When ollama falls back to CPU (conda-forge build without CUDA libs,
+  #   missing driver, wrong CUDA_VISIBLE_DEVICES, etc.) it silently emits
   #     msg="inference compute" id=cpu library=cpu ... total="1456.0 GiB"
   #     msg="vram-based default context" total_vram="0 B"
-  #   Inference on a 16 GB quantized model on CPU takes tens of minutes per
-  #   generation and looks exactly like a hang to the operator. Failing loud
-  #   here turns that silent fallback into an obvious startup error.
+  #   and the operator cannot tell from the wrapper output whether a GPU was
+  #   found or not. Surfacing the device list verbatim in the wrapper output
+  #   turns "is it on GPU or CPU?" into a single glance at the terminal.
   local stderr_log="$1"
 
   if [[ ! -f "$stderr_log" ]]; then
+    printf '%s\n' "VERDICT=unknown gpus=0 reason=stderr_log_missing"
     return 0
   fi
 
   local attempt
-  for attempt in $(seq 1 20); do
+  for attempt in $(seq 1 40); do
     if grep -q 'msg="inference compute"' "$stderr_log" 2>/dev/null; then
       break
     fi
     sleep 0.25
   done
 
-  if grep -E 'msg="inference compute" id=(cuda|rocm|vulkan|metal)' "$stderr_log" >/dev/null 2>&1; then
-    return 0
-  fi
+  python - "$stderr_log" <<'PY'
+from __future__ import annotations
 
-  if grep -E 'msg="inference compute" id=cpu' "$stderr_log" >/dev/null 2>&1; then
-    return 1
-  fi
+import re
+import sys
+from pathlib import Path
 
-  # No discovery line yet; do not block. The healthcheck already passed, so
-  # staying permissive is safer than blocking on a missing log line.
-  return 0
+stderr_path = Path(sys.argv[1])
+try:
+    text = stderr_path.read_text(encoding="utf-8", errors="replace")
+except OSError:
+    print("VERDICT=unknown gpus=0 reason=stderr_log_unreadable")
+    raise SystemExit(0)
+
+# ollama emits one `msg="inference compute"` line per discovered device.
+# Fields are space-separated `key=value` or `key="quoted value"` pairs.
+line_re = re.compile(r'msg="inference compute"\s+(.*)$')
+kv_re = re.compile(r'(\w+)=("((?:[^"\\]|\\.)*)"|\S+)')
+
+gpu_devices: list[dict[str, str]] = []
+cpu_devices: list[dict[str, str]] = []
+for raw_line in text.splitlines():
+    match = line_re.search(raw_line)
+    if not match:
+        continue
+    fields: dict[str, str] = {}
+    for kv_match in kv_re.finditer(match.group(1)):
+        key = kv_match.group(1)
+        value = kv_match.group(3) if kv_match.group(3) is not None else kv_match.group(2)
+        fields[key] = value
+    device_id = fields.get("id", "")
+    library = fields.get("library", "")
+    if device_id == "cpu" or library == "cpu":
+        cpu_devices.append(fields)
+    elif library in {"cuda", "rocm", "vulkan", "metal"} or device_id.startswith(
+        ("cuda", "rocm", "vulkan", "metal")
+    ):
+        gpu_devices.append(fields)
+    else:
+        # Unknown device family - be conservative and treat it as a GPU only
+        # if it's clearly not CPU. This guards against future ollama changes.
+        cpu_devices.append(fields)
+
+def _describe(dev: dict[str, str]) -> str:
+    parts = []
+    for key in ("id", "library", "name", "compute", "driver", "pci_id", "total"):
+        value = dev.get(key, "")
+        if value:
+            parts.append(f"{key}={value}")
+    return ", ".join(parts) if parts else "(no fields)"
+
+print(f"  device summary: {len(gpu_devices)} GPU, {len(cpu_devices)} CPU")
+for idx, dev in enumerate(gpu_devices):
+    print(f"    gpu[{idx}]: {_describe(dev)}")
+for idx, dev in enumerate(cpu_devices):
+    print(f"    cpu[{idx}]: {_describe(dev)}")
+
+if gpu_devices:
+    print(f"VERDICT=gpu gpus={len(gpu_devices)}")
+elif cpu_devices:
+    print("VERDICT=cpu gpus=0")
+else:
+    print("VERDICT=unknown gpus=0 reason=no_inference_compute_line")
+PY
 }
 
 _start_local_ollama() {
@@ -758,19 +814,58 @@ _start_local_ollama() {
     return 1
   fi
 
-  if [[ -n "$gpu_rank" ]]; then
-    if ! _verify_ollama_gpu_visible "$stderr_log"; then
-      echo "Error: Ollama at ${base_url} (gpu:${gpu_rank}) started but reported CPU-only inference." >&2
-      echo "  Running a quantized qwen35 on CPU takes tens of minutes per generation and will look like a hang." >&2
-      echo "  Inspect: tail -n 80 ${stderr_log}" >&2
-      echo "  Likely cause: this Ollama build is missing CUDA runtime libs (common with conda-forge ollama)." >&2
-      echo "  Fix: install the official binary from https://ollama.com/download, or expose CUDA libs via LD_LIBRARY_PATH before launching ${0##*/}." >&2
-      echo "  Override: set NEW_OPTIMIZER_ALLOW_OLLAMA_CPU=1 in the environment to silence this check (inference will still be slow)." >&2
-      if [[ "${NEW_OPTIMIZER_ALLOW_OLLAMA_CPU:-0}" != "1" ]]; then
-        return 1
-      fi
-      echo "  NEW_OPTIMIZER_ALLOW_OLLAMA_CPU=1 set, continuing with CPU inference." >&2
+  local -a compute_summary_lines=()
+  local verdict_line=""
+  while IFS= read -r line; do
+    if [[ "$line" == VERDICT=* ]]; then
+      verdict_line="$line"
+    else
+      compute_summary_lines+=("$line")
     fi
+  done < <(_summarize_ollama_compute_devices "$stderr_log")
+
+  echo "Ollama ${base_url} device discovery:"
+  if [[ "${#compute_summary_lines[@]}" -eq 0 ]]; then
+    echo "  (no device summary available)"
+  else
+    local summary_line
+    for summary_line in "${compute_summary_lines[@]}"; do
+      echo "$summary_line"
+    done
+  fi
+
+  local verdict="unknown"
+  local verdict_gpu_count="0"
+  if [[ -n "$verdict_line" ]]; then
+    verdict="${verdict_line#VERDICT=}"
+    verdict="${verdict%% *}"
+    verdict_gpu_count="${verdict_line##*gpus=}"
+    verdict_gpu_count="${verdict_gpu_count%% *}"
+  fi
+
+  case "$verdict" in
+    gpu)
+      echo "  -> will run on GPU (${verdict_gpu_count} device(s) visible to ollama)"
+      ;;
+    cpu)
+      echo "  -> will run on CPU (0 GPUs visible to ollama)"
+      ;;
+    *)
+      echo "  -> compute target unknown (no inference-compute line parsed yet)"
+      ;;
+  esac
+
+  if [[ -n "$gpu_rank" && "$verdict" == "cpu" ]]; then
+    echo "Error: Ollama at ${base_url} (requested gpu:${gpu_rank}) fell back to CPU-only inference." >&2
+    echo "  Running a quantized qwen35 on CPU takes tens of minutes per generation and will look like a hang." >&2
+    echo "  Inspect: tail -n 80 ${stderr_log}" >&2
+    echo "  Likely cause: this Ollama build is missing CUDA runtime libs (common with conda-forge ollama)." >&2
+    echo "  Fix: install the official binary from https://ollama.com/download, or expose CUDA libs via LD_LIBRARY_PATH before launching ${0##*/}." >&2
+    echo "  Override: set NEW_OPTIMIZER_ALLOW_OLLAMA_CPU=1 in the environment to silence this check (inference will still be slow)." >&2
+    if [[ "${NEW_OPTIMIZER_ALLOW_OLLAMA_CPU:-0}" != "1" ]]; then
+      return 1
+    fi
+    echo "  NEW_OPTIMIZER_ALLOW_OLLAMA_CPU=1 set, continuing with CPU inference." >&2
   fi
 
   return 0
