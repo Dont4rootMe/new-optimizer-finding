@@ -59,26 +59,27 @@ pip install -e .[evolve]
 Smoke enabled experiments:
 
 ```bash
-python -m src.main --config-name config_optimization_survey mode=smoke
+python -m src.main --config-name config_optimization_survey_validate mode=smoke
 ```
 
 Collect baseline stats:
 
 ```bash
-python -m src.main --config-name config_optimization_survey mode=stats
+python -m src.main --config-name config_optimization_survey_validate mode=stats
 ```
 
 Run experiments against a concrete organism:
 
 ```bash
-python -m src.main --config-name config_optimization_survey mode=run organism_dir=/absolute/path/to/organism
+python -m src.main --config-name config_optimization_survey_validate organism_dir=/absolute/path/to/organism
 ```
 
 ## Evolution
 
 ```bash
-export OPENAI_API_KEY=...
-python -m src.main --config-name config_optimization_survey mode=evolve
+./scripts/seed_population.sh --config-name config_optimization_survey
+./scripts/run_evolution.sh --config-name config_optimization_survey
+./scripts/run_evolution.sh --seed --config-name config_optimization_survey
 ```
 
 The evolution engine is task-blind. It operates on organism folders and delegates all task-specific behavior to the configured experiments.
@@ -107,7 +108,7 @@ The repository also ships [`experiments/circle_packing_shinka/`](/Users/artemon/
 Use the dedicated preset:
 
 ```bash
-python -m src.main --config-name config_circle_packing_shinka mode=run organism_dir=/absolute/path/to/organism
+python -m src.main --config-name config_circle_packing_shinka_validate organism_dir=/absolute/path/to/organism
 ./scripts/seed_population.sh --config-name config_circle_packing_shinka
 ./scripts/run_evolution.sh --config-name config_circle_packing_shinka
 ./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka
@@ -120,6 +121,14 @@ That preset isolates the two local Ollama routes by default:
 
 The `scripts/*` wrappers auto-start one local Ollama service per distinct local `base_url`, pin it to the configured route GPU when `gpu_ranks` is set, and pull missing models before `seed` or `evolve` starts.
 By default, local Ollama weights are stored in `./ollama_cache` at the project root. Override that with `paths.ollama_cache_root=/absolute/path` or `OLLAMA_MODELS=/absolute/path`.
+
+## Concurrency knobs
+
+- `evolver.creation.max_parallel_organisms`: maximum number of organisms being created in parallel. Each creation task includes both LLM stages for one organism.
+- `evolver.creation.max_attempts_per_organism`: retry budget for one organism creation when LLM output or provider calls fail.
+- `resources.evaluation.cpu_parallel_jobs`: number of CPU-only evaluation tasks that can run at once.
+- `resources.evaluation.gpu_ranks`: GPU evaluation worker slots. The number of concurrent GPU evaluation tasks equals the number of configured ranks.
+- `api_platforms.<route>.max_concurrency`: backend request concurrency for one routed model service, such as a local Ollama instance.
 
 Its organism contract is:
 

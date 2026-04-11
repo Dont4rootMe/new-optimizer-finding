@@ -16,6 +16,12 @@ def main(cfg: DictConfig) -> None:
     _ensure_console_logging()
     ensure_root_runtime_config(cfg, context="src.main")
 
+    if "mode" not in cfg:
+        raise ValueError(
+            "src.main requires explicit mode=evolve or a standalone validation preset "
+            "(for example: config_optimization_survey_validate, config_circle_packing_shinka_validate)."
+        )
+
     mode = str(cfg.mode)
     if mode == "evolve":
         from src.evolve.run import run_evolution

@@ -37,3 +37,23 @@ def test_user_facing_entrypoints_have_no_optimizer_default_config() -> None:
     for path in files:
         text = path.read_text(encoding="utf-8")
         assert 'config_name="config_optimization_survey"' not in text, str(path)
+
+
+def test_canonical_presets_no_longer_embed_validation_mode_surface() -> None:
+    for path in [
+        ROOT / "conf" / "config_optimization_survey.yaml",
+        ROOT / "conf" / "config_circle_packing_shinka.yaml",
+    ]:
+        text = path.read_text(encoding="utf-8")
+        assert "\nmode:" not in text, str(path)
+        assert "\norganism_dir:" not in text, str(path)
+
+
+def test_validation_presets_keep_standalone_organism_surface() -> None:
+    for path in [
+        ROOT / "conf" / "config_optimization_survey_validate.yaml",
+        ROOT / "conf" / "config_circle_packing_shinka_validate.yaml",
+    ]:
+        text = path.read_text(encoding="utf-8")
+        assert "\nmode: run" in text, str(path)
+        assert "\norganism_dir:" in text, str(path)

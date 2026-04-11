@@ -164,7 +164,6 @@ def _cfg() -> object:
     return OmegaConf.create(
         {
             "evolver": {
-                "enabled": True,
                 "llm": {"route_weights": {"mock": 1.0}, "seed": 1},
             },
             "paths": {
@@ -203,13 +202,6 @@ def test_run_evolution_always_uses_evolution_loop(monkeypatch) -> None:
 
     assert called["loop"] is True
     assert result == {"mode": "canonical"}
-
-
-def test_run_evolution_skips_when_disabled() -> None:
-    cfg = _cfg()
-    cfg.evolver.enabled = False
-
-    assert run_evolution(cfg) == {}
 
 
 def test_run_evolution_shell_wrapper_exists_and_is_executable() -> None:

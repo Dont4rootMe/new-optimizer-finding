@@ -11,14 +11,6 @@ from omegaconf import DictConfig
 LOGGER = logging.getLogger(__name__)
 
 
-def _organism_log_label(organism_id: str, island_id: str | None) -> str:
-    """Prefix for logs about a single organism; includes island when known."""
-
-    if island_id is None:
-        return f"organism {organism_id}"
-    return f"organism {organism_id} (island={island_id})"
-
-
 def _announce(message: str) -> None:
     """Mirror `evolution_loop._announce`: log + flushed stderr line.
 
@@ -105,57 +97,91 @@ class CandidateGenerator(BaseLlmGenerator):
         org_dir: Path,
         organism_id: str,
         generation: int,
-        island_id: str | None = None,
     ) -> CreationStageResult:
         """Run design and implementation stages and persist both LLM exchanges."""
 
-        org_label = _organism_log_label(organism_id, island_id)
         route_id = self.sample_route_id(organism_id=organism_id)
         _announce(
-            f"{org_label} -> route {route_id}: calling design stage (generation={generation})"
+            f"organism {organism_id} -> route {route_id}: calling design stage (generation={generation})"
         )
         llm_request_path = org_dir / "llm_request.json"
         llm_response_path = org_dir / "llm_response.json"
-        design_response = self._call_llm_stage(
-            route_id,
-            "design",
-            design_system_prompt,
-            design_user_prompt,
-            organism_id=organism_id,
-            generation=generation,
-        )
-        _announce(
-            f"{org_label} design stage returned "
-            f"(route={route_id}, provider={design_response.provider}, "
-            f"model={design_response.provider_model_id})"
-        )
         llm_request_payload = {
             "route_id": route_id,
-            "provider": design_response.provider,
-            "provider_model_id": design_response.provider_model_id,
             "design": {
                 "route_id": route_id,
-                "provider": design_response.provider,
-                "provider_model_id": design_response.provider_model_id,
                 "system_prompt": design_system_prompt,
                 "user_prompt": design_user_prompt,
-                "request": design_response.raw_request,
+                "request": None,
+                "status": "in_flight",
+                "error_msg": None,
             },
         }
         llm_response_payload = {
             "route_id": route_id,
-            "provider": design_response.provider,
-            "provider_model_id": design_response.provider_model_id,
             "design": {
                 "route_id": route_id,
-                "provider": design_response.provider,
-                "provider_model_id": design_response.provider_model_id,
-                "text": design_response.text,
-                "response": design_response.raw_response,
-                "usage": design_response.usage,
-                "started_at": design_response.started_at,
-                "finished_at": design_response.finished_at,
+                "text": None,
+                "response": None,
+                "usage": None,
+                "started_at": None,
+                "finished_at": None,
+                "status": "awaiting_response",
+                "error_msg": None,
             },
+        }
+        write_json(llm_request_path, llm_request_payload)
+        write_json(llm_response_path, llm_response_payload)
+
+        try:
+            design_response = self._call_llm_stage(
+                route_id,
+                "design",
+                design_system_prompt,
+                design_user_prompt,
+                organism_id=organism_id,
+                generation=generation,
+            )
+        except Exception as exc:  # noqa: BLE001
+            error_msg = f"{type(exc).__name__}: {exc}"
+            llm_request_payload["design"]["status"] = "failed"
+            llm_request_payload["design"]["error_msg"] = error_msg
+            llm_response_payload["design"]["status"] = "failed"
+            llm_response_payload["design"]["error_msg"] = error_msg
+            write_json(llm_request_path, llm_request_payload)
+            write_json(llm_response_path, llm_response_payload)
+            _announce(f"organism {organism_id} design stage failed (route={route_id}): {error_msg}")
+            raise
+        _announce(
+            f"organism {organism_id} design stage returned "
+            f"(route={route_id}, provider={design_response.provider}, "
+            f"model={design_response.provider_model_id})"
+        )
+        llm_request_payload["provider"] = design_response.provider
+        llm_request_payload["provider_model_id"] = design_response.provider_model_id
+        llm_request_payload["design"] = {
+            "route_id": route_id,
+            "provider": design_response.provider,
+            "provider_model_id": design_response.provider_model_id,
+            "system_prompt": design_system_prompt,
+            "user_prompt": design_user_prompt,
+            "request": design_response.raw_request,
+            "status": "completed",
+            "error_msg": None,
+        }
+        llm_response_payload["provider"] = design_response.provider
+        llm_response_payload["provider_model_id"] = design_response.provider_model_id
+        llm_response_payload["design"] = {
+            "route_id": route_id,
+            "provider": design_response.provider,
+            "provider_model_id": design_response.provider_model_id,
+            "text": design_response.text,
+            "response": design_response.raw_response,
+            "usage": design_response.usage,
+            "started_at": design_response.started_at,
+            "finished_at": design_response.finished_at,
+            "status": "completed",
+            "error_msg": None,
         }
         write_json(llm_request_path, llm_request_payload)
         write_json(llm_response_path, llm_response_payload)
@@ -170,23 +196,47 @@ class CandidateGenerator(BaseLlmGenerator):
             "system_prompt": implementation_system_prompt,
             "user_prompt": implementation_user_prompt,
             "request": None,
+            "status": "in_flight",
+            "error_msg": None,
+        }
+        llm_response_payload["implementation"] = {
+            "route_id": route_id,
+            "text": None,
+            "response": None,
+            "usage": None,
+            "started_at": None,
+            "finished_at": None,
+            "status": "awaiting_response",
+            "error_msg": None,
         }
         write_json(llm_request_path, llm_request_payload)
+        write_json(llm_response_path, llm_response_payload)
 
         _announce(
-            f"{org_label} -> route {route_id}: calling implementation stage"
+            f"organism {organism_id} -> route {route_id}: calling implementation stage"
         )
-        implementation_response = self._call_llm_stage(
-            route_id,
-            "implementation",
-            implementation_system_prompt,
-            implementation_user_prompt,
-            organism_id=organism_id,
-            generation=generation,
-            extra_metadata={"implementation_template": self.prompt_bundle.implementation_template},
-        )
+        try:
+            implementation_response = self._call_llm_stage(
+                route_id,
+                "implementation",
+                implementation_system_prompt,
+                implementation_user_prompt,
+                organism_id=organism_id,
+                generation=generation,
+                extra_metadata={"implementation_template": self.prompt_bundle.implementation_template},
+            )
+        except Exception as exc:  # noqa: BLE001
+            error_msg = f"{type(exc).__name__}: {exc}"
+            llm_request_payload["implementation"]["status"] = "failed"
+            llm_request_payload["implementation"]["error_msg"] = error_msg
+            llm_response_payload["implementation"]["status"] = "failed"
+            llm_response_payload["implementation"]["error_msg"] = error_msg
+            write_json(llm_request_path, llm_request_payload)
+            write_json(llm_response_path, llm_response_payload)
+            _announce(f"organism {organism_id} implementation stage failed (route={route_id}): {error_msg}")
+            raise
         _announce(
-            f"{org_label} implementation stage returned "
+            f"organism {organism_id} implementation stage returned "
             f"(route={route_id})"
         )
         implementation_code = self._extract_python(implementation_response.text)
@@ -197,6 +247,8 @@ class CandidateGenerator(BaseLlmGenerator):
             "system_prompt": implementation_system_prompt,
             "user_prompt": implementation_user_prompt,
             "request": implementation_response.raw_request,
+            "status": "completed",
+            "error_msg": None,
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -207,6 +259,8 @@ class CandidateGenerator(BaseLlmGenerator):
             "usage": implementation_response.usage,
             "started_at": implementation_response.started_at,
             "finished_at": implementation_response.finished_at,
+            "status": "completed",
+            "error_msg": None,
         }
         write_json(llm_request_path, llm_request_payload)
         write_json(llm_response_path, llm_response_payload)
@@ -239,7 +293,7 @@ class CandidateGenerator(BaseLlmGenerator):
     ) -> OrganismMeta:
         """Generate one seed organism for a configured island."""
 
-        max_attempts = int(self.evolver_cfg.max_generation_attempts)
+        max_attempts = int(self.evolver_cfg.creation.max_attempts_per_organism)
         seed_operator = SeedOperator(island)
 
         last_error: str | None = None
@@ -253,7 +307,6 @@ class CandidateGenerator(BaseLlmGenerator):
                     org_dir=organism_dir,
                     organism_id=organism_id,
                     generation=generation,
-                    island_id=island.island_id,
                 )
                 return build_organism_from_response(
                     parsed=creation.parsed_design,
@@ -290,5 +343,6 @@ class CandidateGenerator(BaseLlmGenerator):
                 )
 
         raise RuntimeError(
-            f"Failed to generate valid organism after {max_attempts} attempts: {last_error}"
+            "Failed to generate valid organism after "
+            f"{max_attempts} creation attempts: {last_error}"
         )

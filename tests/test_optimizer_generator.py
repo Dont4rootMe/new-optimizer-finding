@@ -19,7 +19,9 @@ def _cfg():
         {
             "seed": 123,
             "evolver": {
-                "max_generation_attempts": 2,
+                "creation": {
+                    "max_attempts_per_organism": 2,
+                },
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
                     "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
@@ -174,6 +176,46 @@ def test_run_creation_stages_persists_design_exchange_before_parse_failure(
     llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
     llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
     assert llm_request["design"]["request"] == {"stage": "design"}
+    assert llm_request["design"]["status"] == "completed"
     assert llm_response["design"]["response"] == {"stage": "design"}
+    assert llm_response["design"]["status"] == "completed"
     assert "implementation" not in llm_request
     assert "implementation" not in llm_response
+
+
+def test_run_creation_stages_persists_pending_design_exchange_before_transport_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_transport_failure"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+
+    def fake_generate(_request):
+        raise RuntimeError("broker unavailable")
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+
+    try:
+        with pytest.raises(RuntimeError, match="broker unavailable"):
+            generator.run_creation_stages(
+                design_system_prompt="design system",
+                design_user_prompt="design user",
+                org_dir=organism_dir,
+                organism_id="org_transport_failure",
+                generation=0,
+            )
+    finally:
+        generator.close()
+
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
+    assert llm_request["design"]["system_prompt"] == "design system"
+    assert llm_request["design"]["user_prompt"] == "design user"
+    assert llm_request["design"]["request"] is None
+    assert llm_request["design"]["status"] == "failed"
+    assert "broker unavailable" in llm_request["design"]["error_msg"]
+    assert llm_response["design"]["response"] is None
+    assert llm_response["design"]["text"] is None
+    assert llm_response["design"]["status"] == "failed"
+    assert "broker unavailable" in llm_response["design"]["error_msg"]

@@ -40,10 +40,12 @@ def _make_cfg(tmp_path: Path) -> object:
             "experiments": {},
             "api_platforms": {"mock": {"_target_": "api_platforms.mock.platform.build_platform"}},
             "evolver": {
-                "generation": 3,
                 "resume": True,
-                "enabled": True,
                 "max_generations": 3,
+                "creation": {
+                    "max_attempts_per_organism": 1,
+                    "max_parallel_organisms": 1,
+                },
                 "islands": {
                     "dir": str(islands_dir),
                     "seed_organisms_per_island": 2,

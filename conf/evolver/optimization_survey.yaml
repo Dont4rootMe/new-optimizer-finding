@@ -1,14 +1,10 @@
-enabled: true
-generation: 0
 resume: true
-fail_fast: false
 max_generations: 100
-max_generation_attempts: 3
-
-eval_entrypoint_module: src.validate.run_one
-timeout_sec_per_eval: 7200
 max_retries_per_eval: 0
-max_proposal_jobs: 4
+
+creation:
+  max_attempts_per_organism: 3
+  max_parallel_organisms: 4
 
 islands:
   dir: conf/experiments/optimization_survey/prompts/islands

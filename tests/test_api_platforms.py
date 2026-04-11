@@ -27,7 +27,9 @@ def _cfg(tmp_path: Path, *, routes: dict, route_weights: dict[str, float]) -> ob
             },
             "api_platforms": routes,
             "evolver": {
-                "max_generation_attempts": 1,
+                "creation": {
+                    "max_attempts_per_organism": 1,
+                },
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
                     "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",

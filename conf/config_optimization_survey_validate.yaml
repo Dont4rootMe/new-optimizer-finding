@@ -20,6 +20,8 @@ defaults:
   - experiments@experiments.quadratic_bowl: optimization_survey/quadratic_bowl
   - _self_
 
+mode: run
+organism_dir: null
 seed: 42
 deterministic: false
 device: cuda

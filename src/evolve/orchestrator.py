@@ -32,6 +32,7 @@ from src.evolve.types import (
 )
 
 LOGGER = logging.getLogger(__name__)
+DEFAULT_EVAL_ENTRYPOINT_MODULE = "src.validate.run_one"
 
 
 class EvolverOrchestrator:
@@ -44,11 +45,29 @@ class EvolverOrchestrator:
         self.eval_config_dir = self._persist_eval_config_snapshot()
         self.experiment_requirements = self._resolve_experiment_requirements()
         self.gpu_ranks, self.cpu_parallel_jobs = self._resolve_evaluation_resources()
+        self.eval_entrypoint_module = self._resolve_eval_entrypoint_module()
         self._validate_gpu_disjointness()
 
         self.pool = GpuJobPool(gpu_ranks=self.gpu_ranks, cpu_parallel_jobs=self.cpu_parallel_jobs)
         self._request_states: dict[str, dict[str, Any]] = {}
         self._started = False
+
+    def _resolve_eval_entrypoint_module(self) -> str:
+        """Resolve the evaluator subprocess entrypoint.
+
+        Canonical production/runtime configs always use `src.validate.run_one`.
+        The override remains available under an underscore-prefixed key so
+        synthetic tests can swap in a fake evaluator without exposing this as a
+        public preset knob.
+        """
+
+        raw_value = self.evolver_cfg.get("_eval_entrypoint_module")
+        if raw_value is None:
+            return DEFAULT_EVAL_ENTRYPOINT_MODULE
+        value = str(raw_value).strip()
+        if not value:
+            raise ValueError("evolver._eval_entrypoint_module must not be empty when provided")
+        return value
 
     def _persist_eval_config_snapshot(self) -> Path:
         """Persist the active runtime config for subprocess evaluators."""
@@ -186,7 +205,7 @@ class EvolverOrchestrator:
             precision=str(self.cfg.precision),
             mode=request.eval_mode,
             config_path=str(self.eval_config_dir),
-            entrypoint_module=str(self.evolver_cfg.eval_entrypoint_module),
+            entrypoint_module=self.eval_entrypoint_module,
             timeout_sec=int(request.timeout_sec),
             max_retries=int(self.evolver_cfg.get("max_retries_per_eval", 0)),
             workdir=str(Path.cwd()),

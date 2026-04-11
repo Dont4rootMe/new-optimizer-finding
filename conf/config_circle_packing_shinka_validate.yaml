@@ -5,6 +5,8 @@ defaults:
   - experiments@experiments.unit_square_26: circle_packing_shinka/unit_square_26
   - _self_
 
+mode: run
+organism_dir: null
 seed: 42
 deterministic: false
 device: cpu

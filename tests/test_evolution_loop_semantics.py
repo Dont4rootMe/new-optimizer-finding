@@ -10,6 +10,7 @@ from pathlib import Path
 from omegaconf import OmegaConf
 
 from src.evolve.evolution_loop import EvolutionLoop
+from src.evolve.orchestrator import DEFAULT_EVAL_ENTRYPOINT_MODULE, EvolverOrchestrator
 from src.evolve.types import OrganismMeta
 from src.organisms.organism import save_organism_artifacts
 
@@ -47,11 +48,13 @@ def _cfg(tmp_path: Path, **overrides) -> object:
             },
         },
         "evolver": {
-            "generation": 0,
             "resume": False,
-            "enabled": True,
             "max_generations": 1,
-            "eval_entrypoint_module": "tests.fixtures.fake_eval",
+            "_eval_entrypoint_module": "tests.fixtures.fake_eval",
+            "creation": {
+                "max_attempts_per_organism": 1,
+                "max_parallel_organisms": 1,
+            },
             "islands": {
                 "dir": str(islands_dir),
                 "seed_organisms_per_island": 3,
@@ -202,6 +205,21 @@ def test_inter_island_sampling_is_unified_and_distinct(tmp_path: Path) -> None:
 
     observed = primary_counts["gradient_methods"] / draws
     assert abs(observed - 0.5) < 0.03
+
+
+def test_orchestrator_defaults_to_run_one_and_reads_queue_sizes(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        resources={"evaluation": {"gpu_ranks": [2, 4], "cpu_parallel_jobs": 3}},
+        evolver={"_eval_entrypoint_module": None},
+    )
+    orchestrator = EvolverOrchestrator(cfg)
+    try:
+        assert orchestrator.eval_entrypoint_module == DEFAULT_EVAL_ENTRYPOINT_MODULE
+        assert orchestrator.gpu_ranks == [2, 4]
+        assert orchestrator.cpu_parallel_jobs == 3
+    finally:
+        orchestrator.close()
 
 
 def test_deterministic_operator_selection_allocates_exact_counts(tmp_path: Path) -> None:
@@ -377,11 +395,13 @@ def test_assign_batch_routes_respects_weight_proportions(tmp_path: Path) -> None
     assert counts == {"heavy": 6, "light": 2}
 
 
-def test_max_proposal_jobs_bounds_seed_parallelism(tmp_path: Path, monkeypatch) -> None:
+def test_max_parallel_organisms_bounds_seed_parallelism(tmp_path: Path, monkeypatch) -> None:
     cfg = _cfg(
         tmp_path,
         evolver={
-            "max_proposal_jobs": 2,
+            "creation": {
+                "max_parallel_organisms": 2,
+            },
             "islands": {
                 "seed_organisms_per_island": 4,
             },

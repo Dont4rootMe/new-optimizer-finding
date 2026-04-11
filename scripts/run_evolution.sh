@@ -20,7 +20,7 @@ Common examples:
   ./scripts/run_evolution.sh --config-name config_circle_packing_shinka
   ./scripts/run_evolution.sh --config-name config_circle_packing_shinka paths.population_root=/tmp/circle_pack_pop
   ./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka paths.population_root=/tmp/circle_pack_pop
-  ./scripts/run_evolution.sh --config-name config_optimization_survey evolver.max_generations=50 evolver.max_proposal_jobs=8
+  ./scripts/run_evolution.sh --config-name config_optimization_survey evolver.max_generations=50 evolver.creation.max_parallel_organisms=8
 
 Notes:
   - all trailing arguments are passed directly to Hydra as overrides

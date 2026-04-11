@@ -41,7 +41,6 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
 
     return OmegaConf.create(
         {
-            "mode": "evolve",
             "seed": 7,
             "deterministic": False,
             "precision": "fp32",
@@ -83,15 +82,13 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                 },
             },
             "evolver": {
-                "enabled": True,
-                "generation": 0,
                 "resume": resume,
                 "max_generations": max_generations,
-                "fail_fast": False,
-                "max_generation_attempts": 1,
-                "eval_entrypoint_module": "src.validate.run_one",
-                "timeout_sec_per_eval": 60,
                 "max_retries_per_eval": 0,
+                "creation": {
+                    "max_attempts_per_organism": 1,
+                    "max_parallel_organisms": 1,
+                },
                 "islands": {
                     "dir": str(islands_dir),
                     "seed_organisms_per_island": 1,

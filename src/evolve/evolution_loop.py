@@ -99,7 +99,7 @@ class EvolutionLoop:
         self.generator = CandidateGenerator(cfg, llm_registry=self.llm_registry)
         self.orchestrator = EvolverOrchestrator(cfg)
         self.rng = random.Random(int(cfg.seed))
-        self.max_proposal_jobs = max(1, int(self.evolver_cfg.get("max_proposal_jobs") or 1))
+        self.max_parallel_organisms = self._max_parallel_organisms()
 
         self.islands = self._load_islands()
         self.islands_by_id = {island.island_id: island for island in self.islands}
@@ -140,6 +140,9 @@ class EvolutionLoop:
 
     def _offspring_per_generation(self) -> int:
         return int(self._require_cfg_value("evolver.reproduction.offspring_per_generation"))
+
+    def _max_parallel_organisms(self) -> int:
+        return max(1, int(self._require_cfg_value("evolver.creation.max_parallel_organisms")))
 
     def _operator_selection_strategy(self) -> str:
         return str(self._require_cfg_value("evolver.reproduction.operator_selection_strategy"))
@@ -718,7 +721,7 @@ class EvolutionLoop:
         chance of sending both organisms to the same route, which leaves one
         Ollama server idle and doubles wallclock. Here we pre-compute a
         deterministic, weight-proportional allocation and stride-interleave
-        the slots so that even if `max_proposal_jobs` is smaller than the
+        the slots so that even if `max_parallel_organisms` is smaller than the
         batch size, each wave still hits distinct routes when possible.
 
         The allocation uses Hamilton (largest-remainder) apportionment:
@@ -1137,13 +1140,13 @@ class EvolutionLoop:
             )
             _announce(
                 f"creating {len(planned_organisms)} organism(s) for state_kind={state_kind} "
-                f"(generation={self.generation}, concurrency={self.max_proposal_jobs}, "
+                f"(generation={self.generation}, concurrency={self.max_parallel_organisms}, "
                 f"route_distribution=[{distribution}])"
             )
         else:
             _announce(
                 f"creating {len(planned_organisms)} organism(s) for state_kind={state_kind} "
-                f"(generation={self.generation}, concurrency={self.max_proposal_jobs})"
+                f"(generation={self.generation}, concurrency={self.max_parallel_organisms})"
             )
 
         persist_state = self._persist_inflight_generation if state_kind == "generation" else self._persist_inflight_seed
@@ -1151,7 +1154,7 @@ class EvolutionLoop:
         active_by_id = {organism.organism_id: organism for organism in self.population}
         plans_by_id = {plan.organism_id: plan for plan in planned_organisms}
         created_offspring: dict[str, OrganismMeta] = {}
-        semaphore = asyncio.Semaphore(self.max_proposal_jobs)
+        semaphore = asyncio.Semaphore(self.max_parallel_organisms)
 
         async def _run_creation(plan: PlannedOrganismCreation) -> tuple[str, OrganismMeta | None]:
             async with semaphore:
@@ -1438,7 +1441,7 @@ class EvolutionLoop:
             f"starting sampling for generation {generation} "
             f"(active_population={len(self.population)}, "
             f"offspring_per_generation={self.offspring_per_generation}, "
-            f"max_proposal_jobs={self.max_proposal_jobs})"
+            f"max_parallel_organisms={self.max_parallel_organisms})"
         )
         if planned_offspring is None:
             active_by_island = self._group_by_island(self.population)
@@ -1478,7 +1481,7 @@ class EvolutionLoop:
             _announce(
                 "starting seed sampling for generation 0 "
                 f"(islands={len(self.islands)}, seed_per_island={self.seed_organisms_per_island}, "
-                f"max_proposal_jobs={self.max_proposal_jobs})"
+                f"max_parallel_organisms={self.max_parallel_organisms})"
             )
             state = self._load_state()
             if state is not None:

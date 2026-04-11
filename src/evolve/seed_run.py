@@ -19,10 +19,6 @@ def run_seed_population(cfg: DictConfig) -> dict:
 
     ensure_root_runtime_config(cfg, context="src.evolve.seed_run")
 
-    if not bool(cfg.evolver.enabled):
-        LOGGER.info("evolver.enabled=false, skipping seed run")
-        return {}
-
     from src.evolve.evolution_loop import EvolutionLoop
 
     registry = ApiPlatformRegistry(cfg)

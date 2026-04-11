@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def _compose(overrides: list[str]):
     conf_dir = ROOT / "conf"
     with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
-        return compose(config_name="config_optimization_survey", overrides=overrides)
+        return compose(config_name="config_optimization_survey_validate", overrides=overrides)
 
 
 def test_run_validation_overrides_apply_only_in_run_mode() -> None:
