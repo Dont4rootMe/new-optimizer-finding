@@ -46,7 +46,6 @@ def _compose_circle_cfg(tmp_path: Path, *, max_generations: int = 1):
                 f"paths.api_platform_runtime_root={tmp_path / '.api_platform_runtime'}",
                 "evolver.islands.seed_organisms_per_island=1",
                 "evolver.islands.max_organisms_per_island=1",
-                "evolver.phases.simple.top_k_per_island=1",
                 f"evolver.max_generations={max_generations}",
             ],
         )

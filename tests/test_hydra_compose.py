@@ -167,9 +167,9 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert "organism_dir" not in cfg
     assert cfg.evolver.creation.max_attempts_per_organism == 3
     assert cfg.evolver.creation.max_parallel_organisms == 5
-    assert cfg.evolver.islands.seed_organisms_per_island == 1
-    assert cfg.evolver.islands.max_organisms_per_island == 40
-    assert cfg.evolver.phases.simple.top_k_per_island == 40
+    assert cfg.evolver.islands.seed_organisms_per_island == 3
+    assert cfg.evolver.islands.max_organisms_per_island == 15
+    assert "top_k_per_island" not in cfg.evolver.phases.simple
     assert cfg.evolver.reproduction.offspring_per_generation == 5
     assert set(cfg.evolver.llm.route_weights.keys()) == {"ollama_qwen35_27b", "ollama_gemma4_26b"}
     assert cfg.evolver.llm.route_weights.ollama_qwen35_27b == 1.0

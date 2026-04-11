@@ -47,7 +47,6 @@ phases:
   simple:
     eval_mode: smoke
     timeout_sec_per_eval: 7200
-    top_k_per_island: 5
     experiments:
       - synthetic_logreg
       - mnist_mlp

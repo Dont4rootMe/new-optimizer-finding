@@ -91,7 +91,6 @@ def _make_cfg(tmp_path: Path) -> object:
                     "simple": {
                         "eval_mode": "smoke",
                         "timeout_sec_per_eval": 60,
-                        "top_k_per_island": 2,
                         "experiments": [],
                         "allocation": {},
                     },

@@ -47,7 +47,6 @@ phases:
   simple:
     eval_mode: smoke
     timeout_sec_per_eval: 120
-    top_k_per_island: 40
     experiments:
       - unit_square_26
     allocation:

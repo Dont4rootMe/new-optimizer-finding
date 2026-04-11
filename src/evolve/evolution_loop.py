@@ -214,9 +214,6 @@ class EvolutionLoop:
     def _phase_timeout_sec(self, phase: str) -> int:
         return int(self._phase_value(phase, "timeout_sec_per_eval"))
 
-    def _simple_top_k(self) -> int:
-        return int(self._phase_value("simple", "top_k_per_island"))
-
     def _great_filter_top_h(self) -> int:
         return int(self._phase_value("hard", "top_h_per_island"))
 
@@ -227,17 +224,11 @@ class EvolutionLoop:
         return max(1, int(self._phase_value("hard", "interval_generations")))
 
     def _validate_phase_selection_bounds(self) -> None:
-        top_k = self._simple_top_k()
         top_h = self._great_filter_top_h()
-        if top_k > self.max_organisms_per_island:
-            raise ValueError(
-                "Invalid evolve config: evolver.phases.simple.top_k_per_island "
-                "must be <= evolver.islands.max_organisms_per_island"
-            )
-        if top_h > top_k:
+        if top_h > self.max_organisms_per_island:
             raise ValueError(
                 "Invalid evolve config: evolver.phases.great_filter.top_h_per_island "
-                "must be <= evolver.phases.simple.top_k_per_island"
+                "must be <= evolver.islands.max_organisms_per_island"
             )
         if self.max_organisms_per_island <= 0:
             raise ValueError("Invalid evolve config: evolver.islands.max_organisms_per_island must be > 0")
@@ -1451,7 +1442,7 @@ class EvolutionLoop:
         candidate_pool = list(self.population) + offspring
         simple_survivors = select_top_k_per_island(
             candidate_pool,
-            self._simple_top_k(),
+            self.max_organisms_per_island,
             score_field="simple_score",
         )
         self._mark_eliminated(candidate_pool, simple_survivors)
@@ -1500,7 +1491,11 @@ class EvolutionLoop:
                 planned_organisms = self._plan_seed_population()
 
             newborns = await self._execute_planned_creations(planned_organisms, state_kind="seed")
-            self.population = select_top_k_per_island(newborns, self._simple_top_k(), score_field="simple_score")
+            self.population = select_top_k_per_island(
+                newborns,
+                self.max_organisms_per_island,
+                score_field="simple_score",
+            )
             self._mark_eliminated(newborns, self.population)
             for organism in self.population:
                 organism.current_generation_active = 0

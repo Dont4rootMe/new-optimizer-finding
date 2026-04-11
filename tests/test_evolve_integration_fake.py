@@ -134,7 +134,6 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                     "simple": {
                         "eval_mode": "smoke",
                         "timeout_sec_per_eval": 60,
-                        "top_k_per_island": 1,
                         "experiments": ["simple_a"],
                         "allocation": {"enabled": False},
                     },
