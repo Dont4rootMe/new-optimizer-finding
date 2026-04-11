@@ -13,7 +13,6 @@ def test_no_valopt_env_vars_in_active_surface() -> None:
         ROOT / "README.md",
         ROOT / "conf" / "config_optimization_survey.yaml",
         ROOT / "conf" / "config_circle_packing_shinka.yaml",
-        ROOT / "conf" / "config_circle_packing_shinka_ollama_dual.yaml",
         ROOT / "scripts" / "seed_population.sh",
         ROOT / "scripts" / "run_evolution.sh",
     ]

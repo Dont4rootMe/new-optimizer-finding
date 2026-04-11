@@ -113,13 +113,12 @@ python -m src.main --config-name config_circle_packing_shinka mode=run organism_
 ./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka
 ```
 
-For the paper-aligned dual-Ollama run with `qwen3.5:27b` and `gemma4:26b`, use:
+That preset isolates the two local Ollama routes by default:
 
-```bash
-./scripts/seed_population.sh --config-name config_circle_packing_shinka_ollama_dual
-./scripts/run_evolution.sh --config-name config_circle_packing_shinka_ollama_dual
-./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka_ollama_dual
-```
+- `gemma4:26b` on `http://127.0.0.1:11434/api` with `gpu_ranks=[0]`
+- `qwen3.5:27b` on `http://127.0.0.1:11435/api` with `gpu_ranks=[1]`
+
+The `scripts/*` wrappers auto-start one local Ollama service per distinct local `base_url`, pin it to the configured route GPU when `gpu_ranks` is set, and pull missing models before `seed` or `evolve` starts.
 
 Its organism contract is:
 

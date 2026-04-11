@@ -36,7 +36,7 @@ def run_packing():
 def _compose_circle_cfg(tmp_path: Path, *, max_generations: int = 1):
     conf_dir = ROOT / "conf"
     with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
-        return compose(
+        cfg = compose(
             config_name="config_circle_packing_shinka",
             overrides=[
                 f"paths.population_root={tmp_path / 'populations'}",
@@ -50,6 +50,13 @@ def _compose_circle_cfg(tmp_path: Path, *, max_generations: int = 1):
                 f"evolver.max_generations={max_generations}",
             ],
         )
+    cfg.api_platforms = {
+        "mock": {
+            "_target_": "api_platforms.mock.platform.build_platform",
+        }
+    }
+    cfg.evolver.llm.route_weights = {"mock": 1.0}
+    return cfg
 
 
 def _write_organism_dir(tmp_path: Path, code: str) -> Path:
@@ -66,12 +73,12 @@ def test_circle_packing_config_composes() -> None:
 
     assert set(cfg.experiments.keys()) == {"unit_square_26"}
     assert "safety" not in cfg
-    assert set(cfg.api_platforms.keys()) == {"mock"}
+    assert set(cfg.api_platforms.keys()) == {"ollama_qwen35_27b", "ollama_gemma4_26b"}
     assert cfg.experiments.unit_square_26.need_cuda is False
     assert cfg.evolver.phases.simple.experiments == ["unit_square_26"]
     assert cfg.evolver.phases.great_filter.enabled is False
     assert cfg.resources.evaluation.gpu_ranks == []
-    assert cfg.resources.evaluation.cpu_parallel_jobs == 4
+    assert cfg.resources.evaluation.cpu_parallel_jobs == 5
     assert cfg.evolver.prompts.project_context == "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt"
 
 

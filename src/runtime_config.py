@@ -15,6 +15,5 @@ def ensure_root_runtime_config(cfg: DictConfig, *, context: str) -> None:
         raise ValueError(
             f"{context} requires an explicit Hydra preset. "
             "Re-run with --config-name <preset> "
-            "(for example: config_optimization_survey, config_circle_packing_shinka, "
-            "config_circle_packing_shinka_ollama_dual)."
+            "(for example: config_optimization_survey, config_circle_packing_shinka)."
         )

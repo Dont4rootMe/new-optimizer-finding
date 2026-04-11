@@ -18,7 +18,6 @@ Common examples:
   ./scripts/run_evolution.sh --config-name config_optimization_survey
   ./scripts/run_evolution.sh --seed --config-name config_optimization_survey
   ./scripts/run_evolution.sh --config-name config_circle_packing_shinka
-  ./scripts/run_evolution.sh --config-name config_circle_packing_shinka_ollama_dual
   ./scripts/run_evolution.sh --config-name config_circle_packing_shinka paths.population_root=/tmp/circle_pack_pop
   ./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka paths.population_root=/tmp/circle_pack_pop
   ./scripts/run_evolution.sh --config-name config_optimization_survey evolver.max_generations=50 evolver.max_proposal_jobs=8
@@ -26,6 +25,7 @@ Common examples:
 Notes:
   - all trailing arguments are passed directly to Hydra as overrides
   - use --seed to bootstrap a fresh population root automatically
+  - if the selected config uses local Ollama routes, this wrapper auto-starts Ollama and pulls missing models
   - this wrapper forces mode=evolve
   - this wrapper prints script help on --help or -h
 EOF
@@ -38,6 +38,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+source "${SCRIPT_DIR}/lib_runtime.sh"
 
 auto_seed=0
 forward_args=()
@@ -68,24 +69,8 @@ if [[ "$has_config_name" -ne 1 ]]; then
   exit 2
 fi
 
-prompt_seed_now() {
-  local reply
-  if ! read -r -p "Run seed_population.sh now for this run? [Y/n] " reply; then
-    echo "No interactive input available to confirm reseeding." >&2
-    return 1
-  fi
-  case "$reply" in
-    ""|[Yy]|[Yy][Ee][Ss])
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
-if [[ "$auto_seed" -eq 1 ]]; then
-  mapfile -t seed_inspect < <(python - "$ROOT_DIR" "${forward_args[@]}" <<'PY'
+inspect_population_state() {
+  python - "$ROOT_DIR" "__codex_inspect_population__" "${forward_args[@]}" <<'PY'
 from __future__ import annotations
 
 import json
@@ -104,6 +89,9 @@ def main() -> int:
     idx = 0
     while idx < len(cli_args):
         arg = cli_args[idx]
+        if arg.startswith("__codex_inspect_"):
+            idx += 1
+            continue
         if arg == "--config-name":
             if idx + 1 >= len(cli_args):
                 raise SystemExit("--config-name requires a preset name")
@@ -165,7 +153,26 @@ def main() -> int:
 
 raise SystemExit(main())
 PY
-  )
+}
+
+prompt_seed_now() {
+  local reply
+  if ! read -r -p "Run seed_population.sh now for this run? [Y/n] " reply; then
+    echo "No interactive input available to confirm reseeding." >&2
+    return 1
+  fi
+  case "$reply" in
+    ""|[Yy]|[Yy][Ee][Ss])
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+if [[ "$auto_seed" -eq 1 ]]; then
+  mapfile -t seed_inspect < <(inspect_population_state)
   population_root="${seed_inspect[0]}"
   population_status="${seed_inspect[1]:-ready}"
   population_message="${seed_inspect[2]:-}"
@@ -198,6 +205,20 @@ PY
       exit 1
       ;;
   esac
+
+  mapfile -t post_seed_inspect < <(inspect_population_state)
+  post_seed_status="${post_seed_inspect[1]:-ready}"
+  post_seed_message="${post_seed_inspect[2]:-}"
+  if [[ "$post_seed_status" != "ready" ]]; then
+    echo "Seed run did not produce an active generation-0 population." >&2
+    if [[ -n "$post_seed_message" ]]; then
+      echo "$post_seed_message" >&2
+    fi
+    echo "Check the seed logs above. For Ollama routes, verify OLLAMA_BASE_URL and that the Ollama server is reachable from this node." >&2
+    exit 1
+  fi
 fi
+
+ensure_ollama_runtime "$ROOT_DIR" "${forward_args[@]}"
 
 python -m src.main "${forward_args[@]}" mode=evolve

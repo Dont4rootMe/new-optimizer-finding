@@ -136,37 +136,12 @@ def test_circle_packing_shinka_config_composes() -> None:
 
     assert set(cfg.experiments.keys()) == {"unit_square_26"}
     assert "safety" not in cfg
-    assert set(cfg.api_platforms.keys()) == {"mock"}
-    assert cfg.api_platforms.mock._target_ == "api_platforms.mock.platform.build_platform"
+    assert set(cfg.api_platforms.keys()) == {"ollama_qwen35_27b", "ollama_gemma4_26b"}
     assert cfg.experiments.unit_square_26._target_ == "experiments.circle_packing_shinka.unit_square_26.UnitSquare26CirclePackingExperiment"
     assert cfg.experiments.unit_square_26.need_cuda is False
     assert cfg.evolver.prompts.project_context == "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt"
     assert cfg.evolver.phases.simple.experiments == ["unit_square_26"]
     assert cfg.evolver.phases.great_filter.enabled is False
-    assert cfg.resources.evaluation.gpu_ranks == []
-    assert cfg.resources.evaluation.cpu_parallel_jobs == 4
-    assert cfg.evolver.max_generations == 150
-    assert cfg.evolver.max_proposal_jobs == 5
-    assert cfg.evolver.islands.seed_organisms_per_island == 1
-    assert cfg.evolver.islands.max_organisms_per_island == 40
-    assert cfg.evolver.phases.simple.top_k_per_island == 40
-    assert cfg.evolver.reproduction.offspring_per_generation == 5
-    assert cfg.evolver.llm.route_weights.mock == 1.0
-
-
-def test_circle_packing_shinka_dual_ollama_preset_composes() -> None:
-    conf_dir = ROOT / "conf"
-    with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
-        cfg = compose(config_name="config_circle_packing_shinka_ollama_dual")
-
-    assert set(cfg.experiments.keys()) == {"unit_square_26"}
-    assert "safety" not in cfg
-    assert set(cfg.api_platforms.keys()) == {"ollama_qwen35_27b", "ollama_gemma4_26b"}
-    assert cfg.experiments.unit_square_26.need_cuda is False
-    assert cfg.experiments.unit_square_26.compute.device == "cpu"
-    assert cfg.evolver.phases.simple.experiments == ["unit_square_26"]
-    assert cfg.evolver.phases.great_filter.enabled is False
-    assert cfg.evolver.phases.great_filter.top_h_per_island == 0
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 5
     assert cfg.evolver.max_generations == 150
@@ -185,5 +160,9 @@ def test_circle_packing_shinka_dual_ollama_preset_composes() -> None:
     gemma_route = instantiate(cfg.api_platforms.ollama_gemma4_26b, _recursive_=False)
     assert qwen_route.route_id == "ollama_qwen35_27b"
     assert qwen_route.provider_model_id == "qwen3.5:27b"
+    assert qwen_route.base_url == "http://127.0.0.1:11435/api"
+    assert qwen_route.gpu_ranks == [1]
     assert gemma_route.route_id == "ollama_gemma4_26b"
     assert gemma_route.provider_model_id == "gemma4:26b"
+    assert gemma_route.base_url == "http://127.0.0.1:11434/api"
+    assert gemma_route.gpu_ranks == [0]
