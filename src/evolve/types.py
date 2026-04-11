@@ -67,6 +67,7 @@ class OrganismMeta:
     prompt_hash: str = ""
     seed: int = 0
     pipeline_state: str = ""
+    error_msg: str | None = None
     planned_phase_evaluations: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -94,6 +95,7 @@ class OrganismMeta:
             "prompt_hash": self.prompt_hash,
             "seed": self.seed,
             "pipeline_state": self.pipeline_state,
+            "error_msg": self.error_msg,
             "planned_phase_evaluations": dict(self.planned_phase_evaluations),
         }
 

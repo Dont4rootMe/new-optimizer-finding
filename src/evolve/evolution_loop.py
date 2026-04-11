@@ -541,6 +541,7 @@ class EvolutionLoop:
             experiment_report_index={},
             status="pending",
             pipeline_state=plan.pipeline_state,
+            error_msg=plan.error_msg,
             planned_phase_evaluations={
                 phase: phase_plan.to_dict() for phase, phase_plan in plan.planned_phase_evaluations.items()
             },
@@ -1001,6 +1002,13 @@ class EvolutionLoop:
                 try:
                     organism = await asyncio.to_thread(self._materialize_planned_organism, plan, active_by_id)
                 except Exception as exc:  # noqa: BLE001
+                    LOGGER.exception(
+                        "Organism creation failed for %s (generation=%d, island=%s, route=%s)",
+                        plan.organism_id,
+                        plan.generation,
+                        plan.island_id,
+                        plan.route,
+                    )
                     plan.pipeline_state = "failed_creation"
                     plan.error_msg = str(exc)
                     self._write_planned_organism_stub(plan)

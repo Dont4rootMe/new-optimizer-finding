@@ -21,4 +21,20 @@ Do not:
 - let either parent implementation override the selected child draft
 - turn the response into a direct solved arrangement instead of a gene-level design
 
-Return only the structured design artifact with the same sections as the seed stage.
+## Response format
+
+Return the following sections, each starting with `## SECTION_NAME`.
+Do NOT use markdown code fences.
+
+## CORE_GENES
+At least 3 bullets.
+Each bullet is one concrete idea for the child.
+
+## INTERACTION_NOTES
+State what assumptions the combined child makes and where it is likely to help or fail.
+
+## COMPUTE_NOTES
+State the computational style implied by the combined child design.
+
+## CHANGE_DESCRIPTION
+Give one unified novelty summary describing what was inherited, synthesized, or redirected.

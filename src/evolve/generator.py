@@ -83,6 +83,8 @@ class CandidateGenerator(BaseLlmGenerator):
         """Run design and implementation stages and persist both LLM exchanges."""
 
         route_id = self.sample_route_id()
+        llm_request_path = org_dir / "llm_request.json"
+        llm_response_path = org_dir / "llm_response.json"
         design_response = self._call_llm_stage(
             route_id,
             "design",
@@ -91,11 +93,50 @@ class CandidateGenerator(BaseLlmGenerator):
             organism_id=organism_id,
             generation=generation,
         )
+        llm_request_payload = {
+            "route_id": route_id,
+            "provider": design_response.provider,
+            "provider_model_id": design_response.provider_model_id,
+            "design": {
+                "route_id": route_id,
+                "provider": design_response.provider,
+                "provider_model_id": design_response.provider_model_id,
+                "system_prompt": design_system_prompt,
+                "user_prompt": design_user_prompt,
+                "request": design_response.raw_request,
+            },
+        }
+        llm_response_payload = {
+            "route_id": route_id,
+            "provider": design_response.provider,
+            "provider_model_id": design_response.provider_model_id,
+            "design": {
+                "route_id": route_id,
+                "provider": design_response.provider,
+                "provider_model_id": design_response.provider_model_id,
+                "text": design_response.text,
+                "response": design_response.raw_response,
+                "usage": design_response.usage,
+                "started_at": design_response.started_at,
+                "finished_at": design_response.finished_at,
+            },
+        }
+        write_json(llm_request_path, llm_request_payload)
+        write_json(llm_response_path, llm_response_payload)
+
         parsed_design = parse_llm_response(design_response.text)
         implementation_system_prompt, implementation_user_prompt = build_implementation_prompt_from_design(
             parsed_design,
             self.prompt_bundle,
         )
+        llm_request_payload["implementation"] = {
+            "route_id": route_id,
+            "system_prompt": implementation_system_prompt,
+            "user_prompt": implementation_user_prompt,
+            "request": None,
+        }
+        write_json(llm_request_path, llm_request_payload)
+
         implementation_response = self._call_llm_stage(
             route_id,
             "implementation",
@@ -106,59 +147,26 @@ class CandidateGenerator(BaseLlmGenerator):
             extra_metadata={"implementation_template": self.prompt_bundle.implementation_template},
         )
         implementation_code = self._extract_python(implementation_response.text)
-
-        write_json(
-            org_dir / "llm_request.json",
-            {
-                "route_id": route_id,
-                "provider": design_response.provider,
-                "provider_model_id": design_response.provider_model_id,
-                "design": {
-                    "route_id": route_id,
-                    "provider": design_response.provider,
-                    "provider_model_id": design_response.provider_model_id,
-                    "system_prompt": design_system_prompt,
-                    "user_prompt": design_user_prompt,
-                    "request": design_response.raw_request,
-                },
-                "implementation": {
-                    "route_id": route_id,
-                    "provider": implementation_response.provider,
-                    "provider_model_id": implementation_response.provider_model_id,
-                    "system_prompt": implementation_system_prompt,
-                    "user_prompt": implementation_user_prompt,
-                    "request": implementation_response.raw_request,
-                },
-            },
-        )
-        write_json(
-            org_dir / "llm_response.json",
-            {
-                "route_id": route_id,
-                "provider": design_response.provider,
-                "provider_model_id": design_response.provider_model_id,
-                "design": {
-                    "route_id": route_id,
-                    "provider": design_response.provider,
-                    "provider_model_id": design_response.provider_model_id,
-                    "text": design_response.text,
-                    "response": design_response.raw_response,
-                    "usage": design_response.usage,
-                    "started_at": design_response.started_at,
-                    "finished_at": design_response.finished_at,
-                },
-                "implementation": {
-                    "route_id": route_id,
-                    "provider": implementation_response.provider,
-                    "provider_model_id": implementation_response.provider_model_id,
-                    "text": implementation_code,
-                    "response": implementation_response.raw_response,
-                    "usage": implementation_response.usage,
-                    "started_at": implementation_response.started_at,
-                    "finished_at": implementation_response.finished_at,
-                },
-            },
-        )
+        llm_request_payload["implementation"] = {
+            "route_id": route_id,
+            "provider": implementation_response.provider,
+            "provider_model_id": implementation_response.provider_model_id,
+            "system_prompt": implementation_system_prompt,
+            "user_prompt": implementation_user_prompt,
+            "request": implementation_response.raw_request,
+        }
+        llm_response_payload["implementation"] = {
+            "route_id": route_id,
+            "provider": implementation_response.provider,
+            "provider_model_id": implementation_response.provider_model_id,
+            "text": implementation_code,
+            "response": implementation_response.raw_response,
+            "usage": implementation_response.usage,
+            "started_at": implementation_response.started_at,
+            "finished_at": implementation_response.finished_at,
+        }
+        write_json(llm_request_path, llm_request_payload)
+        write_json(llm_response_path, llm_response_payload)
 
         prompt_hash = sha1_text(
             "\n".join(

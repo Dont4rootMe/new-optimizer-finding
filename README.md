@@ -110,6 +110,7 @@ Use the dedicated preset:
 python -m src.main --config-name config_circle_packing_shinka mode=run organism_dir=/absolute/path/to/organism
 ./scripts/seed_population.sh --config-name config_circle_packing_shinka
 ./scripts/run_evolution.sh --config-name config_circle_packing_shinka
+./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka
 ```
 
 For the paper-aligned dual-Ollama run with `qwen3.5:27b` and `gemma4:26b`, use:
@@ -117,6 +118,7 @@ For the paper-aligned dual-Ollama run with `qwen3.5:27b` and `gemma4:26b`, use:
 ```bash
 ./scripts/seed_population.sh --config-name config_circle_packing_shinka_ollama_dual
 ./scripts/run_evolution.sh --config-name config_circle_packing_shinka_ollama_dual
+./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka_ollama_dual
 ```
 
 Its organism contract is:

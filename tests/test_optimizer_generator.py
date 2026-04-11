@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from omegaconf import OmegaConf
 
+from api_platforms import LlmResponse
 import src.evolve.operators as canonical_seed_operators
 from src.evolve.generator import CandidateGenerator
 from src.evolve.types import Island
@@ -122,3 +124,56 @@ def test_canonical_seed_operator_module_excludes_prompt_only_mutation_and_crosso
     assert hasattr(canonical_seed_operators, "SeedOperator")
     assert not hasattr(canonical_seed_operators, "MutationOperator")
     assert not hasattr(canonical_seed_operators, "CrossoverOperator")
+
+
+def test_run_creation_stages_persists_design_exchange_before_parse_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_partial"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    calls: list[str] = []
+
+    def fake_generate(request):
+        calls.append(request.stage)
+        return LlmResponse(
+            text=(
+                "## CORE_GENES\n"
+                "- valid enough gene one\n"
+                "- valid enough gene two\n"
+                "- valid enough gene three\n\n"
+                "## INTERACTION_NOTES\n"
+                "Partial design only.\n"
+            ),
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+
+    try:
+        with pytest.raises(ValueError, match="COMPUTE_NOTES|CHANGE_DESCRIPTION"):
+            generator.run_creation_stages(
+                design_system_prompt="design system",
+                design_user_prompt="design user",
+                org_dir=organism_dir,
+                organism_id="org_partial",
+                generation=0,
+            )
+    finally:
+        generator.close()
+
+    assert calls == ["design"]
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
+    assert llm_request["design"]["request"] == {"stage": "design"}
+    assert llm_response["design"]["response"] == {"stage": "design"}
+    assert "implementation" not in llm_request
+    assert "implementation" not in llm_response

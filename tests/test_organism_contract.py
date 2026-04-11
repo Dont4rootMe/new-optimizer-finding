@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src.evolve.storage import read_genetic_code, read_lineage, read_organism_meta, write_json
+from src.evolve.storage import read_genetic_code, read_lineage, read_organism_meta, write_json, write_organism_meta
 from src.organisms.organism import (
     build_organism_from_response,
     format_lineage_summary,
@@ -213,3 +213,12 @@ def test_canonical_organism_meta_read_rejects_noncanonical_meta_shape(tmp_path: 
 
     with pytest.raises(ValueError, match="generation_created|island_id"):
         read_organism_meta(org_dir)
+
+
+def test_canonical_organism_meta_round_trips_error_msg(tmp_path: Path) -> None:
+    org = _build(tmp_path, _base_parsed())
+    org.error_msg = "design response is missing COMPUTE_NOTES"
+    write_organism_meta(org)
+
+    reloaded = read_organism_meta(org.organism_dir)
+    assert reloaded.error_msg == "design response is missing COMPUTE_NOTES"

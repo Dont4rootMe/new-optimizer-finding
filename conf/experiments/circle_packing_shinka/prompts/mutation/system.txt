@@ -19,4 +19,20 @@ Do not:
 - treat the implementation as the main artifact
 - output a ready-made solution instead of a gene-level design
 
-Return only the structured design artifact with the same sections as the seed stage.
+## Response format
+
+Return the following sections, each starting with `## SECTION_NAME`.
+Do NOT use markdown code fences.
+
+## CORE_GENES
+At least 3 bullets.
+Each bullet is one concrete idea for the child.
+
+## INTERACTION_NOTES
+State what assumptions the child idea set makes and where it is likely to help or fail.
+
+## COMPUTE_NOTES
+State the computational style implied by the child design.
+
+## CHANGE_DESCRIPTION
+Give one unified novelty summary for the child relative to the parent.

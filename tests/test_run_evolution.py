@@ -88,6 +88,7 @@ def test_run_evolution_shell_wrapper_prints_help() -> None:
     assert completed.returncode == 0
     assert "Run the main evolution loop" in completed.stdout
     assert "mode=evolve" in completed.stdout
+    assert "--seed" in completed.stdout
     assert completed.stderr == ""
 
 
@@ -104,6 +105,111 @@ def test_run_evolution_shell_wrapper_requires_config_name() -> None:
 
     assert completed.returncode == 2
     assert "requires an explicit --config-name" in completed.stderr
+
+
+def test_run_evolution_shell_wrapper_requires_config_name_even_with_seed_flag() -> None:
+    script = ROOT / "scripts" / "run_evolution.sh"
+
+    completed = subprocess.run(
+        [str(script), "--seed"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+
+    assert completed.returncode == 2
+    assert "requires an explicit --config-name" in completed.stderr
+
+
+def test_run_evolution_shell_wrapper_auto_seeds_when_generation_zero_is_missing(tmp_path: Path) -> None:
+    script = ROOT / "scripts" / "run_evolution.sh"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    calls_path = tmp_path / "python_calls.log"
+    pop_root = tmp_path / "pop_missing"
+    fake_python = fake_bin / "python"
+    fake_python.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "-" ]]; then
+  cat >/dev/null
+  printf '%s\\n' "${POP_ROOT:?}"
+  exit 0
+fi
+printf '%s\\n' "$*" >> "${PYTHON_CALLS_FILE:?}"
+exit 0
+""",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["POP_ROOT"] = str(pop_root)
+    env["PYTHON_CALLS_FILE"] = str(calls_path)
+
+    completed = subprocess.run(
+        [str(script), "--seed", "--config-name", "config_circle_packing_shinka"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        env=env,
+    )
+
+    assert completed.returncode == 0
+    assert "running seed_population.sh first" in completed.stdout
+    calls = calls_path.read_text(encoding="utf-8").splitlines()
+    assert calls == [
+        "-m src.evolve.seed_run --config-name config_circle_packing_shinka",
+        "-m src.main mode=evolve --config-name config_circle_packing_shinka",
+    ]
+
+
+def test_run_evolution_shell_wrapper_skips_auto_seed_when_generation_zero_exists(tmp_path: Path) -> None:
+    script = ROOT / "scripts" / "run_evolution.sh"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    calls_path = tmp_path / "python_calls.log"
+    pop_root = tmp_path / "pop_existing"
+    (pop_root / "gen_0000").mkdir(parents=True, exist_ok=True)
+    fake_python = fake_bin / "python"
+    fake_python.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "-" ]]; then
+  cat >/dev/null
+  printf '%s\\n' "${POP_ROOT:?}"
+  exit 0
+fi
+printf '%s\\n' "$*" >> "${PYTHON_CALLS_FILE:?}"
+exit 0
+""",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["POP_ROOT"] = str(pop_root)
+    env["PYTHON_CALLS_FILE"] = str(calls_path)
+
+    completed = subprocess.run(
+        [str(script), "--seed", "--config-name", "config_circle_packing_shinka"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        env=env,
+    )
+
+    assert completed.returncode == 0
+    assert "running seed_population.sh first" not in completed.stdout
+    calls = calls_path.read_text(encoding="utf-8").splitlines()
+    assert calls == [
+        "-m src.main mode=evolve --config-name config_circle_packing_shinka",
+    ]
 
 
 def test_main_entrypoint_requires_config_name() -> None:

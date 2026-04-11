@@ -450,6 +450,7 @@ def _coerce_organism_meta_payload(
         "prompt_hash": str(payload.get("prompt_hash", "")),
         "seed": int(payload.get("seed", 0)),
         "pipeline_state": str(payload.get("pipeline_state", "")),
+        "error_msg": _optional_str_field(payload, "error_msg"),
         "planned_phase_evaluations": dict(payload.get("planned_phase_evaluations", {})),
     }
 
@@ -504,6 +505,7 @@ def read_organism_meta(path: str | Path) -> OrganismMeta:
         prompt_hash=canonical["prompt_hash"],
         seed=canonical["seed"],
         pipeline_state=canonical["pipeline_state"],
+        error_msg=canonical["error_msg"],
         planned_phase_evaluations=canonical["planned_phase_evaluations"],
     )
 

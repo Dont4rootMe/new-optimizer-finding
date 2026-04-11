@@ -39,6 +39,34 @@ def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
     assert "Return only the final `implementation.py` text." in bundle.implementation_user
 
 
+def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contract() -> None:
+    cfg = OmegaConf.create(
+        {
+            "evolver": {
+                "prompts": {
+                    "project_context": "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt",
+                    "seed_system": "conf/experiments/circle_packing_shinka/prompts/seed/system.txt",
+                    "seed_user": "conf/experiments/circle_packing_shinka/prompts/seed/user.txt",
+                    "mutation_system": "conf/experiments/circle_packing_shinka/prompts/mutation/system.txt",
+                    "mutation_user": "conf/experiments/circle_packing_shinka/prompts/mutation/user.txt",
+                    "crossover_system": "conf/experiments/circle_packing_shinka/prompts/crossover/system.txt",
+                    "crossover_user": "conf/experiments/circle_packing_shinka/prompts/crossover/user.txt",
+                    "implementation_system": "conf/experiments/circle_packing_shinka/prompts/implementation/system.txt",
+                    "implementation_user": "conf/experiments/circle_packing_shinka/prompts/implementation/user.txt",
+                    "implementation_template": "conf/experiments/circle_packing_shinka/prompts/implementation/template.txt",
+                }
+            }
+        }
+    )
+
+    bundle = load_prompt_bundle(cfg)
+
+    for prompt in (bundle.mutation_system, bundle.crossover_system):
+        assert "## Response format" in prompt
+        assert "## CORE_GENES" in prompt
+        assert "## CHANGE_DESCRIPTION" in prompt
+
+
 def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
     prompts_dir = tmp_path / "prompts"
     files = {
