@@ -32,6 +32,9 @@ def _write_fake_python(
         f"""\
         #!/usr/bin/env bash
         set -euo pipefail
+        if [[ "${{1:-}}" == "-c" ]]; then
+          exec python3 "$@"
+        fi
         if [[ "${{1:-}}" == "-" ]]; then
           cat >/dev/null
           for arg in "$@"; do

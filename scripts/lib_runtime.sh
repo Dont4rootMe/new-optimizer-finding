@@ -124,7 +124,7 @@ _ollama_healthcheck() {
 _ollama_model_present() {
   local base_url="$1"
   local model="$2"
-  curl -fsS --max-time 5 "$(_ollama_tags_url "$base_url")" | python - "$model" <<'PY'
+  curl -fsS --max-time 5 "$(_ollama_tags_url "$base_url")" | python -c '
 from __future__ import annotations
 
 import json
@@ -138,7 +138,7 @@ names = {
     if isinstance(entry, dict)
 }
 raise SystemExit(0 if model in names else 1)
-PY
+' "$model"
 }
 
 _start_local_ollama() {
