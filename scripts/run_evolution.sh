@@ -39,6 +39,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib_runtime.sh"
+require_python_bin || exit 1
 
 auto_seed=0
 forward_args=()
@@ -73,7 +74,7 @@ arm_ollama_cleanup_trap "$ROOT_DIR" "${forward_args[@]}"
 kill_ollama_runtime "$ROOT_DIR" "${forward_args[@]}"
 
 inspect_population_state() {
-  python - "$ROOT_DIR" "__codex_inspect_population__" "${forward_args[@]}" <<'PY'
+  "${PYTHON_BIN}" - "$ROOT_DIR" "__codex_inspect_population__" "${forward_args[@]}" <<'PY'
 from __future__ import annotations
 
 import json
@@ -224,4 +225,4 @@ fi
 
 ensure_ollama_runtime "$ROOT_DIR" "${forward_args[@]}"
 
-python -m src.main "${forward_args[@]}" mode=evolve
+"${PYTHON_BIN}" -m src.main "${forward_args[@]}" mode=evolve

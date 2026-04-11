@@ -36,6 +36,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib_runtime.sh"
+require_python_bin || exit 1
 
 has_config_name=0
 for arg in "$@"; do
@@ -57,4 +58,4 @@ arm_ollama_cleanup_trap "$ROOT_DIR" "$@"
 kill_ollama_runtime "$ROOT_DIR" "$@"
 ensure_ollama_runtime "$ROOT_DIR" "$@"
 
-python -m src.evolve.seed_run "$@"
+"${PYTHON_BIN}" -m src.evolve.seed_run "$@"

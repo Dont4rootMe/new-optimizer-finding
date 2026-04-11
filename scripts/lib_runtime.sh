@@ -5,11 +5,27 @@ OLLAMA_MODELS_DIR=""
 OLLAMA_REQUIREMENTS_LOADED=0
 OLLAMA_CLEANUP_ARMED=0
 OLLAMA_ROUTE_SPECS=()
+if command -v python >/dev/null 2>&1; then
+  PYTHON_BIN="$(command -v python)"
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON_BIN="$(command -v python3)"
+else
+  PYTHON_BIN=""
+fi
+
+require_python_bin() {
+  if [[ -n "$PYTHON_BIN" ]]; then
+    return 0
+  fi
+  echo "Error: scripts require Python, but neither 'python' nor 'python3' is available on PATH." >&2
+  return 1
+}
 
 resolve_ollama_requirements() {
   local root_dir="$1"
   shift
-  python - "$root_dir" "__codex_inspect_ollama__" "$@" <<'PY'
+  require_python_bin || return 1
+  "${PYTHON_BIN}" - "$root_dir" "__codex_inspect_ollama__" "$@" <<'PY'
 from __future__ import annotations
 
 import sys
@@ -212,7 +228,8 @@ _ollama_healthcheck() {
 _ollama_model_present() {
   local base_url="$1"
   local model="$2"
-  curl -fsS --max-time 5 "$(_ollama_tags_url "$base_url")" | python -c '
+  require_python_bin || return 1
+  curl -fsS --max-time 5 "$(_ollama_tags_url "$base_url")" | "${PYTHON_BIN}" -c '
 from __future__ import annotations
 
 import json
@@ -231,7 +248,8 @@ raise SystemExit(0 if model in names else 1)
 
 _stream_ollama_pull_progress() {
   local model="$1"
-  python -c '
+  require_python_bin || return 1
+  "${PYTHON_BIN}" -c '
 from __future__ import annotations
 
 import json
@@ -311,7 +329,8 @@ _child_pids() {
   fi
 
   if [[ "$(uname -s)" == "Linux" ]]; then
-    python - "$parent_pid" <<'PY'
+    require_python_bin || return 1
+    "${PYTHON_BIN}" - "$parent_pid" <<'PY'
 from __future__ import annotations
 
 import os
@@ -426,7 +445,8 @@ _pids_listening_on_port() {
   fi
 
   if [[ "$(uname -s)" == "Linux" ]]; then
-    python - "$port" <<'PY'
+    require_python_bin || return 1
+    "${PYTHON_BIN}" - "$port" <<'PY'
 from __future__ import annotations
 
 import os
@@ -505,7 +525,8 @@ _pids_opening_under_path() {
   fi
 
   if [[ "$(uname -s)" == "Linux" ]]; then
-    python - "$target_path" <<'PY'
+    require_python_bin || return 1
+    "${PYTHON_BIN}" - "$target_path" <<'PY'
 from __future__ import annotations
 
 import os
@@ -694,7 +715,8 @@ _summarize_ollama_compute_devices() {
     sleep 0.25
   done
 
-  python - "$stderr_log" <<'PY'
+  require_python_bin || return 1
+  "${PYTHON_BIN}" - "$stderr_log" <<'PY'
 from __future__ import annotations
 
 import re
@@ -726,20 +748,28 @@ for raw_line in text.splitlines():
         fields[key] = value
     device_id = fields.get("id", "")
     library = fields.get("library", "")
-    if device_id == "cpu" or library == "cpu":
+    device_type = fields.get("type", "")
+    name = fields.get("name", "")
+    device_id_lower = device_id.lower()
+    library_lower = library.lower()
+    device_type_lower = device_type.lower()
+    name_lower = name.lower()
+
+    if device_id_lower == "cpu" or library_lower == "cpu" or device_type_lower == "cpu":
         cpu_devices.append(fields)
-    elif library in {"cuda", "rocm", "vulkan", "metal"} or device_id.startswith(
-        ("cuda", "rocm", "vulkan", "metal")
+    elif (
+        library_lower in {"cuda", "rocm", "vulkan", "metal"}
+        or device_type_lower in {"discrete", "integrated", "gpu"}
+        or device_id_lower.startswith(("cuda", "rocm", "vulkan", "metal", "gpu-"))
+        or name_lower.startswith(("cuda", "rocm", "metal", "vulkan"))
     ):
         gpu_devices.append(fields)
     else:
-        # Unknown device family - be conservative and treat it as a GPU only
-        # if it's clearly not CPU. This guards against future ollama changes.
         cpu_devices.append(fields)
 
 def _describe(dev: dict[str, str]) -> str:
     parts = []
-    for key in ("id", "library", "name", "compute", "driver", "pci_id", "total"):
+    for key in ("id", "library", "type", "name", "compute", "driver", "pci_id", "total"):
         value = dev.get(key, "")
         if value:
             parts.append(f"{key}={value}")

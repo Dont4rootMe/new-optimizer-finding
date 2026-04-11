@@ -262,6 +262,38 @@ def test_seed_population_shell_wrapper_requires_config_name() -> None:
     assert "requires an explicit --config-name" in completed.stderr
 
 
+def test_ollama_device_summary_treats_uppercase_cuda_discrete_device_as_gpu(tmp_path: Path) -> None:
+    stderr_log = tmp_path / "serve.stderr.log"
+    stderr_log.write_text(
+        textwrap.dedent(
+            """\
+            time=2026-04-11T21:10:01.858+03:00 level=INFO source=types.go:42 msg="inference compute" id=GPU-ad350ace-2f24-5f11-bca1-0683d636b105 filter_id="" library=CUDA compute=9.0 name=CUDA0 description="NVIDIA H100 80GB HBM3" libdirs=ollama,cuda_v12 driver=12.6 pci_id=0000:19:00.0 type=discrete total="79.6 GiB" available="62.1 GiB"
+            time=2026-04-11T21:10:01.858+03:00 level=INFO source=routes.go:1860 msg="vram-based default context" total_vram="79.6 GiB" default_num_ctx=262144
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            "bash",
+            "-lc",
+            f"source scripts/lib_runtime.sh && _summarize_ollama_compute_devices '{stderr_log}'",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+
+    assert completed.returncode == 0
+    assert "device summary: 1 GPU, 0 CPU" in completed.stdout
+    assert "gpu[0]:" in completed.stdout
+    assert "library=CUDA" in completed.stdout
+    assert "type=discrete" in completed.stdout
+    assert "VERDICT=gpu gpus=1" in completed.stdout
+
+
 def test_kill_ollama_shell_wrapper_requires_config_name() -> None:
     script = ROOT / "scripts" / "kill_ollama.sh"
 
@@ -374,8 +406,8 @@ def test_seed_population_shell_wrapper_auto_starts_multiple_local_ollama_servers
     )
 
     assert completed.returncode == 0
-    assert "Starting local Ollama server for http://127.0.0.1:11434/api on gpu:0." in completed.stdout
-    assert "Starting local Ollama server for http://127.0.0.1:11435/api on gpu:1." in completed.stdout
+    assert "Starting local Ollama server for http://127.0.0.1:11434/api on gpu:0" in completed.stdout
+    assert "Starting local Ollama server for http://127.0.0.1:11435/api on gpu:1" in completed.stdout
     assert "Pulling Ollama model gemma4:26b" in completed.stdout
     assert "Pulling Ollama model qwen3.5:27b" in completed.stdout
     assert "local model store:" in completed.stdout
