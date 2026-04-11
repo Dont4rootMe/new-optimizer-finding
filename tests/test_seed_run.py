@@ -257,6 +257,7 @@ def test_seed_population_shell_wrapper_auto_starts_local_ollama(tmp_path: Path) 
     env["CURL_CALLS_FILE"] = str(curl_calls_path)
     env["OLLAMA_CALLS_FILE"] = str(ollama_calls_path)
     env["OLLAMA_STATE_DIR"] = str(tmp_path / "ollama_state")
+    env["OLLAMA_MODELS"] = str(tmp_path / "ollama_models")
     env["API_PLATFORM_RUNTIME_ROOT"] = str(runtime_root)
 
     completed = subprocess.run(
@@ -271,6 +272,7 @@ def test_seed_population_shell_wrapper_auto_starts_local_ollama(tmp_path: Path) 
     assert completed.returncode == 0
     assert "Starting local Ollama server" in completed.stdout
     assert "Pulling Ollama model qwen3.5:27b" in completed.stdout
+    assert f"local model store: {tmp_path / 'ollama_models'}" in completed.stdout
     assert "pulling manifest" in completed.stdout
     assert "downloading:" in completed.stdout
     module_calls = [
@@ -314,6 +316,7 @@ def test_seed_population_shell_wrapper_auto_starts_multiple_local_ollama_servers
     env["CURL_CALLS_FILE"] = str(curl_calls_path)
     env["OLLAMA_CALLS_FILE"] = str(ollama_calls_path)
     env["OLLAMA_STATE_DIR"] = str(tmp_path / "ollama_state")
+    env["OLLAMA_MODELS"] = str(tmp_path / "ollama_models")
     env["API_PLATFORM_RUNTIME_ROOT"] = str(runtime_root)
 
     completed = subprocess.run(
@@ -330,6 +333,7 @@ def test_seed_population_shell_wrapper_auto_starts_multiple_local_ollama_servers
     assert "Starting local Ollama server for http://127.0.0.1:11435/api on gpu:1." in completed.stdout
     assert "Pulling Ollama model gemma4:26b" in completed.stdout
     assert "Pulling Ollama model qwen3.5:27b" in completed.stdout
+    assert f"local model store: {tmp_path / 'ollama_models'}" in completed.stdout
     assert "verifying sha256 digest" in completed.stdout
     module_calls = [
         line

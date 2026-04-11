@@ -103,6 +103,28 @@ _ollama_origin() {
   printf '%s\n' "$base_url"
 }
 
+_ollama_models_dir() {
+  if [[ -n "${OLLAMA_MODELS:-}" ]]; then
+    printf '%s\n' "${OLLAMA_MODELS}"
+    return
+  fi
+
+  case "$(uname -s)" in
+    Darwin)
+      printf '%s\n' "${HOME}/.ollama/models"
+      ;;
+    Linux)
+      printf '%s\n' "/usr/share/ollama/.ollama/models"
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      printf '%s\n' "${USERPROFILE:-${HOME}}/.ollama/models"
+      ;;
+    *)
+      printf '%s\n' "${HOME}/.ollama/models"
+      ;;
+  esac
+}
+
 _ollama_is_local() {
   local origin host
   origin="$(_ollama_origin "$1")"
@@ -271,6 +293,7 @@ _ensure_ollama_model() {
   fi
 
   echo "Pulling Ollama model ${model} from ${base_url}."
+  echo "  local model store: $(_ollama_models_dir)"
   curl -fsS --no-buffer --max-time 0 \
     -H 'Content-Type: application/json' \
     -X POST \

@@ -371,6 +371,7 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
     env["CURL_CALLS_FILE"] = str(curl_calls_path)
     env["OLLAMA_CALLS_FILE"] = str(ollama_calls_path)
     env["OLLAMA_STATE_DIR"] = str(tmp_path / "ollama_state")
+    env["OLLAMA_MODELS"] = str(tmp_path / "ollama_models")
     env["API_PLATFORM_RUNTIME_ROOT"] = str(runtime_root)
 
     completed = subprocess.run(
@@ -385,6 +386,7 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
     assert completed.returncode == 0
     assert "Starting local Ollama server" in completed.stdout
     assert "Pulling Ollama model qwen3.5:27b" in completed.stdout
+    assert f"local model store: {tmp_path / 'ollama_models'}" in completed.stdout
     assert "downloading:" in completed.stdout
     module_calls = [
         line
