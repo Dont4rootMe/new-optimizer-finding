@@ -23,7 +23,9 @@ def run_seed_population(cfg: DictConfig) -> dict:
 
     registry = ApiPlatformRegistry(cfg)
     try:
+        LOGGER.info("Starting API platform registry for routes: %s", ", ".join(registry.available_route_ids))
         registry.start()
+        LOGGER.info("API platform registry ready")
         loop = EvolutionLoop(cfg, llm_registry=registry)
         result = asyncio.run(loop.seed_population())
         LOGGER.info("Seed population complete: %s", result)

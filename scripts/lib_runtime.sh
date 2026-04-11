@@ -925,6 +925,8 @@ _ensure_ollama_model() {
   local model="$2"
   local models_dir="${3:-}"
   if _ollama_model_present "$base_url" "$model"; then
+    echo "Ollama model ${model} already present at ${base_url}."
+    echo "  local model store: $(_ollama_models_dir "$models_dir")"
     return 0
   fi
 

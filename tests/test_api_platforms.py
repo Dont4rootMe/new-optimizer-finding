@@ -11,6 +11,7 @@ import pytest
 from omegaconf import OmegaConf
 
 from api_platforms import ApiPlatformRegistry, LlmRequest
+from api_platforms._core import registry as registry_module
 from api_platforms._core import providers as provider_backends
 from api_platforms._core.providers import generate_direct
 from api_platforms._core.types import ApiRouteConfig
@@ -79,6 +80,31 @@ def test_registry_reuses_singleton_broker_between_clients(tmp_path: Path) -> Non
     finally:
         registry_a.stop()
         registry_b.stop()
+
+
+def test_registry_health_probe_uses_short_timeout_for_startup_checks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _cfg(
+        tmp_path,
+        routes={"mock": {"_target_": "api_platforms.mock.platform.build_platform", "timeout_sec": 1800}},
+        route_weights={"mock": 1.0},
+    )
+    registry = ApiPlatformRegistry(cfg)
+    socket_path = registry._socket_path("mock")
+    socket_path.parent.mkdir(parents=True, exist_ok=True)
+    socket_path.touch()
+    observed: dict[str, float] = {}
+
+    def fake_send_ipc_message(socket_path: str, payload: dict[str, object], timeout_sec: float):
+        observed["timeout_sec"] = timeout_sec
+        raise TimeoutError("stale broker socket")
+
+    monkeypatch.setattr(registry_module, "send_ipc_message", fake_send_ipc_message)
+
+    assert registry._broker_healthy("mock") is False
+    assert observed["timeout_sec"] <= 2.0
 
 
 def test_mock_local_route_processes_requests_concurrently(tmp_path: Path) -> None:
