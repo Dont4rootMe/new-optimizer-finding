@@ -69,7 +69,10 @@ def main() -> int:
             continue
         base_url = str(route_cfg.base_url or "http://127.0.0.1:11434/api").rstrip("/")
         gpu_ranks = ",".join(str(rank) for rank in route_cfg.gpu_ranks)
-        print(f"OLLAMA_ROUTE={route_id}|{base_url}|{route_cfg.provider_model_id}|{gpu_ranks}")
+        max_concurrency = max(1, int(route_cfg.max_concurrency))
+        print(
+            f"OLLAMA_ROUTE={route_id}|{base_url}|{route_cfg.provider_model_id}|{gpu_ranks}|{max_concurrency}"
+        )
     return 0
 
 
@@ -539,9 +542,9 @@ PY
 
 _unique_local_ollama_base_urls() {
   declare -A seen=()
-  local route route_id base_url model gpu_ranks_csv
+  local route route_id base_url model gpu_ranks_csv max_concurrency
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
-    IFS='|' read -r route_id base_url model gpu_ranks_csv <<<"$route"
+    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
     if ! _ollama_is_local "$base_url"; then
       continue
@@ -666,6 +669,7 @@ _start_local_ollama() {
   local runtime_root="$2"
   local gpu_rank="${3:-}"
   local models_dir="${4:-}"
+  local num_parallel="${5:-}"
   local origin log_dir log_name stdout_log stderr_log pid_file
   local -a launch_env=()
 
@@ -679,6 +683,9 @@ _start_local_ollama() {
   if [[ -n "$gpu_rank" ]]; then
     launch_env+=("CUDA_VISIBLE_DEVICES=${gpu_rank}")
   fi
+  if [[ -n "$num_parallel" && "$num_parallel" -gt 0 ]]; then
+    launch_env+=("OLLAMA_NUM_PARALLEL=${num_parallel}")
+  fi
   mkdir -p "$models_dir"
   log_dir="${runtime_root}/ollama"
   mkdir -p "$log_dir"
@@ -688,9 +695,9 @@ _start_local_ollama() {
   pid_file="${log_dir}/serve.${log_name}.pid"
 
   if [[ -n "$gpu_rank" ]]; then
-    echo "Starting local Ollama server for ${base_url} on gpu:${gpu_rank}."
+    echo "Starting local Ollama server for ${base_url} on gpu:${gpu_rank} (num_parallel=${num_parallel:-default})."
   else
-    echo "Starting local Ollama server for ${base_url}."
+    echo "Starting local Ollama server for ${base_url} (num_parallel=${num_parallel:-default})."
   fi
   nohup "${launch_env[@]}" ollama serve >"${stdout_log}" 2>"${stderr_log}" </dev/null &
   printf '%s\n' "$!" > "${pid_file}"
@@ -713,12 +720,13 @@ _ensure_ollama_server() {
   local runtime_root="$2"
   local gpu_rank="${3:-}"
   local models_dir="${4:-}"
+  local num_parallel="${5:-}"
   if _ollama_healthcheck "$base_url"; then
     return 0
   fi
 
   if _ollama_is_local "$base_url"; then
-    _start_local_ollama "$base_url" "$runtime_root" "$gpu_rank" "$models_dir" || return 1
+    _start_local_ollama "$base_url" "$runtime_root" "$gpu_rank" "$models_dir" "$num_parallel" || return 1
     return 0
   fi
 
@@ -760,9 +768,10 @@ ensure_ollama_runtime() {
 
   declare -A server_gpu_by_url=()
   declare -A server_url_by_gpu=()
-  local route route_id base_url model gpu_ranks_csv gpu_rank
+  declare -A server_num_parallel_by_url=()
+  local route route_id base_url model gpu_ranks_csv gpu_rank max_concurrency
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
-    IFS='|' read -r route_id base_url model gpu_ranks_csv <<<"$route"
+    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
     gpu_rank=""
     if [[ -n "$gpu_ranks_csv" ]]; then
@@ -771,6 +780,9 @@ ensure_ollama_runtime() {
         return 1
       fi
       gpu_rank="$gpu_ranks_csv"
+    fi
+    if [[ -z "$max_concurrency" || "$max_concurrency" -lt 1 ]]; then
+      max_concurrency=1
     fi
     if ! _ollama_is_local "$base_url"; then
       continue
@@ -792,15 +804,26 @@ ensure_ollama_runtime() {
       fi
       server_url_by_gpu["$gpu_rank"]="$base_url"
     fi
+    # Server serves every route mapped to the same base_url simultaneously,
+    # so the number of parallel slots must cover the *sum* of the routes'
+    # broker-side concurrency limits — otherwise ollama starts returning 500
+    # on the (max_concurrency+1)-th request.
+    if [[ -n "${server_num_parallel_by_url[$base_url]+x}" ]]; then
+      server_num_parallel_by_url["$base_url"]=$(( server_num_parallel_by_url[$base_url] + max_concurrency ))
+    else
+      server_num_parallel_by_url["$base_url"]=$max_concurrency
+    fi
   done
 
   declare -A started_base_urls=()
+  local num_parallel
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
-    IFS='|' read -r route_id base_url model gpu_ranks_csv <<<"$route"
+    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
     gpu_rank="${server_gpu_by_url[$base_url]-}"
+    num_parallel="${server_num_parallel_by_url[$base_url]-}"
     if [[ -z "${started_base_urls[$base_url]+x}" ]]; then
-      _ensure_ollama_server "$base_url" "$OLLAMA_RUNTIME_ROOT" "$gpu_rank" "$OLLAMA_MODELS_DIR" || return 1
+      _ensure_ollama_server "$base_url" "$OLLAMA_RUNTIME_ROOT" "$gpu_rank" "$OLLAMA_MODELS_DIR" "$num_parallel" || return 1
       started_base_urls["$base_url"]=1
     fi
     _ensure_ollama_model "$base_url" "$model" "$OLLAMA_MODELS_DIR" || {

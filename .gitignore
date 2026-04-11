@@ -21,3 +21,4 @@ populations/
 ollama_cache
 .api_platform_runtime
 api_platform_runtime
+.claude

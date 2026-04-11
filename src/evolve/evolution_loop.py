@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import traceback
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -523,6 +525,51 @@ class EvolutionLoop:
             created_at=created_at,
         )
 
+    def _record_creation_event(
+        self,
+        plan: PlannedOrganismCreation,
+        *,
+        event: str,
+        message: str,
+        include_traceback: bool = False,
+    ) -> None:
+        """Append a creation-pipeline event to `org_dir/logs/creation.err`.
+
+        This file is the survivable ground-truth for diagnosing organism
+        creation hangs/crashes: it is written synchronously on disk at every
+        transition (`started`, `completed`, `failed`) so even a hard SIGKILL
+        leaves enough context to understand where the pipeline stopped. It
+        intentionally bypasses the Python `logging` framework because Hydra
+        reconfigures root handlers at import time and swallows per-module
+        logger output from long-running creation threads.
+        """
+
+        org_dir = Path(plan.organism_dir)
+        log_dir = org_dir / "logs"
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return
+        log_path = log_dir / "creation.err"
+        timestamp = datetime.now(timezone.utc).isoformat()
+        lines = [
+            f"[{timestamp}] event={event} organism_id={plan.organism_id} "
+            f"generation={plan.generation} island={plan.island_id} route={plan.route}",
+            f"  {message}",
+        ]
+        if include_traceback:
+            tb_text = traceback.format_exc()
+            if tb_text and tb_text.strip() and tb_text.strip() != "NoneType: None":
+                lines.append("  traceback:")
+                lines.extend("    " + raw_line for raw_line in tb_text.rstrip().splitlines())
+        lines.append("")
+        try:
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write("\n".join(lines) + "\n")
+                handle.flush()
+        except OSError:
+            return
+
     def _write_planned_organism_stub(self, plan: PlannedOrganismCreation) -> None:
         placeholder = OrganismMeta(
             organism_id=plan.organism_id,
@@ -999,6 +1046,14 @@ class EvolutionLoop:
                 plan.pipeline_state = "creating"
                 self._write_planned_organism_stub(plan)
                 persist_state(planned_organisms)
+                self._record_creation_event(
+                    plan,
+                    event="started",
+                    message=(
+                        f"creating organism (route={plan.route}, island={plan.island_id}, "
+                        f"generation={plan.generation})"
+                    ),
+                )
                 try:
                     organism = await asyncio.to_thread(self._materialize_planned_organism, plan, active_by_id)
                 except Exception as exc:  # noqa: BLE001
@@ -1009,11 +1064,22 @@ class EvolutionLoop:
                         plan.island_id,
                         plan.route,
                     )
+                    self._record_creation_event(
+                        plan,
+                        event="failed",
+                        message=f"{type(exc).__name__}: {exc}",
+                        include_traceback=True,
+                    )
                     plan.pipeline_state = "failed_creation"
                     plan.error_msg = str(exc)
                     self._write_planned_organism_stub(plan)
                     persist_state(planned_organisms)
                     return plan.organism_id, None
+                self._record_creation_event(
+                    plan,
+                    event="completed",
+                    message="creation stages finished",
+                )
 
                 plan.pipeline_state = "pending_simple_eval"
                 plan.error_msg = None

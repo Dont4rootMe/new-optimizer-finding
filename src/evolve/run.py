@@ -40,10 +40,9 @@ def run_evolution(cfg: DictConfig) -> dict:
 def main(cfg: DictConfig) -> None:
     """Standalone module entrypoint for evolve mode."""
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
+    from src.evolve.seed_run import _ensure_console_logging
+
+    _ensure_console_logging()
     run_evolution(cfg)
 
 

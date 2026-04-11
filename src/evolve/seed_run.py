@@ -36,14 +36,39 @@ def run_seed_population(cfg: DictConfig) -> dict:
         registry.stop()
 
 
+def _ensure_console_logging() -> None:
+    """Force an INFO-level stderr handler onto the root logger.
+
+    Hydra's `@hydra.main` installs its own logging config which may hide the
+    evolve-loop logs from stderr (sending them only to the Hydra job log file
+    under `outputs/.../*.log`). For long-running LLM creation stages that is
+    unhelpful — the user expects to see live progress on the terminal they
+    launched the script from. We attach a dedicated stream handler (idempotent
+    via a marker attribute) so that `LOGGER.info`/`LOGGER.warning` output from
+    the evolution loop, the generator, and the orchestrator always surfaces on
+    stderr in addition to any Hydra-managed log files.
+    """
+
+    root = logging.getLogger()
+    marker = "_evolve_console_handler_attached"
+    if getattr(root, marker, False):
+        root.setLevel(min(root.level or logging.INFO, logging.INFO))
+        return
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    )
+    root.addHandler(handler)
+    root.setLevel(min(root.level or logging.INFO, logging.INFO))
+    setattr(root, marker, True)
+
+
 @hydra.main(config_path="../../conf", config_name=None, version_base=None)
 def main(cfg: DictConfig) -> None:
     """Standalone module entrypoint for seed-only population initialization."""
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
+    _ensure_console_logging()
     run_seed_population(cfg)
 
 

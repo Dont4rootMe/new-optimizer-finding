@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from omegaconf import DictConfig
+
+LOGGER = logging.getLogger(__name__)
 
 from api_platforms import ApiPlatformRegistry, LlmRequest
 from src.evolve.llm_generator_base import BaseLlmGenerator
@@ -82,7 +85,7 @@ class CandidateGenerator(BaseLlmGenerator):
     ) -> CreationStageResult:
         """Run design and implementation stages and persist both LLM exchanges."""
 
-        route_id = self.sample_route_id()
+        route_id = self.sample_route_id(organism_id=organism_id)
         llm_request_path = org_dir / "llm_request.json"
         llm_response_path = org_dir / "llm_response.json"
         design_response = self._call_llm_stage(
@@ -229,8 +232,21 @@ class CandidateGenerator(BaseLlmGenerator):
                     timestamp=utc_now_iso(),
                     parent_lineage=[],
                 )
-            except (ValueError, KeyError) as exc:
-                last_error = str(exc)
+            except Exception as exc:  # noqa: BLE001
+                # Retry on any failure: malformed LLM output (ValueError / KeyError
+                # from parse_llm_response), transient provider errors (RuntimeError
+                # from ollama / broker / HTTP 5xx), timeouts, etc. The creation
+                # stage must be tolerant of upstream flakiness; unrecoverable
+                # failures surface after `max_attempts` exhaustion.
+                last_error = f"{type(exc).__name__}: {exc}"
+                LOGGER.warning(
+                    "Seed organism %s attempt %d/%d failed on island %s: %s",
+                    organism_id,
+                    attempt,
+                    max_attempts,
+                    island.island_id,
+                    last_error,
+                )
 
         raise RuntimeError(
             f"Failed to generate valid organism after {max_attempts} attempts: {last_error}"
