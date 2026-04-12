@@ -279,3 +279,95 @@ def test_ollama_route_posts_chat_payload_and_parses_response(monkeypatch: pytest
         "eval_count": 19,
         "eval_duration": 4,
     }
+
+
+def test_ollama_route_applies_stage_specific_generation_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    route_cfg = ApiRouteConfig(
+        route_id="ollama_qwen35_27b",
+        provider="ollama",
+        provider_model_id="qwen3.5:27b",
+        backend="ollama",
+        base_url="http://127.0.0.1:11435/api",
+        temperature=0.7,
+        max_output_tokens=4096,
+        timeout_sec=30.0,
+        top_p=0.92,
+        top_k=40,
+        think=False,
+        keep_alive="15m",
+        request_options={
+            "num_ctx": 65536,
+            "repeat_penalty": 1.05,
+            "min_p": None,
+        },
+        stage_options={
+            "design": {
+                "think": "high",
+                "temperature": 0.2,
+                "max_output_tokens": 1536,
+                "top_k": 12,
+                "raw": True,
+                "logprobs": True,
+                "top_logprobs": 4,
+                "request_options": {
+                    "num_ctx": 32768,
+                    "repeat_penalty": 1.15,
+                    "presence_penalty": 0.1,
+                    "min_p": None,
+                },
+            }
+        },
+    )
+    request = LlmRequest(
+        route_id="ollama_qwen35_27b",
+        stage="design",
+        system_prompt="system prompt",
+        user_prompt="user prompt",
+        seed=123,
+        metadata={"organism_id": "org001"},
+    )
+    captured: dict[str, object] = {}
+
+    class FakeHttpResponse:
+        def __enter__(self) -> "FakeHttpResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"message": {"role": "assistant", "content": "generated text"}}).encode("utf-8")
+
+    def fake_urlopen(http_request, timeout: float):
+        captured["timeout"] = timeout
+        captured["body"] = json.loads(http_request.data.decode("utf-8"))
+        return FakeHttpResponse()
+
+    monkeypatch.setattr(provider_backends.urllib_request, "urlopen", fake_urlopen)
+
+    response = generate_direct(route_cfg, request)
+
+    assert captured["timeout"] == 30.0
+    assert captured["body"] == {
+        "model": "qwen3.5:27b",
+        "messages": [
+            {"role": "system", "content": "system prompt"},
+            {"role": "user", "content": "user prompt"},
+        ],
+        "stream": False,
+        "options": {
+            "num_ctx": 32768,
+            "repeat_penalty": 1.15,
+            "presence_penalty": 0.1,
+            "temperature": 0.2,
+            "num_predict": 1536,
+            "top_p": 0.92,
+            "top_k": 12,
+        },
+        "think": "high",
+        "keep_alive": "15m",
+        "raw": True,
+        "logprobs": True,
+        "top_logprobs": 4,
+    }
+    assert response.raw_request == captured["body"]

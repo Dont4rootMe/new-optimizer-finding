@@ -175,14 +175,53 @@ def _ollama_chat_url(base_url: str | None) -> str:
     return normalized + "/api/chat"
 
 
+def _drop_none_entries(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _drop_none_entries(item) for key, item in value.items() if item is not None}
+    if isinstance(value, list):
+        return [_drop_none_entries(item) for item in value if item is not None]
+    return value
+
+
+def _ollama_stage_effective_config(route_cfg: ApiRouteConfig, stage: str) -> dict[str, Any]:
+    stage_cfg = route_cfg.stage_options.get(stage, {})
+    if not isinstance(stage_cfg, dict):
+        stage_cfg = {}
+
+    def _stage_override(key: str, default: Any) -> Any:
+        value = stage_cfg.get(key, default)
+        return default if value is None else value
+
+    request_options = dict(route_cfg.request_options)
+    override_request_options = stage_cfg.get("request_options", {})
+    if isinstance(override_request_options, dict):
+        request_options.update({key: value for key, value in override_request_options.items()})
+
+    return {
+        "temperature": _stage_override("temperature", route_cfg.temperature),
+        "max_output_tokens": _stage_override("max_output_tokens", route_cfg.max_output_tokens),
+        "top_p": _stage_override("top_p", route_cfg.top_p),
+        "top_k": _stage_override("top_k", route_cfg.top_k),
+        "think": _stage_override("think", route_cfg.think),
+        "keep_alive": _stage_override("keep_alive", route_cfg.keep_alive),
+        "raw": _stage_override("raw", route_cfg.raw),
+        "format": _stage_override("format", route_cfg.format),
+        "logprobs": _stage_override("logprobs", route_cfg.logprobs),
+        "top_logprobs": _stage_override("top_logprobs", route_cfg.top_logprobs),
+        "request_options": request_options,
+    }
+
+
 def _ollama_request_payload(route_cfg: ApiRouteConfig, request: LlmRequest) -> dict[str, Any]:
-    options = dict(route_cfg.request_options)
-    options.setdefault("temperature", float(route_cfg.temperature))
-    options.setdefault("num_predict", int(route_cfg.max_output_tokens))
-    if route_cfg.top_p is not None:
-        options.setdefault("top_p", float(route_cfg.top_p))
-    if route_cfg.top_k is not None:
-        options.setdefault("top_k", int(route_cfg.top_k))
+    effective = _ollama_stage_effective_config(route_cfg, request.stage)
+
+    options = dict(effective["request_options"])
+    options.setdefault("temperature", float(effective["temperature"]))
+    options.setdefault("num_predict", int(effective["max_output_tokens"]))
+    if effective["top_p"] is not None:
+        options.setdefault("top_p", float(effective["top_p"]))
+    if effective["top_k"] is not None:
+        options.setdefault("top_k", int(effective["top_k"]))
 
     payload: dict[str, Any] = {
         "model": route_cfg.provider_model_id,
@@ -191,13 +230,21 @@ def _ollama_request_payload(route_cfg: ApiRouteConfig, request: LlmRequest) -> d
             {"role": "user", "content": request.user_prompt},
         ],
         "stream": False,
-        "options": options,
+        "options": _drop_none_entries(options),
     }
-    if route_cfg.think is not None:
-        payload["think"] = route_cfg.think
-    if route_cfg.keep_alive is not None:
-        payload["keep_alive"] = route_cfg.keep_alive
-    return payload
+    if effective["think"] is not None:
+        payload["think"] = effective["think"]
+    if effective["keep_alive"] is not None:
+        payload["keep_alive"] = effective["keep_alive"]
+    if effective["raw"] is not None:
+        payload["raw"] = bool(effective["raw"])
+    if effective["format"] is not None:
+        payload["format"] = effective["format"]
+    if effective["logprobs"] is not None:
+        payload["logprobs"] = bool(effective["logprobs"])
+    if effective["top_logprobs"] is not None:
+        payload["top_logprobs"] = int(effective["top_logprobs"])
+    return _drop_none_entries(payload)
 
 
 def _openai_output_text(response_payload: dict[str, Any]) -> str:

@@ -160,7 +160,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.experiments.unit_square_26.need_cuda is False
     assert cfg.evolver.prompts.project_context == "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt"
     assert cfg.evolver.phases.simple.experiments == ["unit_square_26"]
-    assert cfg.evolver.phases.great_filter.enabled is False
+    assert cfg.evolver.phases.great_filter.enabled is True
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 5
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
@@ -171,8 +171,9 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_parallel_organisms == 5
     assert cfg.evolver.islands.seed_organisms_per_island == 3
-    assert cfg.evolver.islands.max_organisms_per_island == 15
+    assert cfg.evolver.islands.max_organisms_per_island == 10
     assert "top_k_per_island" not in cfg.evolver.phases.simple
+    assert cfg.evolver.phases.great_filter.top_h_per_island == 5
     assert cfg.evolver.reproduction.offspring_per_generation == 5
     assert set(cfg.evolver.llm.route_weights.keys()) == {"ollama_qwen35_27b", "ollama_gemma4_26b"}
     assert cfg.evolver.llm.route_weights.ollama_qwen35_27b == 1.0
@@ -186,10 +187,15 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert qwen_route.provider_model_id == "qwen3.5:27b"
     assert qwen_route.base_url == "http://127.0.0.1:12435/api"
     assert qwen_route.gpu_ranks == [1]
+    assert qwen_route.stage_options["design"]["think"] == "medium"
+    assert qwen_route.stage_options["implementation"]["max_output_tokens"] == 4096
+    assert qwen_route.request_options["num_ctx"] == 65536
     assert gemma_route.route_id == "ollama_gemma4_26b"
     assert gemma_route.provider_model_id == "gemma4:26b"
     assert gemma_route.base_url == "http://127.0.0.1:12434/api"
     assert gemma_route.gpu_ranks == [0]
+    assert gemma_route.stage_options["implementation"]["think"] == "low"
+    assert gemma_route.stage_options["repair"]["top_k"] == 64
 
 
 def test_circle_packing_canonical_preset_accepts_standalone_validation_overrides() -> None:
