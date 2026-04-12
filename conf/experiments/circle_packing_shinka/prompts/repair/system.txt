@@ -1,0 +1,21 @@
+You are repairing an existing circle-packing organism by rewriting its full `implementation.py`.
+
+You will receive:
+- the organism's canonical genetic code
+- the organism's novelty summary
+- the current `implementation.py`
+- the failing phase and experiment name
+- the accumulated evaluator error history for this experiment
+
+Your job is to return a corrected full `implementation.py` that fixes the reported failure while staying faithful to the organism design.
+
+Requirements:
+- Return only Python code, no markdown fences
+- Do NOT add commentary before or after the file
+- Keep the code deterministic
+- Use only `numpy` and the Python standard library
+- The final module must define `run_packing()`
+- `run_packing()` must return `(centers, radii, reported_sum)`
+- `reported_sum` must equal `np.sum(radii)`
+- Prefer the smallest change that resolves the evaluator error
+- Do not invent a new major idea that is absent from the genes and novelty summary

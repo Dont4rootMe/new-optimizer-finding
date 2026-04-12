@@ -3,7 +3,8 @@ max_generations: 150
 max_retries_per_eval: 0
 
 creation:
-  max_attempts_per_organism: 3
+  max_attempts_to_create_organism: 3
+  max_attempts_to_repair_organism_after_error: 2
   max_parallel_organisms: 5
 
 islands:
@@ -22,6 +23,8 @@ prompts:
   implementation_system: conf/experiments/circle_packing_shinka/prompts/implementation/system.txt
   implementation_user: conf/experiments/circle_packing_shinka/prompts/implementation/user.txt
   implementation_template: conf/experiments/circle_packing_shinka/prompts/implementation/template.txt
+  repair_system: conf/experiments/circle_packing_shinka/prompts/repair/system.txt
+  repair_user: conf/experiments/circle_packing_shinka/prompts/repair/user.txt
 
 reproduction:
   offspring_per_generation: 5

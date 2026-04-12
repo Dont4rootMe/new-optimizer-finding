@@ -29,7 +29,8 @@ def _cfg(tmp_path: Path, *, routes: dict, route_weights: dict[str, float]) -> ob
             "api_platforms": routes,
             "evolver": {
                 "creation": {
-                    "max_attempts_per_organism": 1,
+                    "max_attempts_to_create_organism": 1,
+                    "max_attempts_to_repair_organism_after_error": 1,
                 },
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
@@ -42,6 +43,8 @@ def _cfg(tmp_path: Path, *, routes: dict, route_weights: dict[str, float]) -> ob
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                    "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
+                    "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
                 },
                 "llm": {
                     "selection_strategy": "random",

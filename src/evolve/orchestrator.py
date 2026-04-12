@@ -8,7 +8,7 @@ from collections.abc import Sequence
 import logging
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from omegaconf import DictConfig, OmegaConf
 
@@ -33,12 +33,13 @@ from src.evolve.types import (
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_EVAL_ENTRYPOINT_MODULE = "src.validate.run_one"
+RepairCallback = Callable[[str, str, str, list[dict[str, Any]]], None]
 
 
 class EvolverOrchestrator:
     """Evaluate canonical organisms on request-scoped experiments and phase settings."""
 
-    def __init__(self, cfg: DictConfig) -> None:
+    def __init__(self, cfg: DictConfig, repair_callback: RepairCallback | None = None) -> None:
         self.cfg = cfg
         self.evolver_cfg = cfg.evolver
         self.population_root = Path(str(cfg.paths.population_root)).expanduser().resolve()
@@ -46,11 +47,22 @@ class EvolverOrchestrator:
         self.experiment_requirements = self._resolve_experiment_requirements()
         self.gpu_ranks, self.cpu_parallel_jobs = self._resolve_evaluation_resources()
         self.eval_entrypoint_module = self._resolve_eval_entrypoint_module()
+        self.max_repair_attempts_per_organism = self._resolve_max_repair_attempts_per_organism()
+        self.repair_callback = repair_callback
         self._validate_gpu_disjointness()
 
         self.pool = GpuJobPool(gpu_ranks=self.gpu_ranks, cpu_parallel_jobs=self.cpu_parallel_jobs)
         self._request_states: dict[str, dict[str, Any]] = {}
         self._started = False
+
+    def _resolve_max_repair_attempts_per_organism(self) -> int:
+        creation_cfg = self.evolver_cfg.get("creation")
+        if creation_cfg is None:
+            return 0
+        value = int(creation_cfg.get("max_attempts_to_repair_organism_after_error", 0))
+        if value < 0:
+            raise ValueError("evolver.creation.max_attempts_to_repair_organism_after_error must be >= 0")
+        return value
 
     def _resolve_eval_entrypoint_module(self) -> str:
         """Resolve the evaluator subprocess entrypoint.
@@ -156,16 +168,22 @@ class EvolverOrchestrator:
             payload = read_json(out_path)
         else:
             payload = {
-                "status": "failed",
+                "status": status,
                 "error_msg": error_msg or "missing output json",
             }
             write_json(out_path, payload)
 
-        if status != "ok":
+        payload_status = str(payload.get("status", "")).strip()
+        if status in {"timeout", "interrupted"}:
             payload["status"] = status
-            if not payload.get("error_msg"):
-                payload["error_msg"] = error_msg
-            write_json(out_path, payload)
+        elif status == "failed":
+            if not payload_status or payload_status == "ok":
+                payload["status"] = "failed"
+        elif status == "ok" and not payload_status:
+            payload["status"] = "ok"
+        if error_msg and not payload.get("error_msg"):
+            payload["error_msg"] = error_msg
+        write_json(out_path, payload)
 
         return payload
 
@@ -258,6 +276,7 @@ class EvolverOrchestrator:
                 "assigned_rank": None,
                 "attempts": None,
                 "error_msg": None,
+                "errors": [],
             }
             for exp_name in selected_experiments
         }
@@ -271,6 +290,99 @@ class EvolverOrchestrator:
 
     def _request_key(self, organism_id: str, phase: str) -> str:
         return f"{organism_id}:{phase}"
+
+    def _coerce_error_history(self, task_state: dict[str, Any]) -> list[dict[str, Any]]:
+        raw_errors = task_state.get("errors", [])
+        if not isinstance(raw_errors, list):
+            return []
+        return [dict(entry) for entry in raw_errors if isinstance(entry, dict)]
+
+    def _repair_attempts_used(self, planned: PlannedPhaseEvaluation) -> int:
+        used = 0
+        for task_state in planned.task_states.values():
+            for entry in self._coerce_error_history(task_state):
+                if bool(entry.get("repair_attempted")):
+                    used += 1
+        return used
+
+    def _first_pending_index(
+        self,
+        selected_experiments: list[str],
+        completed_results: dict[str, dict[str, Any]],
+    ) -> int:
+        for idx, exp_name in enumerate(selected_experiments):
+            if exp_name not in completed_results:
+                return idx
+        return len(selected_experiments)
+
+    def _task_state(self, planned: PlannedPhaseEvaluation, exp_name: str) -> dict[str, Any]:
+        if exp_name not in planned.task_states:
+            raise KeyError(f"Unknown planned experiment '{exp_name}'")
+        return planned.task_states[exp_name]
+
+    def _schedule_experiment(self, request_key: str, exp_name: str) -> None:
+        state = self._request_states[request_key]
+        request = state["request"]
+        planned = state["planned"]
+        task_state = self._task_state(planned, exp_name)
+        task_state["status"] = "queued"
+        planned.status = "queued"
+        state["active_experiment"] = exp_name
+        task = self._build_organism_task(request, exp_name)
+        self.pool.submit(task)
+
+    def _final_payload_for_task(self, payload: dict[str, Any], task_state: dict[str, Any]) -> dict[str, Any]:
+        final_payload = dict(payload)
+        errors = self._coerce_error_history(task_state)
+        if errors:
+            final_payload["errors"] = errors
+        return final_payload
+
+    def _advance_request_after_final_result(
+        self,
+        request_key: str,
+        exp_name: str,
+        payload: dict[str, Any],
+    ) -> OrganismEvaluationSummary | None:
+        state = self._request_states[request_key]
+        planned = state["planned"]
+        task_state = self._task_state(planned, exp_name)
+        state["results"][exp_name] = self._final_payload_for_task(payload, task_state)
+        state["active_experiment"] = None
+
+        selected_experiments = state["selected_experiments"]
+        next_index = int(state["next_index"]) + 1
+        while next_index < len(selected_experiments) and selected_experiments[next_index] in state["results"]:
+            next_index += 1
+        state["next_index"] = next_index
+
+        if next_index >= len(selected_experiments):
+            planned.status = "completed"
+            return self._finalize_summary(request_key)
+
+        self._schedule_experiment(request_key, selected_experiments[next_index])
+        return None
+
+    def _append_error_entry(
+        self,
+        task_state: dict[str, Any],
+        *,
+        status: str,
+        error_msg: str,
+        repair_attempted: bool,
+    ) -> list[dict[str, Any]]:
+        errors = self._coerce_error_history(task_state)
+        errors.append(
+            {
+                "attempt": len(errors) + 1,
+                "status": status,
+                "error_msg": error_msg,
+                "timestamp": utc_now_iso(),
+                "repair_attempted": repair_attempted,
+            }
+        )
+        task_state["errors"] = errors
+        return errors
 
     def submit_planned_request(
         self,
@@ -286,23 +398,28 @@ class EvolverOrchestrator:
 
         selected_experiments = list(planned_evaluation.selected_experiments)
         completed_results = dict(existing_results or {})
+        for exp_name, payload in completed_results.items():
+            task_state = self._task_state(planned_evaluation, exp_name)
+            task_state["status"] = str(payload.get("status", "ok"))
+            task_state["error_msg"] = payload.get("error_msg")
+            if "errors" in payload and isinstance(payload["errors"], list):
+                task_state["errors"] = [dict(entry) for entry in payload["errors"] if isinstance(entry, dict)]
+
+        selected_experiments = list(planned_evaluation.selected_experiments)
+        next_index = self._first_pending_index(selected_experiments, completed_results)
         self._request_states[request_key] = {
             "request": request,
             "planned": planned_evaluation,
             "results": completed_results,
-            "pending": len([name for name in selected_experiments if name not in completed_results]),
+            "selected_experiments": selected_experiments,
+            "next_index": next_index,
+            "active_experiment": None,
+            "repair_attempts_used": self._repair_attempts_used(planned_evaluation),
         }
-        planned_evaluation.status = (
-            "queued" if self._request_states[request_key]["pending"] > 0 else "completed"
-        )
-
-        for exp_name in selected_experiments:
-            if exp_name in completed_results:
-                continue
-            task = self._build_organism_task(request, exp_name)
-            self.pool.submit(task)
-        if self._request_states[request_key]["pending"] <= 0:
+        if next_index >= len(selected_experiments):
+            planned_evaluation.status = "completed"
             return self._finalize_summary(request_key)
+        self._schedule_experiment(request_key, selected_experiments[next_index])
         return None
 
     @property
@@ -348,13 +465,66 @@ class EvolverOrchestrator:
         state = self._request_states.get(request_key)
         if state is None:
             raise KeyError(f"Received evaluation result for unknown request '{request_key}'")
+        planned = state["planned"]
+        exp_name = result.experiment_name
+        task_state = self._task_state(planned, exp_name)
+        payload_status = str(payload.get("status", result.status)).strip() or result.status
+        error_msg = str(payload.get("error_msg") or result.error_msg or "").strip()
 
-        state["results"][result.experiment_name] = payload
-        state["pending"] -= 1
+        task_state["assigned_device"] = result.assigned_device
+        task_state["assigned_rank"] = result.assigned_rank
+        task_state["attempts"] = result.attempts
+        task_state["status"] = payload_status
+        task_state["error_msg"] = error_msg or None
+
         summary = None
-        if state["pending"] <= 0:
-            summary = self._finalize_summary(request_key)
+        eligible_error_status = {"failed", "timeout", "interrupted"}
+        should_attempt_repair = (
+            payload_status in eligible_error_status
+            and bool(error_msg)
+            and self.repair_callback is not None
+            and int(state["repair_attempts_used"]) < self.max_repair_attempts_per_organism
+        )
 
+        if should_attempt_repair:
+            errors = self._append_error_entry(
+                task_state,
+                status=payload_status,
+                error_msg=error_msg,
+                repair_attempted=True,
+            )
+            try:
+                await asyncio.to_thread(
+                    self.repair_callback,
+                    str(state["request"].organism_dir),
+                    result.phase,
+                    exp_name,
+                    [dict(entry) for entry in errors],
+                )
+            except Exception as exc:  # noqa: BLE001
+                repair_error_msg = f"{type(exc).__name__}: {exc}"
+                errors[-1]["repair_error_msg"] = repair_error_msg
+                combined_error = f"{error_msg} | repair failed: {repair_error_msg}"
+                payload = dict(payload)
+                payload["error_msg"] = combined_error
+                task_state["error_msg"] = combined_error
+                state["repair_attempts_used"] = int(state["repair_attempts_used"]) + 1
+                summary = self._advance_request_after_final_result(request_key, exp_name, payload)
+            else:
+                state["repair_attempts_used"] = int(state["repair_attempts_used"]) + 1
+                task_state["status"] = "queued"
+                self._schedule_experiment(request_key, exp_name)
+            return result, payload, summary
+
+        if payload_status != "ok" and error_msg:
+            self._append_error_entry(
+                task_state,
+                status=payload_status,
+                error_msg=error_msg,
+                repair_attempted=False,
+            )
+
+        summary = self._advance_request_after_final_result(request_key, exp_name, payload)
         return result, payload, summary
 
     async def evaluate_organisms(

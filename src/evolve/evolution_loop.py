@@ -97,7 +97,7 @@ class EvolutionLoop:
         self.llm_registry = llm_registry or ApiPlatformRegistry(cfg)
         self._owns_llm_registry = llm_registry is None
         self.generator = CandidateGenerator(cfg, llm_registry=self.llm_registry)
-        self.orchestrator = EvolverOrchestrator(cfg)
+        self.orchestrator = EvolverOrchestrator(cfg, repair_callback=self._repair_organism_after_eval_error)
         self.rng = random.Random(int(cfg.seed))
         self.max_parallel_organisms = self._max_parallel_organisms()
 
@@ -963,17 +963,43 @@ class EvolutionLoop:
             if task_status in {"planned", "queued", "running"}:
                 continue
             result_path = str(task_state.get("result_path", "")).strip()
+            error_history = task_state.get("errors", [])
             if result_path and Path(result_path).exists():
                 payload = read_json(result_path)
                 if isinstance(payload, dict):
+                    if isinstance(error_history, list) and error_history:
+                        payload = dict(payload)
+                        payload["errors"] = [dict(entry) for entry in error_history if isinstance(entry, dict)]
                     existing[exp_name] = payload
                     continue
             existing[exp_name] = {
                 "status": task_status,
                 "score": None,
                 "error_msg": task_state.get("error_msg"),
+                "errors": [dict(entry) for entry in error_history if isinstance(entry, dict)]
+                if isinstance(error_history, list)
+                else [],
             }
         return existing
+
+    def _repair_organism_after_eval_error(
+        self,
+        organism_dir: str,
+        phase: str,
+        experiment_name: str,
+        errors: list[dict[str, Any]],
+    ) -> None:
+        organism = read_organism_meta(organism_dir)
+        _announce(
+            f"organism {organism.organism_id} repair requested "
+            f"(phase={phase}, experiment={experiment_name}, attempt={len(errors)})"
+        )
+        self.generator.repair_organism_after_error(
+            organism=organism,
+            phase=phase,
+            experiment_name=experiment_name,
+            errors=errors,
+        )
 
     def _materialize_planned_organism(
         self,
@@ -1361,13 +1387,6 @@ class EvolutionLoop:
                 if event is not None:
                     result, payload, summary = event
                     plan = plans_by_id[result.organism_id]
-                    phase_plan = plan.planned_phase_evaluations[result.phase]
-                    task_state = phase_plan.task_states[result.experiment_name]
-                    task_state["status"] = result.status
-                    task_state["assigned_device"] = result.assigned_device
-                    task_state["assigned_rank"] = result.assigned_rank
-                    task_state["attempts"] = result.attempts
-                    task_state["error_msg"] = payload.get("error_msg", result.error_msg)
                     if summary is not None:
                         organism = created_offspring[result.organism_id]
                         self._announce_phase_summary(result.organism_id, summary)

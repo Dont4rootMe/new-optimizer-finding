@@ -80,7 +80,8 @@ def test_hydra_compose_config_and_experiments() -> None:
     assert cfg.evolver.islands.max_organisms_per_island == 5
     assert cfg.evolver.reproduction.offspring_per_generation == 10
     assert cfg.evolver.reproduction.operator_selection_strategy == "deterministic"
-    assert cfg.evolver.creation.max_attempts_per_organism == 3
+    assert cfg.evolver.creation.max_attempts_to_create_organism == 3
+    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_parallel_organisms == 4
     assert cfg.evolver.llm.selection_strategy == "random"
     assert cfg.evolver.llm.route_weights.mock == 1.0
@@ -116,7 +117,8 @@ def test_optimization_survey_canonical_preset_accepts_standalone_validation_over
 
     assert cfg.mode == "run"
     assert cfg.organism_dir == "/tmp/organism"
-    assert cfg.evolver.creation.max_attempts_per_organism == 3
+    assert cfg.evolver.creation.max_attempts_to_create_organism == 3
+    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_parallel_organisms == 4
 
 
@@ -165,7 +167,8 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.max_generations == 150
     assert cfg.mode == "evolve"
     assert "organism_dir" not in cfg
-    assert cfg.evolver.creation.max_attempts_per_organism == 3
+    assert cfg.evolver.creation.max_attempts_to_create_organism == 3
+    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_parallel_organisms == 5
     assert cfg.evolver.islands.seed_organisms_per_island == 3
     assert cfg.evolver.islands.max_organisms_per_island == 15
@@ -199,5 +202,6 @@ def test_circle_packing_canonical_preset_accepts_standalone_validation_overrides
 
     assert cfg.mode == "run"
     assert cfg.organism_dir == "/tmp/organism"
-    assert cfg.evolver.creation.max_attempts_per_organism == 3
+    assert cfg.evolver.creation.max_attempts_to_create_organism == 3
+    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_parallel_organisms == 5

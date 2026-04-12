@@ -20,7 +20,8 @@ def _cfg():
             "seed": 123,
             "evolver": {
                 "creation": {
-                    "max_attempts_per_organism": 2,
+                    "max_attempts_to_create_organism": 2,
+                    "max_attempts_to_repair_organism_after_error": 2,
                 },
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
@@ -33,6 +34,8 @@ def _cfg():
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                    "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
+                    "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
                 },
                 "llm": {"route_weights": {"mock": 1.0}, "seed": 123},
             },
@@ -70,6 +73,8 @@ def test_generator_loads_only_current_prompt_bundle_assets(monkeypatch) -> None:
         ("prompts", "implementation", "system.txt"),
         ("prompts", "implementation", "user.txt"),
         ("prompts", "implementation", "template.txt"),
+        ("prompts", "repair", "system.txt"),
+        ("prompts", "repair", "user.txt"),
     }
     assert "## CORE_GENES" in generator.prompt_bundle.seed_system
     generator.close()

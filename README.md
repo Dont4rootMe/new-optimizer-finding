@@ -125,7 +125,8 @@ By default, local Ollama weights are stored in `./ollama_cache` at the project r
 ## Concurrency knobs
 
 - `evolver.creation.max_parallel_organisms`: maximum number of organisms being created in parallel. Each creation task includes both LLM stages for one organism.
-- `evolver.creation.max_attempts_per_organism`: retry budget for one organism creation when LLM output or provider calls fail.
+- `evolver.creation.max_attempts_to_create_organism`: retry budget for one organism creation when LLM output or provider calls fail.
+- `evolver.creation.max_attempts_to_repair_organism_after_error`: maximum number of LLM repair passes after explicit evaluator errors for one organism phase evaluation.
 - `resources.evaluation.cpu_parallel_jobs`: number of CPU-only evaluation tasks that can run at once.
 - `resources.evaluation.gpu_ranks`: GPU evaluation worker slots. The number of concurrent GPU evaluation tasks equals the number of configured ranks.
 - `api_platforms.<route>.max_concurrency`: backend request concurrency for one routed model service, such as a local Ollama instance.

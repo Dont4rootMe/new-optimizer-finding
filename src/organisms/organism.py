@@ -114,6 +114,22 @@ def format_lineage_summary(
     return "\n".join(lines)
 
 
+def format_error_history(errors: list[dict[str, Any]]) -> str:
+    """Render evaluator error history for repair prompts."""
+
+    if not errors:
+        return "No prior evaluator errors."
+
+    lines: list[str] = []
+    for entry in errors:
+        attempt = entry.get("attempt", "?")
+        status = entry.get("status", "unknown")
+        error_msg = str(entry.get("error_msg", "")).strip() or "(none)"
+        timestamp = str(entry.get("timestamp", "")).strip() or "(unknown time)"
+        lines.append(f"- attempt={attempt} status={status} timestamp={timestamp} error={error_msg}")
+    return "\n".join(lines)
+
+
 def save_organism_artifacts(
     org: OrganismMeta,
     *,
@@ -209,6 +225,38 @@ def build_implementation_prompt_from_design(
         organism_genetic_code=format_genetic_code(genetic_code),
         change_description=change_description,
         implementation_template=prompts.implementation_template,
+    )
+    return system, user
+
+
+def build_repair_prompt(
+    organism: OrganismMeta,
+    prompts: PromptBundle,
+    *,
+    phase: str,
+    experiment_name: str,
+    errors: list[dict[str, Any]],
+) -> tuple[str, str]:
+    """Build the repair-stage prompt from organism artifacts and evaluator errors."""
+
+    genetic_code = read_organism_genetic_code(organism)
+    lineage = read_organism_lineage(organism)
+    current_implementation = read_organism_implementation(organism)
+    change_description = "No recorded novelty summary."
+    if lineage:
+        latest = lineage[-1]
+        candidate = str(latest.get("change_description", "")).strip()
+        if candidate:
+            change_description = candidate
+
+    system = compose_system_prompt(prompts.project_context, prompts.repair_system)
+    user = prompts.repair_user.format(
+        organism_genetic_code=format_genetic_code(genetic_code),
+        change_description=change_description,
+        current_implementation=format_implementation_code(current_implementation),
+        phase=str(phase),
+        experiment_name=str(experiment_name),
+        error_history=format_error_history(errors),
     )
     return system, user
 

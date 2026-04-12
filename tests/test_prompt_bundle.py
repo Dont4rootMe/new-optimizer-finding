@@ -26,6 +26,8 @@ def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                    "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
+                    "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
                 }
             }
         }
@@ -37,6 +39,7 @@ def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
     assert "## CORE_GENES" in bundle.seed_system
     assert "{island_description}" in bundle.seed_user
     assert "Return only the final `implementation.py` text." in bundle.implementation_user
+    assert "=== ERROR HISTORY ===" in bundle.repair_user
 
 
 def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contract() -> None:
@@ -54,6 +57,8 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
                     "implementation_system": "conf/experiments/circle_packing_shinka/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/circle_packing_shinka/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/circle_packing_shinka/prompts/implementation/template.txt",
+                    "repair_system": "conf/experiments/circle_packing_shinka/prompts/repair/system.txt",
+                    "repair_user": "conf/experiments/circle_packing_shinka/prompts/repair/user.txt",
                 }
             }
         }
@@ -65,6 +70,7 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
         assert "## Response format" in prompt
         assert "## CORE_GENES" in prompt
         assert "## CHANGE_DESCRIPTION" in prompt
+    assert "CURRENT IMPLEMENTATION.PY" in bundle.repair_user
 
 
 def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
@@ -80,6 +86,8 @@ def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
         "implementation/system.txt": "implementation system",
         "implementation/user.txt": "implementation user",
         "implementation/template.txt": "implementation template",
+        "repair/system.txt": "repair system",
+        "repair/user.txt": "repair user",
     }
     for relative_path, contents in files.items():
         target = prompts_dir / relative_path
@@ -100,6 +108,8 @@ def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
                     "implementation_system": str(prompts_dir / "implementation" / "system.txt"),
                     "implementation_user": str(prompts_dir / "implementation" / "user.txt"),
                     "implementation_template": str(prompts_dir / "implementation" / "template.txt"),
+                    "repair_system": str(prompts_dir / "repair" / "system.txt"),
+                    "repair_user": str(prompts_dir / "repair" / "user.txt"),
                 }
             }
         }
@@ -110,4 +120,5 @@ def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
     assert bundle.project_context == "project context"
     assert bundle.crossover_user == "crossover user"
     assert bundle.implementation_template == "implementation template"
+    assert bundle.repair_user == "repair user"
     assert compose_system_prompt(bundle.project_context, bundle.seed_system) == "project context\n\nseed system"

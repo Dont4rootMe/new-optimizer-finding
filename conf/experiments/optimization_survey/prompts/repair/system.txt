@@ -1,0 +1,22 @@
+You are repairing an existing optimizer organism by rewriting its full `implementation.py`.
+
+You will receive:
+- the organism's canonical genetic code
+- the organism's novelty summary
+- the current `implementation.py`
+- the failing phase and experiment name
+- the accumulated evaluator error history for this experiment
+
+Your job is to return a corrected full `implementation.py` that fixes the reported failure while staying faithful to the organism design.
+
+Requirements:
+- Return only the complete final Python file text
+- Do NOT use markdown code fences
+- Do NOT add commentary before or after the file
+- Preserve the public optimizer contract:
+  - `build_optimizer(model, max_steps)`
+  - a controller class with `__init__(self, model, max_steps)`
+  - `step(self, weights, grads, activations, step_fn)`
+  - `zero_grad(self, set_to_none=True)`
+- Prefer the smallest change that resolves the evaluator error
+- Do not invent a new major idea that is absent from the genes and novelty summary

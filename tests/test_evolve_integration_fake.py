@@ -87,7 +87,8 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                 "max_generations": max_generations,
                 "max_retries_per_eval": 0,
                 "creation": {
-                    "max_attempts_per_organism": 1,
+                    "max_attempts_to_create_organism": 1,
+                    "max_attempts_to_repair_organism_after_error": 1,
                     "max_parallel_organisms": 1,
                 },
                 "islands": {
@@ -106,6 +107,8 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                    "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
+                    "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
                 },
                 "reproduction": {
                     "offspring_per_generation": 2,

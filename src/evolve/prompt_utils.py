@@ -18,6 +18,8 @@ class PromptBundle:
     implementation_system: str
     implementation_user: str
     implementation_template: str
+    repair_system: str
+    repair_user: str
 
 from pathlib import Path
 
@@ -55,6 +57,8 @@ def load_prompt_bundle(cfg: DictConfig) -> PromptBundle:
         implementation_system=_read_path(_resolve_prompt_path(cfg, "implementation_system")),
         implementation_user=_read_path(_resolve_prompt_path(cfg, "implementation_user")),
         implementation_template=_read_path(_resolve_prompt_path(cfg, "implementation_template")),
+        repair_system=_read_path(_resolve_prompt_path(cfg, "repair_system")),
+        repair_user=_read_path(_resolve_prompt_path(cfg, "repair_user")),
     )
 
 

@@ -123,13 +123,13 @@ class CrossbreedingOperator:
             father,
             generator.prompt_bundle,
         )
-        creation = generator.run_creation_stages(
+        run_creation = getattr(generator, "run_creation_stages_with_retries", generator.run_creation_stages)
+        creation = run_creation(
             design_system_prompt=system_prompt,
             design_user_prompt=user_prompt,
             org_dir=org_dir,
             organism_id=organism_id,
             generation=generation,
-            island_id=mother.island_id,
         )
         mother_lineage = read_organism_lineage(mother)
         ancestor_ids = list(mother.ancestor_ids)

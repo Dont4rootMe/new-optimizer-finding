@@ -1,0 +1,21 @@
+Repair this optimizer organism implementation.
+
+=== ORGANISM GENETIC CODE ===
+{organism_genetic_code}
+
+=== ORGANISM NOVELTY SUMMARY ===
+{change_description}
+
+=== CURRENT IMPLEMENTATION.PY ===
+{current_implementation}
+
+=== FAILING PHASE ===
+{phase}
+
+=== FAILING EXPERIMENT ===
+{experiment_name}
+
+=== ERROR HISTORY ===
+{error_history}
+
+Return only the corrected full `implementation.py` text.
