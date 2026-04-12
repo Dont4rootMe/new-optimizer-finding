@@ -162,16 +162,21 @@ def test_canonical_organism_first_pipeline_fake(tmp_path: Path) -> None:
     seed_summary = asyncio.run(EvolutionLoop(cfg).seed_population())
     assert seed_summary["total_generations"] == 0
     assert seed_summary["active_population_size"] == 2
+    pop_root = Path(str(cfg.paths.population_root))
+    overview_path = pop_root / "evolution_overview.png"
+    assert overview_path.exists()
+    seed_mtime_ns = overview_path.stat().st_mtime_ns
 
     summary = asyncio.run(EvolutionLoop(cfg).run())
 
     assert summary["total_generations"] == 1
     assert summary["active_population_size"] == 2
 
-    pop_root = Path(str(cfg.paths.population_root))
     state = read_json(pop_root / "population_state.json")
     assert state["current_generation"] == 1
     assert len(state["active_organisms"]) == 2
+    assert overview_path.exists()
+    assert overview_path.stat().st_mtime_ns >= seed_mtime_ns
 
     active_dirs = [Path(entry["organism_dir"]) for entry in state["active_organisms"]]
     for org_dir in active_dirs:
@@ -204,6 +209,9 @@ def test_seed_population_writes_generation_zero_state(tmp_path: Path) -> None:
     assert state["current_generation"] == 0
     assert state["inflight_seed"] is None
     assert len(state["active_organisms"]) == 2
+    overview_path = pop_root / "evolution_overview.png"
+    assert overview_path.exists()
+    assert overview_path.stat().st_size > 0
 
 
 def test_seed_population_raises_when_all_simple_evals_fail(tmp_path: Path) -> None:

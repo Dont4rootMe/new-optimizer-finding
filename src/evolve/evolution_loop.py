@@ -47,6 +47,7 @@ from src.evolve.types import (
     PlannedOrganismCreation,
     PlannedPhaseEvaluation,
 )
+from src.evolve.visualization import render_evolution_overview
 from src.organisms.crossbreeding import CrossbreedingOperator
 from src.organisms.mutation import MutationOperator
 from src.organisms.organism import update_latest_lineage_entry
@@ -286,6 +287,15 @@ class EvolutionLoop:
             inflight_seed=inflight_seed,
             inflight_generation=inflight_generation,
         )
+
+    def _render_progress_snapshot(self) -> None:
+        try:
+            out_path = render_evolution_overview(self.population_root)
+        except Exception:  # noqa: BLE001
+            LOGGER.exception("Failed to render evolution overview for %s", self.population_root)
+            return
+        if out_path is not None:
+            LOGGER.info("Updated evolution overview at %s", out_path)
 
     def _load_state(self) -> dict[str, Any] | None:
         payload = read_population_state(self.population_root)
@@ -1594,6 +1604,7 @@ class EvolutionLoop:
             self.population = simple_survivors
 
         self._save_state(finalized_generation=generation, inflight_seed=None, inflight_generation=None)
+        self._render_progress_snapshot()
 
     async def seed_population(self) -> dict[str, Any]:
         if self._owns_llm_registry:
@@ -1638,6 +1649,7 @@ class EvolutionLoop:
                 organism.current_generation_active = 0
                 write_organism_meta(organism)
             self._save_state(finalized_generation=0, inflight_seed=None, inflight_generation=None)
+            self._render_progress_snapshot()
 
             best = self._best_active_organism()
             return {
