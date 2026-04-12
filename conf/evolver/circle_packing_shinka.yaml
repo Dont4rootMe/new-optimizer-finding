@@ -10,7 +10,7 @@ creation:
 islands:
   dir: conf/experiments/circle_packing_shinka/prompts/islands
   seed_organisms_per_island: 3
-  max_organisms_per_island: 15
+  max_organisms_per_island: 10
 
 prompts:
   project_context: conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt
@@ -31,8 +31,8 @@ reproduction:
   operator_selection_strategy: deterministic
   operator_weights:
     within_island_crossover: 1.0
-    inter_island_crossover: 1.0
-    mutation: 1.0
+    inter_island_crossover: 0.5
+    mutation: 2.0
   island_sampling:
     within_island_crossover: unified
     inter_island_crossover: unified
@@ -41,10 +41,10 @@ reproduction:
 operators:
   mutation:
     gene_removal_probability: 0.2
-    parent_selection_softmax_temperature: 1.0
+    parent_selection_softmax_temperature: 0.3
   crossover:
     primary_parent_gene_inheritance_probability: 0.7
-    parent_selection_softmax_temperature: 1.0
+    parent_selection_softmax_temperature: 0.3
 
 phases:
   simple:
@@ -55,12 +55,13 @@ phases:
     allocation:
       enabled: false
   great_filter:
-    enabled: false
-    interval_generations: 1
+    enabled: true
+    interval_generations: 5
     eval_mode: full
     timeout_sec_per_eval: 120
-    top_h_per_island: 0
-    experiments: []
+    top_h_per_island: 5
+    experiments:
+      - unit_square_26
     allocation:
       enabled: false
 

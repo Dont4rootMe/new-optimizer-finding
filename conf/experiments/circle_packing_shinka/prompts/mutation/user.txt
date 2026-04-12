@@ -16,6 +16,7 @@ Use this only to understand where the child draft came from.
 
 === PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
 Use this only to understand past idea changes and outcomes.
+Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
 {parent_lineage_summary}
 
 === PARENT IMPLEMENTATION CODE (REFERENCE ONLY) ===

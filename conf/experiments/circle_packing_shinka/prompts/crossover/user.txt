@@ -10,6 +10,7 @@ Use this to understand continuity and provenance of ideas.
 {mother_genetic_code}
 
 === PRIMARY PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
+Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
 {mother_lineage_summary}
 
 === PRIMARY PARENT IMPLEMENTATION CODE (REFERENCE ONLY) ===
@@ -22,6 +23,7 @@ Use this to understand complementary idea sources.
 {father_genetic_code}
 
 === SECONDARY PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
+Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
 {father_lineage_summary}
 
 === SECONDARY PARENT IMPLEMENTATION CODE (REFERENCE ONLY) ===

@@ -14,12 +14,15 @@ Do:
 - treat the child draft as the main object
 - preserve coherence at the level of ideas
 - use the parents to understand provenance, compatibility, and possible implementation consequences
+- compare parent scores in lineage to judge which parent's ideas contributed more value — lean toward preserving genes from the higher-scoring parent
 - produce one unified novelty summary for the child
 
 Do not:
 - concatenate parent code
 - let either parent implementation override the selected child draft
 - turn the response into a direct solved arrangement instead of a gene-level design
+- bundle multiple independent ideas into one gene — keep genes atomic
+- include Python code, variable names, or hardcoded constants in genes or summaries — those belong only in implementation
 
 ## Response format
 
@@ -27,8 +30,9 @@ Return the following sections, each starting with `## SECTION_NAME`.
 Do NOT use markdown code fences.
 
 ## CORE_GENES
-At least 3 bullets.
-Each bullet is one concrete idea for the child.
+At least 3 bullets, at most 7.
+Each bullet is one atomic idea (one independent concept per bullet).
+Write ideas in plain language or math. No Python code, no variable names, no hardcoded constants.
 
 ## INTERACTION_NOTES
 State what assumptions the combined child makes and where it is likely to help or fail.
@@ -38,3 +42,5 @@ State the computational style implied by the combined child design.
 
 ## CHANGE_DESCRIPTION
 Give one unified novelty summary describing what was inherited, synthesized, or redirected.
+Include: (1) which parent's ideas dominate and why, (2) what the combined hypothesis is, (3) what score improvement is expected and why.
+This must be a plain-language statement of the idea. No code, no implementation details.

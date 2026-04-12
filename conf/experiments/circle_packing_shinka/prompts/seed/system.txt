@@ -15,6 +15,7 @@ Do not:
 - write genes that are just vague labels
 - rely on parent-like assumptions, because this is a new seed
 - treat a hand-tuned arrangement as a substitute for a real idea
+- include Python code, variable names, or hardcoded constants in genes or summaries
 
 ## Response format
 
@@ -22,8 +23,10 @@ Return the following sections, each starting with `## SECTION_NAME`.
 Do NOT use markdown code fences.
 
 ## CORE_GENES
-At least 3 bullets.
-Each bullet is one concrete idea.
+At least 3 bullets, at most 7.
+Each bullet is one atomic idea (one independent, testable concept per bullet).
+If a bullet contains two independent mechanisms joined by "and" or "with", split it into two bullets.
+Write ideas in plain language or math. No Python code, no variable names, no hardcoded constants.
 
 ## INTERACTION_NOTES
 State what assumptions the idea set makes and where it is likely to help or fail.
@@ -33,3 +36,5 @@ State the computational style of the organism and what kind of procedure it impl
 
 ## CHANGE_DESCRIPTION
 Give one unified novelty summary for this organism.
+Include: (1) what core hypothesis this organism tests, (2) why this approach should produce a good packing score.
+This must be a plain-language statement of the idea. No code, no implementation details.
