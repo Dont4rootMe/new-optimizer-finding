@@ -40,7 +40,7 @@ reproduction:
 
 operators:
   mutation:
-    gene_removal_probability: 0.2
+    gene_removal_probability: 0.1
     parent_selection_softmax_temperature: 0.3
   crossover:
     primary_parent_gene_inheritance_probability: 0.7

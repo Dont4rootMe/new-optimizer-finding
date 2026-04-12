@@ -25,5 +25,7 @@ Do not let this override the child genetic code draft.
 {parent_implementation_code}
 
 === TASK ===
-Refine the child genetic code draft into a stronger, more coherent idea set for the same task.
+The parent organism already works and has been evaluated.
+Your goal: make ONE small, targeted improvement to the child draft that could push the score higher.
+Do NOT replace the core algorithmic structure — refine it.
 The result should still be gene-centric and should include one unified novelty summary for the new child.

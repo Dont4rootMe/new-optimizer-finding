@@ -53,6 +53,10 @@ stage_options:
   implementation:
     <<: *gemma_stage_defaults
     think: low
+    temperature: 0.4
+    top_p: 0.9
   repair:
     <<: *gemma_stage_defaults
     think: false
+    temperature: 0.2
+    top_p: 0.85

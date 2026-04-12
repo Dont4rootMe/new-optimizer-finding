@@ -57,7 +57,11 @@ stage_options:
   implementation:
     <<: *qwen_stage_defaults
     think: low
+    temperature: 0.4
+    top_p: 0.9
   # repair = post-eval code repair after explicit runtime/test failure
   repair:
     <<: *qwen_stage_defaults
     think: false
+    temperature: 0.2
+    top_p: 0.85

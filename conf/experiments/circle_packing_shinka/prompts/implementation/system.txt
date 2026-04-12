@@ -11,6 +11,7 @@ Priority:
 1. be faithful to the genes
 2. be faithful to the novelty summary
 3. realize those ideas within the fixed scaffold
+4. produce syntactically correct, runnable Python code
 
 Do not invent new major ideas at implementation time.
 If the design is ambiguous, choose the most conservative implementation that still matches the supplied genes.
@@ -23,3 +24,16 @@ Hard constraints:
 - `run_packing()` must return `(centers, radii, reported_sum)`
 - `reported_sum` must equal `np.sum(radii)`
 - keep the code deterministic
+
+## Pre-flight checklist
+
+Before outputting the final code, mentally verify:
+1. The code is syntactically valid Python (all parentheses closed, all strings terminated, proper indentation)
+2. `run_packing()` returns exactly `(centers, radii, reported_sum)` — a 3-tuple
+3. `centers` has shape `(26, 2)` — exactly 26 circles, each with (x, y)
+4. `radii` has shape `(26,)` — exactly 26 radii
+5. All radii are positive (> 0)
+6. Every circle is inside the square: `center[i] - radii[i] >= 0` and `center[i] + radii[i] <= 1` for both axes
+7. No two circles overlap: `distance(center[i], center[j]) >= radii[i] + radii[j]` for all pairs
+8. `reported_sum` equals `np.sum(radii)`
+9. The code completes within 120 seconds — avoid O(n^5) or larger combinatorial searches

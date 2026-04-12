@@ -19,3 +19,15 @@ Requirements:
 - `reported_sum` must equal `np.sum(radii)`
 - Prefer the smallest change that resolves the evaluator error
 - Do not invent a new major idea that is absent from the genes and novelty summary
+
+## Common failure modes to check
+
+Before outputting the repaired code, verify:
+1. All parentheses, brackets, and strings are properly closed
+2. `run_packing()` returns exactly `(centers, radii, reported_sum)` — a 3-tuple, not None
+3. `centers` has shape `(26, 2)` and `radii` has shape `(26,)` — exactly 26 circles
+4. All radii are positive (> 0)
+5. Every circle is fully inside the unit square [0, 1] x [0, 1]
+6. No two circles overlap
+7. No division by zero or NaN values can occur
+8. The code completes within 120 seconds
