@@ -393,7 +393,13 @@ def generate_direct(route_cfg: ApiRouteConfig, request: LlmRequest) -> LlmRespon
             message = {}
         text = str(message.get("content", "")).strip()
         if not text:
-            raise RuntimeError("Ollama response did not contain usable message.content text output.")
+            # When think mode is enabled, some models put all output into the
+            # thinking field and leave content empty. Fall back to thinking text.
+            thinking_text = str(message.get("thinking", "")).strip()
+            if thinking_text:
+                text = thinking_text
+            else:
+                raise RuntimeError("Ollama response did not contain usable message.content text output.")
 
         usage = {
             key: response_payload.get(key)
