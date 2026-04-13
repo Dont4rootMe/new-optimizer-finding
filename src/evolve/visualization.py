@@ -57,7 +57,8 @@ def render_evolution_overview(population_root: str | Path) -> Path | None:
     title = "Evolution Results"
     subtitle = (
         f"Generation {current_generation} | active organisms: {active_count} | "
-        f"tracked organisms: {len(records)}"
+        f"tracked organisms: {len(records)} | best active score: "
+        f"{_format_score(_best_active_simple_score(records))}"
     )
     fig.suptitle(f"{title}\n{subtitle}", fontsize=20, fontweight="bold", y=0.98)
 
@@ -346,6 +347,20 @@ def _evaluated_records(records: list[OrganismVizRecord]) -> list[OrganismVizReco
     return evaluated
 
 
+def _best_active_simple_score(records: list[OrganismVizRecord]) -> float | None:
+    active_scores = [
+        record.simple_score
+        for record in records
+        if record.active and record.simple_score is not None
+    ]
+    if active_scores:
+        return max(active_scores)
+    all_scores = [record.simple_score for record in records if record.simple_score is not None]
+    if not all_scores:
+        return None
+    return max(all_scores)
+
+
 def _cumulative_best(values: list[float]) -> list[float]:
     best_values: list[float] = []
     running_best = -float("inf")
@@ -376,6 +391,12 @@ def _format_elapsed_seconds(seconds: float, _: int) -> str:
     if seconds < 86400:
         return f"{seconds / 3600:.1f}h"
     return f"{seconds / 86400:.1f}d"
+
+
+def _format_score(score: float | None) -> str:
+    if score is None:
+        return "n/a"
+    return f"{score:.4f}"
 
 
 def _empty_panel(ax: Any, message: str) -> None:
