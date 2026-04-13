@@ -46,6 +46,7 @@ def _compose_circle_cfg(tmp_path: Path, *, max_generations: int = 1):
                 f"paths.api_platform_runtime_root={tmp_path / '.api_platform_runtime'}",
                 "evolver.islands.seed_organisms_per_island=1",
                 "evolver.islands.max_organisms_per_island=1",
+                "evolver.phases.great_filter.top_h_per_island=1",
                 f"evolver.max_generations={max_generations}",
             ],
         )
@@ -75,7 +76,7 @@ def test_circle_packing_config_composes() -> None:
     assert set(cfg.api_platforms.keys()) == {"ollama_qwen35_27b", "ollama_gemma4_26b"}
     assert cfg.experiments.unit_square_26.need_cuda is False
     assert cfg.evolver.phases.simple.experiments == ["unit_square_26"]
-    assert cfg.evolver.phases.great_filter.enabled is False
+    assert cfg.evolver.phases.great_filter.enabled is True
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 5
     assert cfg.evolver.prompts.project_context == "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt"

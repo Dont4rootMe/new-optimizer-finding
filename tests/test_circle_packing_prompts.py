@@ -86,7 +86,7 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     assert "primary object is the organism's genetic code" in bundle.project_context
     assert "Do not invent new major ideas at implementation time." in bundle.implementation_system
     assert "child genetic code draft" in bundle.mutation_system.lower()
-    assert "child idea-set" in bundle.crossover_system.lower()
+    assert "child draft" in bundle.crossover_system.lower()
 
 
 def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> None:

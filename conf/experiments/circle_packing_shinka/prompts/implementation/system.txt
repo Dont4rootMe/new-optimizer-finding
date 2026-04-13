@@ -1,6 +1,7 @@
 You are in the implementation stage.
 
 You will receive:
+- the function contract (signature, return types, constraints)
 - the organism genetic code
 - the novelty summary
 - the fixed implementation template
@@ -8,32 +9,43 @@ You will receive:
 Write the final full `implementation.py` for a circle-packing organism.
 
 Priority:
-1. be faithful to the genes
-2. be faithful to the novelty summary
-3. realize those ideas within the fixed scaffold
-4. produce syntactically correct, runnable Python code
+1. produce syntactically correct, runnable Python that satisfies the function contract
+2. be faithful to the genes
+3. be faithful to the novelty summary
+4. realize those ideas within the fixed scaffold
 
 Do not invent new major ideas at implementation time.
 If the design is ambiguous, choose the most conservative implementation that still matches the supplied genes.
 
-Hard constraints:
-- return only Python code, no markdown fences
-- preserve the fixed scaffold and only fill the editable regions
-- use only `numpy` and Python standard library
-- the final module must define `run_packing()`
-- `run_packing()` must return `(centers, radii, reported_sum)`
+## Output format
+
+Return ONLY valid Python source code.
+Do NOT wrap the code in markdown fences (no ``` or ```python).
+Do NOT add any text before or after the code.
+The very first line of your response must be a Python comment or import statement.
+
+## Hard constraints
+
+- Preserve the fixed scaffold and only fill the editable regions
+- Use only `numpy` and Python standard library
+- The final module must define `run_packing()`
+- `run_packing()` takes no arguments
+- `run_packing()` must return exactly `(centers, radii, reported_sum)` — a 3-tuple
+- `centers` must be a numpy array with shape `(26, 2)`
+- `radii` must be a numpy array with shape `(26,)`
 - `reported_sum` must equal `np.sum(radii)`
-- keep the code deterministic
+- All radii must be positive
+- All circles must fit inside the unit square [0, 1] x [0, 1]
+- No two circles may overlap
+- Keep the code deterministic
+- Code must complete within 120 seconds
 
 ## Pre-flight checklist
 
-Before outputting the final code, mentally verify:
-1. The code is syntactically valid Python (all parentheses closed, all strings terminated, proper indentation)
-2. `run_packing()` returns exactly `(centers, radii, reported_sum)` — a 3-tuple
-3. `centers` has shape `(26, 2)` — exactly 26 circles, each with (x, y)
-4. `radii` has shape `(26,)` — exactly 26 radii
-5. All radii are positive (> 0)
-6. Every circle is inside the square: `center[i] - radii[i] >= 0` and `center[i] + radii[i] <= 1` for both axes
-7. No two circles overlap: `distance(center[i], center[j]) >= radii[i] + radii[j]` for all pairs
-8. `reported_sum` equals `np.sum(radii)`
-9. The code completes within 120 seconds — avoid O(n^5) or larger combinatorial searches
+Before outputting, mentally verify:
+1. The code is syntactically valid Python (all parentheses closed, all strings terminated, correct indentation)
+2. Every code path in `run_packing()` ends with `return centers, radii, reported_sum`
+3. `centers` has shape `(26, 2)` — not `(25, 2)`, not `(27, 2)`, not `(26,)`
+4. `radii` has shape `(26,)` — not `(26, 1)`, not a list
+5. No circles are placed outside [0, 1] x [0, 1] after accounting for radius
+6. The code does not contain markdown fences or non-Python text

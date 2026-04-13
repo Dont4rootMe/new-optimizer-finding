@@ -5,10 +5,10 @@ This island explores organisms that treat an initial hypothesis as something to 
 ## Mathematical DNA to build from
 
 - Greedy placement followed by overlap resolution: place circles one at a time, then iteratively resolve overlaps by pushing apart overlapping pairs
-- Force-directed or spring-based repulsion: model overlapping circles as compressed springs, iterate until equilibrium while growing radii
+- Force-directed or elastic repulsion: model overlapping circles as compressed elastic elements, iterate until equilibrium while expanding radii
 - Penalty-based optimization: define a penalty for overlaps and boundary violations, use gradient-free local search (coordinate descent, Nelder-Mead-like simplex on positions) to minimize penalty while maximizing total radius
 - Sequential repair passes: detect all violations, fix the worst violation first, re-check, iterate until feasible
-- Two-phase algorithms: Phase 1 finds a feasible packing (all circles non-overlapping and inside the square), Phase 2 grows radii while maintaining feasibility
+- Two-phase algorithms: Phase 1 finds a feasible packing (all circles non-overlapping and inside the square), Phase 2 expands radii while maintaining feasibility
 
 ## Promising formal directions
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
+import logging
 import random
 import re
 import threading
@@ -10,6 +12,8 @@ import threading
 from omegaconf import DictConfig
 
 from api_platforms import ApiPlatformRegistry
+
+LOGGER = logging.getLogger(__name__)
 
 
 class BaseLlmGenerator:
@@ -42,11 +46,40 @@ class BaseLlmGenerator:
         self._batch_route_assignments: dict[str, str] = {}
 
     def _extract_python(self, text: str) -> str:
+        """Extract Python code from LLM response, stripping markdown fences.
+
+        Strategy:
+        1. Find ALL markdown code blocks and pick the longest one (the main code).
+        2. If no fences found, use the whole response.
+        3. Strip any remaining stray backtick lines.
+        4. Validate syntax — raise ValueError if the code is not parseable Python.
+        """
+
+        # Find all code blocks — pick the longest to avoid grabbing a short snippet
         pattern = re.compile(r"```(?:python)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
-        match = pattern.search(text)
-        if match:
-            return match.group(1).strip() + "\n"
-        return text.strip() + "\n"
+        matches = pattern.findall(text)
+        if matches:
+            code = max(matches, key=len).strip() + "\n"
+        else:
+            code = text.strip() + "\n"
+
+        # Strip any remaining stray backtick lines that the regex didn't catch
+        lines = code.split("\n")
+        cleaned_lines = [line for line in lines if not line.strip().startswith("```")]
+        code = "\n".join(cleaned_lines)
+        if not code.strip():
+            code = text.strip() + "\n"
+
+        # Validate Python syntax — fail fast instead of wasting an eval slot
+        try:
+            ast.parse(code)
+        except SyntaxError as exc:
+            LOGGER.warning("Extracted code has syntax error: %s (line %s)", exc.msg, exc.lineno)
+            raise ValueError(
+                f"LLM returned syntactically invalid Python: {exc.msg} at line {exc.lineno}"
+            ) from exc
+
+        return code
 
     def set_batch_route_assignments(self, assignments: dict[str, str]) -> None:
         """Install a batch-scoped organism_id -> route_id mapping.

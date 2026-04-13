@@ -194,7 +194,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert gemma_route.provider_model_id == "gemma4:26b"
     assert gemma_route.base_url == "http://127.0.0.1:12434/api"
     assert gemma_route.gpu_ranks == [0]
-    assert gemma_route.stage_options["implementation"]["think"] == "low"
+    assert gemma_route.stage_options["implementation"]["think"] == "medium"
     assert gemma_route.stage_options["repair"]["top_k"] == 64
 
 

@@ -1,5 +1,25 @@
 Convert this circle-packing design into the final `implementation.py`.
 
+=== FUNCTION CONTRACT ===
+You must implement exactly this function:
+
+    def run_packing() -> tuple[np.ndarray, np.ndarray, float]:
+
+Arguments: none.
+Returns a 3-tuple:
+  1. centers: np.ndarray of shape (26, 2) — each row is (x, y) center of a circle
+  2. radii: np.ndarray of shape (26,) — radius of each circle
+  3. reported_sum: float — must equal np.sum(radii)
+
+Constraints enforced by the evaluator:
+  - All values must be finite (no NaN, no inf)
+  - All radii must be > 0
+  - Every circle fully inside [0, 1] x [0, 1]: center[i] - radii[i] >= 0 and center[i] + radii[i] <= 1, for both x and y
+  - No overlaps: for every pair i != j, distance(centers[i], centers[j]) >= radii[i] + radii[j]
+  - reported_sum must match np.sum(radii) within 1e-6
+
+Score = sum of radii. Higher is better.
+
 === ORGANISM GENETIC CODE ===
 {organism_genetic_code}
 
@@ -12,4 +32,4 @@ Convert this circle-packing design into the final `implementation.py`.
 Implement the supplied ideas faithfully.
 Do not add a new major idea that is absent from the genes and novelty summary.
 
-Return only the final `implementation.py` text.
+Return ONLY the final Python code. No markdown fences, no commentary before or after.
