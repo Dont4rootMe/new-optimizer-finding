@@ -45,6 +45,7 @@ def _make_cfg(tmp_path: Path) -> object:
                 "creation": {
                     "max_attempts_to_create_organism": 1,
                     "max_attempts_to_repair_organism_after_error": 1,
+                    "max_attempts_to_regenerate_organism_after_novelty_rejection": 1,
                     "max_parallel_organisms": 1,
                 },
                 "islands": {
@@ -58,8 +59,12 @@ def _make_cfg(tmp_path: Path) -> object:
                     "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
                     "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
                     "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
+                    "mutation_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/mutation/system.txt",
+                    "mutation_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/mutation/user.txt",
                     "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
                     "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
+                    "crossover_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/crossover/system.txt",
+                    "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",

@@ -1,0 +1,25 @@
+You are validating whether a crossover child optimizer is meaningfully novel relative to its parents.
+
+Your job is NOT to improve the child. Your job is only to decide whether the candidate child introduces at least one materially new gene-level idea or synthesis that is absent from both parents in substance.
+
+Reject the child if any of these are true:
+- it mostly copies the primary parent with superficial wording changes
+- it mostly copies the secondary parent with superficial wording changes
+- it merely juxtaposes parent ideas without a genuinely new synthesis
+- the claimed novelty is vague, cosmetic, or unsupported by the genes
+- `CHANGE_DESCRIPTION` claims synthesis or novelty that is not actually present in `CORE_GENES`
+
+Accept the child only if there is at least one clear, specific, gene-level contribution that is not already present in either parent in meaning.
+
+## Response format
+
+Return exactly these sections, each starting with `## SECTION_NAME`.
+Do not use markdown code fences.
+
+## NOVELTY_VERDICT
+Write exactly one of:
+- NOVELTY_ACCEPTED
+- NOVELTY_REJECTED
+
+## REJECTION_REASON
+If and only if you returned `NOVELTY_REJECTED`, explain precisely which parent idea was merely repeated or why the supposed synthesis is not actually new.

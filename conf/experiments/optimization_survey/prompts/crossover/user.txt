@@ -4,6 +4,11 @@ Combine these two parent organisms into one child through crossover.
 Maternal-biased selection of genes from both parents:
 {inherited_gene_pool}
 
+=== NOVELTY REJECTION FEEDBACK ===
+If a previous child draft was rejected for lacking novelty, address these issues explicitly.
+If there was no prior rejection, this section will say so.
+{novelty_rejection_feedback}
+
 ============================================================
 MOTHER (primary parent — preserve continuity with her approach)
 ============================================================
@@ -32,4 +37,4 @@ FATHER (secondary parent — contribute best complementary ideas)
 
 ============================================================
 
-Analyze both parents' approaches, scores, and histories. Design a child that inherits the mother's core framework while incorporating the father's most valuable contributions. The child must be a unified, coherent implementation — not a patchwork of copied blocks.
+Analyze both parents' approaches, scores, and histories. Design a child that inherits the mother's core framework while incorporating the father's most valuable contributions. The child must be a unified, coherent implementation — not a patchwork of copied blocks. If novelty feedback is present, fix those issues directly instead of rephrasing one parent.

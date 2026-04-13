@@ -7,6 +7,7 @@ This file applies to `src/organisms/`.
 - `organism.py`: canonical organism validation, persistence, lineage handling, and genetic-code formatting
 - `mutation.py`: mutation prompt construction and organism creation
 - `crossbreeding.py`: crossover prompt construction and organism creation
+- `novelty.py`: novelty-check prompt construction and verdict parsing for mutation/crossover
 
 ## Canonical Organism Rules
 

@@ -8,6 +8,11 @@ These genes were selected to carry forward into the child:
 These genes were deliberately dropped. Do not reintroduce without strong justification:
 {removed_gene_pool}
 
+=== NOVELTY REJECTION FEEDBACK ===
+If a previous child draft was rejected for lacking novelty, address these issues explicitly.
+If there was no prior rejection, this section will say so.
+{novelty_rejection_feedback}
+
 === PARENT GENETIC CODE ===
 Structured description of the parent's algorithmic design:
 {parent_genetic_code}
@@ -22,4 +27,4 @@ Study this raw implementation carefully before making changes.
 
 ===
 
-Analyze the parent's strengths and weaknesses based on scores, history, and code. Produce a child that addresses the most impactful weakness or amplifies the strongest trait.
+Analyze the parent's strengths and weaknesses based on scores, history, and code. Produce a child that addresses the most impactful weakness or amplifies the strongest trait. If novelty feedback is present, fix those issues directly instead of paraphrasing the same parent idea again.

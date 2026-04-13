@@ -60,3 +60,8 @@ stage_options:
     think: false
     temperature: 0.2
     top_p: 0.85
+  novelty_check:
+    <<: *gemma_stage_defaults
+    think: false
+    temperature: 0.1
+    top_p: 0.8

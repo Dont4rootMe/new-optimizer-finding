@@ -9,6 +9,11 @@ from pathlib import Path
 from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
 from src.evolve.storage import utc_now_iso
 from src.evolve.types import OrganismMeta
+from src.organisms.novelty import (
+    NoveltyCheckContext,
+    build_mutation_novelty_prompt,
+    format_novelty_rejection_feedback,
+)
 from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
@@ -55,6 +60,7 @@ def _build_mutate_prompt(
     removed_genes: list[str],
     parent: OrganismMeta,
     prompts: PromptBundle,
+    novelty_feedback: list[str] | None = None,
 ) -> tuple[str, str]:
     """Build `(system_prompt, user_prompt)` for mutation LLM call."""
 
@@ -69,6 +75,7 @@ def _build_mutate_prompt(
         parent_genetic_code=format_genetic_code(parent_genetic_code),
         parent_lineage_summary=format_lineage_summary(parent_lineage),
         parent_implementation_code=format_implementation_code(parent_implementation),
+        novelty_rejection_feedback=format_novelty_rejection_feedback(list(novelty_feedback or [])),
     )
     return system, user
 
@@ -107,6 +114,23 @@ class MutationOperator:
             parent,
             generator.prompt_bundle,
         )
+        novelty_context = NoveltyCheckContext(
+            operator="mutation",
+            build_design_prompts=lambda feedback: _build_mutate_prompt(
+                inherited_genes,
+                removed_genes,
+                parent,
+                generator.prompt_bundle,
+                novelty_feedback=feedback,
+            ),
+            build_novelty_prompts=lambda candidate_design: build_mutation_novelty_prompt(
+                inherited_genes=inherited_genes,
+                removed_genes=removed_genes,
+                parent=parent,
+                candidate_design=candidate_design,
+                prompts=generator.prompt_bundle,
+            ),
+        )
         run_creation = getattr(generator, "run_creation_stages_with_retries", generator.run_creation_stages)
         creation = run_creation(
             design_system_prompt=system_prompt,
@@ -114,6 +138,7 @@ class MutationOperator:
             org_dir=org_dir,
             organism_id=organism_id,
             generation=generation,
+            novelty_context=novelty_context,
         )
         parent_lineage = read_organism_lineage(parent)
         return build_organism_from_response(

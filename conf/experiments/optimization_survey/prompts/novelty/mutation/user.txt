@@ -1,0 +1,22 @@
+Evaluate whether this mutation child is meaningfully novel relative to its parent.
+
+=== CHILD GENETIC CODE DRAFT SELECTED BY EVOLUTION ===
+{inherited_gene_pool}
+
+=== REMOVED GENES ===
+These genes were explicitly removed during mutation sampling.
+{removed_gene_pool}
+
+=== PARENT GENETIC CODE ===
+{parent_genetic_code}
+
+=== CANDIDATE CHILD GENETIC CODE ===
+{candidate_genetic_code}
+
+=== CANDIDATE CHILD CHANGE_DESCRIPTION ===
+{candidate_change_description}
+
+=== TASK ===
+Decide whether the candidate child contains at least one genuinely new gene-level idea that is absent from the parent in substance, not just in wording.
+If the child only paraphrases, reshuffles, or cosmetically renames parent ideas, reject it.
+If `CHANGE_DESCRIPTION` overclaims novelty that the genes do not support, reject it.

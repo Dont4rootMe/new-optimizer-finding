@@ -5,6 +5,11 @@ This merged draft was already selected by evolution.
 This is the main object you must refine.
 {inherited_gene_pool}
 
+=== NOVELTY REJECTION FEEDBACK ===
+If a previous child draft was rejected for lacking novelty, address these issues explicitly.
+If there was no prior rejection, this section will say so.
+{novelty_rejection_feedback}
+
 === PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ===
 Use this to understand continuity and provenance of ideas.
 {mother_genetic_code}
@@ -34,3 +39,4 @@ Do not let it override the child draft.
 === TASK ===
 Refine the child genetic code draft into one coherent organism.
 The result should be gene-centric, internally consistent, and summarized by one unified novelty statement for lineage.
+If novelty rejection feedback is present, resolve it explicitly instead of rephrasing one parent.

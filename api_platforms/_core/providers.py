@@ -86,6 +86,8 @@ def build_mock_text(request: LlmRequest) -> str:
     use_sgd = (base % 2) == 0
     opt_type = "SGD" if use_sgd else "AdamW"
     joined_prompt = f"{request.system_prompt}\n{request.user_prompt}".lower()
+    if request.stage == "novelty_check":
+        return "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n"
     if "circle-packing" in joined_prompt or "circle packing" in joined_prompt or "run_packing" in joined_prompt:
         if request.stage == "design":
             return (

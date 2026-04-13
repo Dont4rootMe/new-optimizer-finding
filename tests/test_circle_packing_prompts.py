@@ -107,6 +107,7 @@ def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) 
 
     assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
     assert "=== EXCLUDED IDEAS ===" in user_prompt
+    assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
     assert "REFERENCE ONLY" in user_prompt
     assert "Do not let this override the child genetic code draft." in user_prompt
     assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
@@ -132,11 +133,32 @@ def test_circle_packing_crossover_prompt_prioritizes_child_draft(tmp_path: Path)
     )
 
     assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
+    assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
     assert "REFERENCE ONLY" in user_prompt
     assert "Do not let it override the child draft." in user_prompt
     assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
         "=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ==="
     )
+
+
+def test_circle_packing_mutation_prompt_renders_novelty_feedback(tmp_path: Path) -> None:
+    cfg = _compose_cfg()
+    bundle = load_prompt_bundle(cfg)
+    parent = _make_parent(tmp_path, "parent_feedback", "symmetric_constructions")
+
+    _, user_prompt = _build_mutate_prompt(
+        inherited_genes=[
+            "Child idea about structural organization",
+            "Child idea about feasibility preservation",
+            "Child idea about refinement logic",
+        ],
+        removed_genes=["Excluded idea about older organization"],
+        parent=parent,
+        prompts=bundle,
+        novelty_feedback=["The previous child only paraphrased the parent layout idea."],
+    )
+
+    assert "- The previous child only paraphrased the parent layout idea." in user_prompt
 
 
 def test_circle_packing_prompts_avoid_solution_leading_lists() -> None:

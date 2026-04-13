@@ -12,6 +12,7 @@ from api_platforms import LlmResponse
 import src.evolve.operators as canonical_seed_operators
 from src.evolve.generator import CandidateGenerator
 from src.evolve.types import Island
+from src.organisms.novelty import NoveltyCheckContext, NoveltyRejectionExhaustedError
 
 
 def _cfg():
@@ -22,6 +23,7 @@ def _cfg():
                 "creation": {
                     "max_attempts_to_create_organism": 2,
                     "max_attempts_to_repair_organism_after_error": 2,
+                    "max_attempts_to_regenerate_organism_after_novelty_rejection": 1,
                 },
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
@@ -29,8 +31,12 @@ def _cfg():
                     "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
                     "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
                     "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
+                    "mutation_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/mutation/system.txt",
+                    "mutation_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/mutation/user.txt",
                     "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
                     "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
+                    "crossover_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/crossover/system.txt",
+                    "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
@@ -58,23 +64,27 @@ def test_generator_loads_only_current_prompt_bundle_assets(monkeypatch) -> None:
     generator = CandidateGenerator(_cfg())
 
     observed = {
-        tuple(path.parts[-3:])
+        "/".join(path.parts[path.parts.index("prompts") + 1 :])
         for path in seen_paths
-        if len(path.parts) >= 3 and "prompts" in path.parts
+        if "prompts" in path.parts
     }
     assert observed == {
-        ("prompts", "shared", "project_context.txt"),
-        ("prompts", "seed", "system.txt"),
-        ("prompts", "seed", "user.txt"),
-        ("prompts", "mutation", "system.txt"),
-        ("prompts", "mutation", "user.txt"),
-        ("prompts", "crossover", "system.txt"),
-        ("prompts", "crossover", "user.txt"),
-        ("prompts", "implementation", "system.txt"),
-        ("prompts", "implementation", "user.txt"),
-        ("prompts", "implementation", "template.txt"),
-        ("prompts", "repair", "system.txt"),
-        ("prompts", "repair", "user.txt"),
+        "shared/project_context.txt",
+        "seed/system.txt",
+        "seed/user.txt",
+        "mutation/system.txt",
+        "mutation/user.txt",
+        "novelty/mutation/system.txt",
+        "novelty/mutation/user.txt",
+        "crossover/system.txt",
+        "crossover/user.txt",
+        "novelty/crossover/system.txt",
+        "novelty/crossover/user.txt",
+        "implementation/system.txt",
+        "implementation/user.txt",
+        "implementation/template.txt",
+        "repair/system.txt",
+        "repair/user.txt",
     }
     assert "## CORE_GENES" in generator.prompt_bundle.seed_system
     generator.close()
@@ -122,6 +132,8 @@ def test_canonical_generator_seeds_real_island_organism(tmp_path: Path) -> None:
     assert llm_request["route_id"] == "mock"
     assert llm_request["design"]["route_id"] == "mock"
     assert llm_request["implementation"]["route_id"] == "mock"
+    assert "design_attempts" not in llm_request
+    assert "novelty_checks" not in llm_request
     assert llm_response["route_id"] == "mock"
     assert llm_response["design"]["route_id"] == "mock"
     assert llm_response["implementation"]["route_id"] == "mock"
@@ -224,3 +236,261 @@ def test_run_creation_stages_persists_pending_design_exchange_before_transport_f
     assert llm_response["design"]["text"] is None
     assert llm_response["design"]["status"] == "failed"
     assert "broker unavailable" in llm_response["design"]["error_msg"]
+
+
+def test_run_creation_stages_with_novelty_retries_design_before_implementation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_novelty_retry"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    calls: list[tuple[str, str]] = []
+    design_responses = iter(
+        [
+            (
+                "## CORE_GENES\n"
+                "- first candidate gene one\n"
+                "- first candidate gene two\n"
+                "- first candidate gene three\n\n"
+                "## INTERACTION_NOTES\n"
+                "First candidate.\n\n"
+                "## COMPUTE_NOTES\n"
+                "Cheap.\n\n"
+                "## CHANGE_DESCRIPTION\n"
+                "First candidate change.\n"
+            ),
+            (
+                "## CORE_GENES\n"
+                "- second candidate gene one\n"
+                "- second candidate gene two\n"
+                "- second candidate gene three\n\n"
+                "## INTERACTION_NOTES\n"
+                "Second candidate.\n\n"
+                "## COMPUTE_NOTES\n"
+                "Cheap.\n\n"
+                "## CHANGE_DESCRIPTION\n"
+                "Second candidate change.\n"
+            ),
+        ]
+    )
+    novelty_responses = iter(
+        [
+            "## NOVELTY_VERDICT\nNOVELTY_REJECTED\n\n## REJECTION_REASON\nToo close to the parent.\n",
+            "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n",
+        ]
+    )
+
+    def fake_generate(request):
+        calls.append((request.stage, request.user_prompt))
+        if request.stage == "design":
+            text = next(design_responses)
+        elif request.stage == "novelty_check":
+            text = next(novelty_responses)
+        else:
+            text = (
+                "import torch.nn as nn\n\n"
+                "class Impl:\n"
+                "    def __init__(self, model: nn.Module, max_steps: int) -> None:\n"
+                "        self.model = model\n"
+                "        self.max_steps = max_steps\n\n"
+                "    def step(self, weights, grads, activations, step_fn) -> None:\n"
+                "        del weights, grads, activations, step_fn\n\n"
+                "    def zero_grad(self, set_to_none: bool = True) -> None:\n"
+                "        del set_to_none\n\n"
+                "def build_optimizer(model: nn.Module, max_steps: int):\n"
+                "    return Impl(model, max_steps)\n"
+            )
+        return LlmResponse(
+            text=text,
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    novelty_context = NoveltyCheckContext(
+        operator="mutation",
+        build_design_prompts=lambda feedback: ("design system retry", f"retry prompt :: {feedback[-1]}"),
+        build_novelty_prompts=lambda _parsed: ("novelty system", "novelty user"),
+    )
+
+    try:
+        result = generator.run_creation_stages(
+            design_system_prompt="design system",
+            design_user_prompt="design user",
+            novelty_context=novelty_context,
+            org_dir=organism_dir,
+            organism_id="org_novelty_retry",
+            generation=0,
+        )
+    finally:
+        generator.close()
+
+    assert [stage for stage, _ in calls] == [
+        "design",
+        "novelty_check",
+        "design",
+        "novelty_check",
+        "implementation",
+    ]
+    assert "retry prompt :: Too close to the parent." in calls[2][1]
+    assert result.parsed_design["CHANGE_DESCRIPTION"] == "Second candidate change."
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
+    assert len(llm_request["design_attempts"]) == 2
+    assert len(llm_request["novelty_checks"]) == 2
+    assert llm_response["novelty_checks"][0]["rejection_reason"] == "Too close to the parent."
+    assert llm_request["design"]["user_prompt"] == "retry prompt :: Too close to the parent."
+
+
+def test_run_creation_stages_with_novelty_rejection_exhaustion_is_terminal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_novelty_exhausted"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+
+    def fake_generate(request):
+        if request.stage == "design":
+            text = (
+                "## CORE_GENES\n"
+                "- first candidate gene one\n"
+                "- first candidate gene two\n"
+                "- first candidate gene three\n\n"
+                "## INTERACTION_NOTES\n"
+                "Candidate.\n\n"
+                "## COMPUTE_NOTES\n"
+                "Cheap.\n\n"
+                "## CHANGE_DESCRIPTION\n"
+                "Candidate change.\n"
+            )
+        else:
+            text = (
+                "## NOVELTY_VERDICT\n"
+                "NOVELTY_REJECTED\n\n"
+                "## REJECTION_REASON\n"
+                "Still paraphrases the parent.\n"
+            )
+        return LlmResponse(
+            text=text,
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    novelty_context = NoveltyCheckContext(
+        operator="mutation",
+        build_design_prompts=lambda feedback: ("design retry", f"retry :: {feedback[-1]}"),
+        build_novelty_prompts=lambda _parsed: ("novelty system", "novelty user"),
+    )
+
+    try:
+        with pytest.raises(NoveltyRejectionExhaustedError, match="Novelty validation rejected organism"):
+            generator.run_creation_stages_with_retries(
+                design_system_prompt="design system",
+                design_user_prompt="design user",
+                novelty_context=novelty_context,
+                org_dir=organism_dir,
+                organism_id="org_novelty_exhausted",
+                generation=0,
+            )
+    finally:
+        generator.close()
+
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    assert len(llm_request["design_attempts"]) == 2
+    assert len(llm_request["novelty_checks"]) == 2
+    assert "implementation" not in llm_request
+
+
+def test_run_creation_stages_with_novelty_parse_failure_retries_full_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_novelty_parse_retry"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    calls: list[str] = []
+    novelty_texts = iter(
+        [
+            "## NOVELTY_VERDICT\nMAYBE\n",
+            "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n",
+        ]
+    )
+
+    def fake_generate(request):
+        calls.append(request.stage)
+        if request.stage == "design":
+            text = (
+                "## CORE_GENES\n"
+                "- candidate gene one\n"
+                "- candidate gene two\n"
+                "- candidate gene three\n\n"
+                "## INTERACTION_NOTES\n"
+                "Candidate.\n\n"
+                "## COMPUTE_NOTES\n"
+                "Cheap.\n\n"
+                "## CHANGE_DESCRIPTION\n"
+                "Candidate change.\n"
+            )
+        elif request.stage == "novelty_check":
+            text = next(novelty_texts)
+        else:
+            text = (
+                "import torch.nn as nn\n\n"
+                "class Impl:\n"
+                "    def __init__(self, model: nn.Module, max_steps: int) -> None:\n"
+                "        self.model = model\n"
+                "        self.max_steps = max_steps\n\n"
+                "    def step(self, weights, grads, activations, step_fn) -> None:\n"
+                "        del weights, grads, activations, step_fn\n\n"
+                "    def zero_grad(self, set_to_none: bool = True) -> None:\n"
+                "        del set_to_none\n\n"
+                "def build_optimizer(model: nn.Module, max_steps: int):\n"
+                "    return Impl(model, max_steps)\n"
+            )
+        return LlmResponse(
+            text=text,
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    novelty_context = NoveltyCheckContext(
+        operator="mutation",
+        build_design_prompts=lambda feedback: ("design retry", f"retry :: {feedback[-1]}"),
+        build_novelty_prompts=lambda _parsed: ("novelty system", "novelty user"),
+    )
+
+    try:
+        generator.run_creation_stages_with_retries(
+            design_system_prompt="design system",
+            design_user_prompt="design user",
+            novelty_context=novelty_context,
+            org_dir=organism_dir,
+            organism_id="org_novelty_parse_retry",
+            generation=0,
+        )
+    finally:
+        generator.close()
+
+    assert calls == ["design", "novelty_check", "design", "novelty_check", "implementation"]

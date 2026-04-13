@@ -13,8 +13,12 @@ class PromptBundle:
     seed_user: str
     mutation_system: str
     mutation_user: str
+    mutation_novelty_system: str
+    mutation_novelty_user: str
     crossover_system: str
     crossover_user: str
+    crossover_novelty_system: str
+    crossover_novelty_user: str
     implementation_system: str
     implementation_user: str
     implementation_template: str
@@ -52,8 +56,12 @@ def load_prompt_bundle(cfg: DictConfig) -> PromptBundle:
         seed_user=_read_path(_resolve_prompt_path(cfg, "seed_user")),
         mutation_system=_read_path(_resolve_prompt_path(cfg, "mutation_system")),
         mutation_user=_read_path(_resolve_prompt_path(cfg, "mutation_user")),
+        mutation_novelty_system=_read_path(_resolve_prompt_path(cfg, "mutation_novelty_system")),
+        mutation_novelty_user=_read_path(_resolve_prompt_path(cfg, "mutation_novelty_user")),
         crossover_system=_read_path(_resolve_prompt_path(cfg, "crossover_system")),
         crossover_user=_read_path(_resolve_prompt_path(cfg, "crossover_user")),
+        crossover_novelty_system=_read_path(_resolve_prompt_path(cfg, "crossover_novelty_system")),
+        crossover_novelty_user=_read_path(_resolve_prompt_path(cfg, "crossover_novelty_user")),
         implementation_system=_read_path(_resolve_prompt_path(cfg, "implementation_system")),
         implementation_user=_read_path(_resolve_prompt_path(cfg, "implementation_user")),
         implementation_template=_read_path(_resolve_prompt_path(cfg, "implementation_template")),

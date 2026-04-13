@@ -212,14 +212,26 @@ def _build_genetic_code(parsed: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def require_response_section(parsed: dict[str, str], key: str) -> str:
+    """Public wrapper for required structured-response sections."""
+
+    return _require_section(parsed, key)
+
+
+def build_genetic_code_from_design_response(parsed: dict[str, str]) -> dict[str, Any]:
+    """Public wrapper for canonical genetic-code extraction from design responses."""
+
+    return _build_genetic_code(parsed)
+
+
 def build_implementation_prompt_from_design(
     parsed: dict[str, str],
     prompts: PromptBundle,
 ) -> tuple[str, str]:
     """Build the shared implementation-stage prompt from a design-stage response."""
 
-    genetic_code = _build_genetic_code(parsed)
-    change_description = _require_section(parsed, "CHANGE_DESCRIPTION")
+    genetic_code = build_genetic_code_from_design_response(parsed)
+    change_description = require_response_section(parsed, "CHANGE_DESCRIPTION")
     system = compose_system_prompt(prompts.project_context, prompts.implementation_system)
     user = prompts.implementation_user.format(
         organism_genetic_code=format_genetic_code(genetic_code),
@@ -288,8 +300,8 @@ def build_organism_from_response(
         if key not in parsed:
             raise ValueError(f"Canonical organism response is missing required section {key}.")
 
-    genetic_code = _build_genetic_code(parsed)
-    change_description = _require_section(parsed, "CHANGE_DESCRIPTION")
+    genetic_code = build_genetic_code_from_design_response(parsed)
+    change_description = require_response_section(parsed, "CHANGE_DESCRIPTION")
     if not str(implementation_code).strip():
         raise ValueError("Implementation stage must return non-empty implementation.py text.")
 

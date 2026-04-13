@@ -82,6 +82,7 @@ def test_hydra_compose_config_and_experiments() -> None:
     assert cfg.evolver.reproduction.operator_selection_strategy == "deterministic"
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
     assert cfg.evolver.creation.max_parallel_organisms == 4
     assert cfg.evolver.llm.selection_strategy == "random"
     assert cfg.evolver.llm.route_weights.mock == 1.0
@@ -119,6 +120,7 @@ def test_optimization_survey_canonical_preset_accepts_standalone_validation_over
     assert cfg.organism_dir == "/tmp/organism"
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
     assert cfg.evolver.creation.max_parallel_organisms == 4
 
 
@@ -169,6 +171,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert "organism_dir" not in cfg
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
     assert cfg.evolver.creation.max_parallel_organisms == 5
     assert cfg.evolver.islands.seed_organisms_per_island == 3
     assert cfg.evolver.islands.max_organisms_per_island == 10
@@ -189,6 +192,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert qwen_route.gpu_ranks == [1]
     assert qwen_route.stage_options["design"]["think"] == "medium"
     assert qwen_route.stage_options["implementation"]["max_output_tokens"] == 4096
+    assert qwen_route.stage_options["novelty_check"]["temperature"] == 0.1
     assert qwen_route.request_options["num_ctx"] == 65536
     assert gemma_route.route_id == "ollama_gemma4_26b"
     assert gemma_route.provider_model_id == "gemma4:26b"
@@ -196,6 +200,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert gemma_route.gpu_ranks == [0]
     assert gemma_route.stage_options["implementation"]["think"] == "medium"
     assert gemma_route.stage_options["repair"]["top_k"] == 64
+    assert gemma_route.stage_options["novelty_check"]["top_k"] == 64
 
 
 def test_circle_packing_canonical_preset_accepts_standalone_validation_overrides() -> None:
@@ -210,4 +215,5 @@ def test_circle_packing_canonical_preset_accepts_standalone_validation_overrides
     assert cfg.organism_dir == "/tmp/organism"
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
     assert cfg.evolver.creation.max_parallel_organisms == 5

@@ -10,6 +10,11 @@ These ideas were deliberately removed during mutation sampling.
 Treat them as excluded-by-evolution context, not as default candidates to restore.
 {removed_gene_pool}
 
+=== NOVELTY REJECTION FEEDBACK ===
+If a previous child draft was rejected for lacking novelty, address these issues explicitly.
+If there was no prior rejection, this section will say so.
+{novelty_rejection_feedback}
+
 === PARENT GENETIC CODE (REFERENCE ONLY) ===
 Use this only to understand where the child draft came from.
 {parent_genetic_code}
@@ -29,3 +34,4 @@ The parent organism already works and has been evaluated.
 Your goal: make ONE small, targeted improvement to the child draft that could push the score higher.
 Do NOT replace the core algorithmic structure — refine it.
 The result should still be gene-centric and should include one unified novelty summary for the new child.
+If novelty rejection feedback is present, resolve it explicitly instead of rephrasing the parent.
