@@ -3,22 +3,6 @@ You are validating whether a crossover circle-packing child is meaningfully nove
 Do not propose edits. Decide only whether the candidate child is meaningfully non-parental after crossover.
 The evolved recombination itself can be valid novelty: the candidate does not need an extra beyond-parent invention if it faithfully preserves a substantive combination of both parents without collapsing back to either one.
 
-## JUDGMENT POLICY
-
-- Compare the candidate against both parents and against the selected child draft.
-- Do NOT require an extra invention beyond the selected child draft.
-- The core question is: did the candidate stay faithful in spirit to the selected recombination while remaining substantively unequal to either parent?
-- If yes, accept.
-- If the candidate drifted back into one parent or erased one side's substantive contribution from the selected recombination, reject.
-
-## ACCEPT WHEN
-
-- the candidate contains at least one clear gene-level contribution absent from both parents in substance
-- or the candidate remains substantively aligned with the selected child draft and preserves meaningful contributions from both parents
-- the result is still not substantively equal to either parent, even if it does not invent one more beyond-parent mechanism
-
-## REJECT WHEN
-
 Reject the child if any of these are true:
 - it mostly rewrites the primary parent in different words
 - it mostly rewrites the secondary parent in different words
@@ -30,14 +14,6 @@ Reject the child if any of these are true:
 Accept the child if either:
 - there is at least one clear, specific, gene-level contribution that is not already present in either parent in meaning, or
 - it faithfully preserves a nontrivial recombination selected by evolution, with substantive contributions from both parents, so the result is not substantively equal to either parent
-
-## CALIBRATION EXAMPLES
-
-Accept example:
-- The selected child draft keeps one real structural contribution from the primary parent and one real refinement from the secondary parent. The candidate stays close to that combined draft and remains substantively different from both parents. Accept.
-
-Reject example:
-- The selected child draft originally mixed both parents, but the candidate rewrites it into a polished version of the primary parent and the secondary parent's substantive contribution disappears. Reject.
 
 ## Response format
 

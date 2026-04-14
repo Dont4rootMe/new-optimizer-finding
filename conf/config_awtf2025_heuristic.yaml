@@ -15,7 +15,7 @@ num_workers: 0
 resources:
   evaluation:
     gpu_ranks: []
-    cpu_parallel_jobs: 20
+    cpu_parallel_jobs: 5
 
 paths:
   data_root: ${oc.env:AIFS_DATA_ROOT,./data}
@@ -27,6 +27,8 @@ paths:
   ollama_cache_root: ${oc.env:OLLAMA_MODELS,./ollama_cache}
 
 evolver:
+  creation:
+    max_parallel_organisms: 2
   llm:
     route_weights:
       ollama_qwen35_27b: 1.0
@@ -36,10 +38,13 @@ api_platforms:
   ollama_qwen35_27b:
     base_url: ${oc.env:OLLAMA_QWEN35_27B_BASE_URL,http://127.0.0.1:12435/api}
     gpu_ranks: [1]
-    max_concurrency: 2
+    max_concurrency: 1
     stage_options:
       design:
         think: high
+      implementation:
+        think: false
+        temperature: 0.2
       repair:
         think: low
       novelty_check:
@@ -48,10 +53,13 @@ api_platforms:
   ollama_gemma4_26b:
     base_url: ${oc.env:OLLAMA_GEMMA4_26B_BASE_URL,http://127.0.0.1:12434/api}
     gpu_ranks: [0]
-    max_concurrency: 2
+    max_concurrency: 1
     stage_options:
       design:
         think: high
+      implementation:
+        think: false
+        temperature: 0.2
       repair:
         think: low
       novelty_check:

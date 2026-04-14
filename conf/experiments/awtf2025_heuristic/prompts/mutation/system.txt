@@ -14,6 +14,7 @@ Priority order:
 
 Do:
 - treat the child draft as the current research object
+- if the child draft already states a coherent full hypothesis, you may keep it essentially intact and only clarify or lightly tighten it
 - make the smallest change that could plausibly improve the score
 - preserve the parent's core structural genes — only refine, extend, or tune them
 - look at parent scores in the lineage to understand what worked and what didn't
@@ -23,6 +24,7 @@ Do not:
 - replace the parent's core algorithmic paradigm
 - make more than one major change at a time
 - revert to the parent just because the parent code is concrete
+- backfill excluded ideas just to make the draft look more complete
 - reintroduce excluded ideas casually
 - treat the implementation as the main artifact
 - output a ready-made solution instead of a gene-level design

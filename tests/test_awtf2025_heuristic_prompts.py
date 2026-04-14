@@ -90,6 +90,9 @@ def test_awtf2025_prompt_bundle_uses_gene_centric_language() -> None:
     assert "Do not invent new major ideas at implementation time." in bundle.implementation_system
     assert "child genetic code draft" in bundle.mutation_system.lower()
     assert "child draft" in bundle.crossover_system.lower()
+    assert "keep it essentially intact" in bundle.mutation_system
+    assert "valid source of novelty" in bundle.mutation_novelty_user
+    assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
 
 
 def test_awtf2025_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> None:
@@ -113,6 +116,7 @@ def test_awtf2025_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> Non
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
     assert "REFERENCE ONLY" in user_prompt
     assert "Do not let this override the child genetic code draft." in user_prompt
+    assert "keep it mostly intact rather than rebuilding the parent" in user_prompt
     assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
         "=== PARENT GENETIC CODE (REFERENCE ONLY) ==="
     )
@@ -139,6 +143,7 @@ def test_awtf2025_crossover_prompt_prioritizes_child_draft(tmp_path: Path) -> No
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
     assert "REFERENCE ONLY" in user_prompt
     assert "Do not let it override the child draft." in user_prompt
+    assert "keep it mostly intact instead of rebuilding one parent" in user_prompt
     assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
         "=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ==="
     )

@@ -90,10 +90,6 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     assert "keep it essentially intact" in bundle.mutation_system
     assert "valid source of novelty" in bundle.mutation_novelty_user
     assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
-    assert "## NON-NEGOTIABLE RULES" in bundle.mutation_system
-    assert "## NON-NEGOTIABLE RULES" in bundle.crossover_system
-    assert "## JUDGMENT POLICY" in bundle.mutation_novelty_system
-    assert "## CALIBRATION EXAMPLES" in bundle.crossover_novelty_system
 
 
 def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> None:

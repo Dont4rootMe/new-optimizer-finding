@@ -265,15 +265,28 @@ def evaluate_case(
 
     input_text = case_path.read_text(encoding="utf-8")
     contest_input = parse_input(input_text)
+    input_header = input_text.splitlines()[0].strip() if input_text.splitlines() else ""
     started_at = time.perf_counter()
-    with soft_timeout(per_case_soft_time_limit_sec):
-        output_text = solve_case(input_text)
+    try:
+        with soft_timeout(per_case_soft_time_limit_sec):
+            output_text = solve_case(input_text)
+    except Exception as exc:
+        raise RuntimeError(
+            f"solve_case failed on case {case_name} for input header {input_header!r}: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
     elapsed_sec = time.perf_counter() - started_at
     if not isinstance(output_text, str):
         raise TypeError(f"solve_case(...) must return str, got {type(output_text).__name__}.")
 
-    contest_output = parse_output(contest_input, output_text)
-    absolute_score, final_positions = compute_absolute_score(contest_input, contest_output)
+    try:
+        contest_output = parse_output(contest_input, output_text)
+    except Exception as exc:
+        raise ValueError(f"Illegal output on case {case_name}: {exc}") from exc
+    try:
+        absolute_score, final_positions = compute_absolute_score(contest_input, contest_output)
+    except Exception as exc:
+        raise RuntimeError(f"Simulation failed on case {case_name}: {type(exc).__name__}: {exc}") from exc
     return {
         "case_id": case_name,
         "absolute_score": int(absolute_score),

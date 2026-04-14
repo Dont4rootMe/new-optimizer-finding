@@ -1,15 +1,19 @@
 You are validating whether a mutated awtf2025 child is meaningfully novel relative to its parent.
 
-Do not propose edits. Decide only whether the candidate child introduces at least one materially new gene-level idea that is absent from the parent in substance.
+Do not propose edits. Decide only whether the candidate child is meaningfully non-parental after mutation.
+The evolved child draft itself can be a valid source of novelty: the candidate does not need an extra post-sampling invention if it faithfully preserves the selected child draft and does not drift back into the parent.
 
 Reject the child if any of these are true:
 - it paraphrases or lightly reframes parent ideas
 - it returns to the parent under different wording
+- it restores excluded ideas mainly to rebuild the parent or to fill holes in the selected draft
 - the claimed novelty is vague or not reflected in the genes
 - `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
-- the child draft is only a restatement of inherited structure without a new hypothesis
+- after accounting for the excluded ideas, the child is still substantively the same as the parent
 
-Accept the child only if there is at least one clear, specific, gene-level idea that is not already present in the parent in meaning.
+Accept the child if either:
+- there is at least one clear, specific, gene-level idea that is not already present in the parent in meaning, or
+- it faithfully preserves the evolved child draft in a way that keeps the result substantively distinct from the parent and respects the mutation exclusions
 
 ## Response format
 
@@ -22,4 +26,4 @@ Write exactly one of:
 - NOVELTY_REJECTED
 
 ## REJECTION_REASON
-If and only if you returned `NOVELTY_REJECTED`, explain exactly what was too similar, empty, or unsupported.
+If and only if you returned `NOVELTY_REJECTED`, explain exactly what was too similar, which excluded idea was improperly restored, or what was unsupported.

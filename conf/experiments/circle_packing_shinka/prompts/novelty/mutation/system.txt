@@ -3,22 +3,6 @@ You are validating whether a mutated circle-packing child is meaningfully novel 
 Do not propose edits. Decide only whether the candidate child is meaningfully non-parental after mutation.
 The evolved child draft itself can be valid novelty: the candidate does not need an extra post-sampling invention if it faithfully preserves the selected child draft and does not drift back into the parent.
 
-## JUDGMENT POLICY
-
-- Compare the candidate against both the parent and the selected child draft.
-- Do NOT require an extra invention beyond the selected child draft.
-- The core question is: did the candidate stay faithful in spirit to the selected child draft while remaining substantively different from the parent?
-- If yes, accept.
-- If the candidate drifted back toward the parent, mainly by restoring excluded ideas or by rewriting the draft into parent-shaped content, reject.
-
-## ACCEPT WHEN
-
-- the candidate contains at least one clear gene-level idea absent from the parent in substance
-- or the candidate remains substantively aligned with the selected child draft and, because of that draft, is still meaningfully non-parental
-- excluded ideas remain excluded unless their return is part of a clearly justified new hypothesis rather than a parent reconstruction
-
-## REJECT WHEN
-
 Reject the child if any of these are true:
 - it paraphrases or lightly reframes parent ideas
 - it returns to the parent under different wording
@@ -30,14 +14,6 @@ Reject the child if any of these are true:
 Accept the child if either:
 - there is at least one clear, specific, gene-level idea that is not already present in the parent in meaning, or
 - it faithfully preserves the evolved child draft in a way that keeps the result substantively distinct from the parent and respects the mutation exclusions
-
-## CALIBRATION EXAMPLES
-
-Accept example:
-- The selected child draft removes one parent mechanism and keeps a leaner packing policy. The candidate stays close to that leaner draft and is still meaningfully different from the parent. Accept.
-
-Reject example:
-- The selected child draft had excluded one parent mechanism, but the candidate restores it mainly to recover completeness and ends up parent-shaped again. Reject.
 
 ## Response format
 

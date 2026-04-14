@@ -174,6 +174,14 @@ def test_awtf2025_evaluator_accepts_valid_candidate(tmp_path: Path) -> None:
             "    return 123\n",
             "must return str",
         ),
+        (
+            "from __future__ import annotations\n\n"
+            "def solve_case(input_text: str) -> str:\n"
+            "    lines = [line.strip() for line in input_text.splitlines() if line.strip()]\n"
+            "    int(lines[0])\n"
+            "    return ''\n",
+            r"solve_case failed on case 0000.*'30 59'",
+        ),
     ],
 )
 def test_awtf2025_evaluator_rejects_invalid_candidates(tmp_path: Path, code: str, error_match: str) -> None:
