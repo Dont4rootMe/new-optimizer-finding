@@ -38,7 +38,7 @@ api_platforms:
       implementation:
         think: medium
       repair:
-        think: low
+        think: medium
       novelty_check:
         think: medium
 
@@ -52,7 +52,7 @@ api_platforms:
       implementation:
         think: medium
       repair:
-        think: low
+        think: medium
       novelty_check:
         think: medium
 
