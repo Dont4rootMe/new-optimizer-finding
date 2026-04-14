@@ -6,12 +6,12 @@ creation:
   max_attempts_to_create_organism: 3
   max_attempts_to_repair_organism_after_error: 2
   max_attempts_to_regenerate_organism_after_novelty_rejection: 2
-  max_parallel_organisms: 5
+  max_parallel_organisms: 10
 
 islands:
   dir: conf/experiments/awtf2025_heuristic/prompts/islands
-  seed_organisms_per_island: 3
-  max_organisms_per_island: 10
+  seed_organisms_per_island: 5
+  max_organisms_per_island: 15
 
 prompts:
   project_context: conf/experiments/awtf2025_heuristic/prompts/shared/project_context.txt
@@ -32,12 +32,12 @@ prompts:
   repair_user: conf/experiments/awtf2025_heuristic/prompts/repair/user.txt
 
 reproduction:
-  offspring_per_generation: 5
+  offspring_per_generation: 10
   operator_selection_strategy: deterministic
   operator_weights:
-    within_island_crossover: 1.0
-    inter_island_crossover: 0.5
-    mutation: 2.0
+    within_island_crossover: 0.5
+    inter_island_crossover: 0.2
+    mutation: 0.3
   island_sampling:
     within_island_crossover: unified
     inter_island_crossover: unified
@@ -51,20 +51,20 @@ reproduction:
 
 operators:
   mutation:
-    gene_removal_probability: 0.1
+    gene_removal_probability: 0.2
   crossover:
     primary_parent_gene_inheritance_probability: 0.7
 
 phases:
   simple:
-    eval_mode: smoke
+    eval_mode: full
     timeout_sec_per_eval: 120
     experiments:
       - group_commands_and_wall_planning
     allocation:
       enabled: false
   great_filter:
-    enabled: true
+    enabled: false
     interval_generations: 5
     eval_mode: full
     timeout_sec_per_eval: 120

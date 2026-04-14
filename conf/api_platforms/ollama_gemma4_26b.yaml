@@ -62,6 +62,6 @@ stage_options:
     top_p: 0.85
   novelty_check:
     <<: *gemma_stage_defaults
-    think: false
+    think: medium
     temperature: 0.1
     top_p: 0.8
