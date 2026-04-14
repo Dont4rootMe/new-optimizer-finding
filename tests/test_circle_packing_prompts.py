@@ -112,8 +112,8 @@ def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) 
     assert "=== EXCLUDED IDEAS ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
     assert "REFERENCE ONLY" in user_prompt
-    assert "Do not let this override the child genetic code draft." in user_prompt
     assert "keep it mostly intact rather than rebuilding the parent" in user_prompt
+    assert "IMPLEMENTATION CODE" not in user_prompt
     assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
         "=== PARENT GENETIC CODE (REFERENCE ONLY) ==="
     )
@@ -139,8 +139,8 @@ def test_circle_packing_crossover_prompt_prioritizes_child_draft(tmp_path: Path)
     assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
     assert "REFERENCE ONLY" in user_prompt
-    assert "Do not let it override the child draft." in user_prompt
     assert "keep it mostly intact instead of rebuilding one parent" in user_prompt
+    assert "IMPLEMENTATION CODE" not in user_prompt
     assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
         "=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ==="
     )

@@ -1,14 +1,14 @@
 _target_: api_platforms.ollama_qwen35_35b.platform.build_platform
 base_url: ${oc.env:OLLAMA_BASE_URL,http://127.0.0.1:11434/api}
 temperature: 1.0
-max_output_tokens: 4096
+max_output_tokens: 12288
 top_p: 0.95
 top_k: 20
 timeout_sec: 1800
 max_retries: 0
 max_concurrency: 4
 keep_alive: 30m
-think: false
+think: low
 raw: null
 format: null
 logprobs: null
@@ -43,7 +43,7 @@ stage_options:
   # design = trait/design generation for a new or mutated organism
   design: &qwen_stage_defaults
     think: medium
-    max_output_tokens: 4096
+    max_output_tokens: 12288
     temperature: 1.0
     top_p: 0.95
     top_k: 20
@@ -56,17 +56,17 @@ stage_options:
   # implementation = full implementation.py generation
   implementation:
     <<: *qwen_stage_defaults
-    think: medium
+    think: low
     temperature: 0.4
     top_p: 0.9
   # repair = post-eval code repair after explicit runtime/test failure
   repair:
     <<: *qwen_stage_defaults
-    think: false
+    think: low
     temperature: 0.2
     top_p: 0.85
   novelty_check:
     <<: *qwen_stage_defaults
-    think: medium
+    think: low
     temperature: 0.1
     top_p: 0.8

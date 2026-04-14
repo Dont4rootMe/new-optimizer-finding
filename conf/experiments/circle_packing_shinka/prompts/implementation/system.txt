@@ -16,6 +16,7 @@ Priority:
 
 Do not invent new major ideas at implementation time.
 If the design is ambiguous, choose the most conservative implementation that still matches the supplied genes.
+If there is any tradeoff between ambition and validity, prefer the simplest fully valid deterministic implementation.
 
 ## Output format
 

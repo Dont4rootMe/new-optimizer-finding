@@ -11,8 +11,9 @@ from omegaconf import OmegaConf
 from api_platforms import LlmResponse
 import src.evolve.operators as canonical_seed_operators
 from src.evolve.generator import CandidateGenerator
-from src.evolve.types import Island
+from src.evolve.types import Island, OrganismMeta
 from src.organisms.novelty import NoveltyCheckContext, NoveltyRejectionExhaustedError
+from src.organisms.organism import save_organism_artifacts
 
 
 def _cfg():
@@ -49,6 +50,73 @@ def _cfg():
             "paths": {"api_platform_runtime_root": ".tmp_api_platform_runtime"},
         }
     )
+
+
+def _make_repairable_organism(tmp_path: Path) -> OrganismMeta:
+    organism_dir = tmp_path / "org_repair"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    implementation_path = organism_dir / "implementation.py"
+    implementation_path.write_text(
+        "import torch.nn as nn\n\n"
+        "class Impl:\n"
+        "    def __init__(self, model: nn.Module, max_steps: int) -> None:\n"
+        "        self.model = model\n"
+        "        self.max_steps = max_steps\n\n"
+        "    def step(self, weights, grads, activations, step_fn) -> None:\n"
+        "        del weights, grads, activations, step_fn\n\n"
+        "    def zero_grad(self, set_to_none: bool = True) -> None:\n"
+        "        del set_to_none\n\n"
+        "def build_optimizer(model: nn.Module, max_steps: int):\n"
+        "    return Impl(model, max_steps)\n",
+        encoding="utf-8",
+    )
+    organism = OrganismMeta(
+        organism_id="repair01",
+        island_id="gradient_methods",
+        generation_created=0,
+        current_generation_active=0,
+        timestamp="2026-01-01T00:00:00Z",
+        mother_id=None,
+        father_id=None,
+        operator="seed",
+        genetic_code_path=str(organism_dir / "genetic_code.md"),
+        implementation_path=str(implementation_path),
+        lineage_path=str(organism_dir / "lineage.json"),
+        organism_dir=str(organism_dir),
+        llm_route_id="mock",
+        llm_provider="mock",
+        provider_model_id="mock-model",
+        prompt_hash="abc",
+        seed=123,
+    )
+    save_organism_artifacts(
+        organism,
+        genetic_code={
+            "core_genes": [
+                "Per-parameter first moment tracking for stable updates",
+                "Second-moment normalization to damp noisy gradients",
+                "Deterministic schedule that shrinks the effective step size late in training",
+            ],
+            "interaction_notes": "Baseline optimizer notes.",
+            "compute_notes": "Low-overhead baseline.",
+        },
+        lineage=[
+            {
+                "generation": 0,
+                "operator": "seed",
+                "mother_id": None,
+                "father_id": None,
+                "change_description": "Initial optimizer baseline.",
+                "selected_simple_experiments": ["simple_a"],
+                "selected_hard_experiments": [],
+                "simple_score": 0.5,
+                "hard_score": None,
+                "cross_island": False,
+                "father_island_id": None,
+            }
+        ],
+    )
+    return organism
 
 
 def test_generator_loads_only_current_prompt_bundle_assets(monkeypatch) -> None:
@@ -200,6 +268,67 @@ def test_run_creation_stages_persists_design_exchange_before_parse_failure(
     assert "implementation" not in llm_response
 
 
+def test_run_creation_stages_persists_raw_implementation_exchange_before_extract_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_impl_failure"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+
+    def fake_generate(request):
+        if request.stage == "design":
+            text = (
+                "## CORE_GENES\n"
+                "- candidate gene one\n"
+                "- candidate gene two\n"
+                "- candidate gene three\n\n"
+                "## INTERACTION_NOTES\n"
+                "Candidate.\n\n"
+                "## COMPUTE_NOTES\n"
+                "Cheap.\n\n"
+                "## CHANGE_DESCRIPTION\n"
+                "Candidate change.\n"
+            )
+        else:
+            text = "def broken(\n"
+        return LlmResponse(
+            text=text,
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+
+    try:
+        with pytest.raises(ValueError, match="syntactically invalid Python"):
+            generator.run_creation_stages(
+                design_system_prompt="design system",
+                design_user_prompt="design user",
+                org_dir=organism_dir,
+                organism_id="org_impl_failure",
+                generation=0,
+            )
+    finally:
+        generator.close()
+
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
+    assert llm_request["implementation"]["request"] == {"stage": "implementation"}
+    assert llm_request["implementation"]["status"] == "failed"
+    assert "syntactically invalid Python" in llm_request["implementation"]["error_msg"]
+    assert llm_response["implementation"]["response"] == {"stage": "implementation"}
+    assert llm_response["implementation"]["text"] == "def broken(\n"
+    assert llm_response["implementation"]["status"] == "failed"
+    assert "syntactically invalid Python" in llm_response["implementation"]["error_msg"]
+
+
 def test_run_creation_stages_persists_pending_design_exchange_before_transport_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -236,6 +365,57 @@ def test_run_creation_stages_persists_pending_design_exchange_before_transport_f
     assert llm_response["design"]["text"] is None
     assert llm_response["design"]["status"] == "failed"
     assert "broker unavailable" in llm_response["design"]["error_msg"]
+
+
+def test_repair_stage_persists_raw_exchange_before_extract_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism = _make_repairable_organism(tmp_path)
+
+    def fake_generate(_request):
+        return LlmResponse(
+            text="def broken(\n",
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": "repair"},
+            raw_response={"stage": "repair"},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+
+    try:
+        with pytest.raises(ValueError, match="syntactically invalid Python"):
+            generator.repair_organism_after_error(
+                organism=organism,
+                phase="simple",
+                experiment_name="simple_a",
+                errors=[
+                    {
+                        "attempt": 1,
+                        "status": "failed",
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "error_msg": "name 'np' is not defined",
+                    }
+                ],
+            )
+    finally:
+        generator.close()
+
+    llm_request = json.loads((Path(organism.organism_dir) / "llm_request.json").read_text(encoding="utf-8"))
+    llm_response = json.loads((Path(organism.organism_dir) / "llm_response.json").read_text(encoding="utf-8"))
+    assert llm_request["repair_attempts"][0]["request"] == {"stage": "repair"}
+    assert llm_request["repair_attempts"][0]["status"] == "failed"
+    assert "syntactically invalid Python" in llm_request["repair_attempts"][0]["error_msg"]
+    assert llm_response["repair_attempts"][0]["response"] == {"stage": "repair"}
+    assert llm_response["repair_attempts"][0]["text"] == "def broken(\n"
+    assert llm_response["repair_attempts"][0]["status"] == "failed"
+    assert "syntactically invalid Python" in llm_response["repair_attempts"][0]["error_msg"]
 
 
 def test_run_creation_stages_with_novelty_retries_design_before_implementation(

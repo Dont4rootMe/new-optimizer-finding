@@ -34,13 +34,17 @@ api_platforms:
     max_concurrency: 2
     stage_options:
       design:
-        think: high
+        think: medium
+        max_output_tokens: 12288
       implementation:
-        think: medium
+        think: low
+        max_output_tokens: 12288
       repair:
-        think: medium
+        think: low
+        max_output_tokens: 12288
       novelty_check:
-        think: medium
+        think: low
+        max_output_tokens: 12288
 
   ollama_gemma4_26b:
     base_url: ${oc.env:OLLAMA_GEMMA4_26B_BASE_URL,http://127.0.0.1:12434/api}
@@ -48,13 +52,17 @@ api_platforms:
     max_concurrency: 2
     stage_options:
       design:
-        think: high
+        think: medium
+        max_output_tokens: 12288
       implementation:
-        think: medium
+        think: low
+        max_output_tokens: 12288
       repair:
-        think: medium
+        think: low
+        max_output_tokens: 12288
       novelty_check:
-        think: medium
+        think: low
+        max_output_tokens: 12288
 
 hydra:
   run:

@@ -5,7 +5,7 @@ This file applies to `conf/experiments/optimization_survey/prompts/mutation/`.
 ## Purpose
 
 - `system.txt`: defines the canonical design-stage response contract for mutation.
-- `user.txt`: injects the parent organism's genes, lineage, and raw implementation code.
+- `user.txt`: injects the parent organism's genes and lineage summary around the child draft.
 
 ## Placeholder Contract
 
@@ -16,7 +16,6 @@ This file applies to `conf/experiments/optimization_survey/prompts/mutation/`.
 - `novelty_rejection_feedback`
 - `parent_genetic_code`
 - `parent_lineage_summary`
-- `parent_implementation_code`
 
 Keep these names synchronized with `src/organisms/mutation.py`.
 

@@ -10,7 +10,7 @@ Preserve the core algorithmic paradigm of the parent.
 Priority order:
 1. analyze the child genetic code draft selected by evolution
 2. use excluded genes and lineage as context
-3. use the parent implementation only as reference
+3. use the parent genetic code only to understand continuity boundaries
 
 Do:
 - treat the child draft as the current research object
@@ -32,6 +32,10 @@ Do not:
 - include Python code, variable names, or hardcoded constants in genes or summaries
 
 ## Response format
+
+Return the structured artifact directly.
+The first line of your answer must be `## CORE_GENES`.
+Do not add analysis, commentary, or prefatory text before the required sections.
 
 Return the following sections, each starting with `## SECTION_NAME`.
 Do NOT use markdown code fences.

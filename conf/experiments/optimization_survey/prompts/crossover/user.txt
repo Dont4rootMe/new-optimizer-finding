@@ -19,9 +19,6 @@ MOTHER (primary parent — preserve continuity with her approach)
 --- Mother evolutionary history ---
 {mother_lineage_summary}
 
---- Mother implementation code ---
-{mother_implementation_code}
-
 ============================================================
 FATHER (secondary parent — contribute best complementary ideas)
 ============================================================
@@ -32,11 +29,9 @@ FATHER (secondary parent — contribute best complementary ideas)
 --- Father evolutionary history ---
 {father_lineage_summary}
 
---- Father implementation code ---
-{father_implementation_code}
-
 ============================================================
 
-Analyze both parents' approaches, scores, and histories. Design a child that inherits the mother's core framework while incorporating the father's most valuable contributions. The child must be a unified, coherent implementation — not a patchwork of copied blocks. If novelty feedback is present, fix those issues directly instead of rephrasing one parent.
+Analyze both parents' approaches, scores, and histories. Design a child that inherits the mother's core framework while incorporating the father's most valuable contributions. The child must be a unified, coherent design — not a patchwork. If novelty feedback is present, fix those issues directly instead of rephrasing one parent.
 The inherited gene pool is already the child draft selected by evolution. A faithful, coherent recombination is allowed.
-Do not overwrite that draft with one parent's full design just because that parent looks more complete in code.
+Do not overwrite that draft with one parent's full design just because that parent looks more complete.
+Return the structured design directly. Do not add preface text before `## CORE_GENES`.

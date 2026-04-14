@@ -1,14 +1,14 @@
 _target_: api_platforms.ollama_gemma4_31b.platform.build_platform
 base_url: ${oc.env:OLLAMA_BASE_URL,http://127.0.0.1:11434/api}
 temperature: 1.0
-max_output_tokens: 4096
+max_output_tokens: 12288
 top_p: 0.95
 top_k: 64
 timeout_sec: 1800
 max_retries: 0
 max_concurrency: 4
 keep_alive: 30m
-think: false
+think: low
 raw: null
 format: null
 logprobs: null
@@ -40,7 +40,7 @@ request_options:
 stage_options:
   design: &gemma_stage_defaults
     think: medium
-    max_output_tokens: 4096
+    max_output_tokens: 12288
     temperature: 1.0
     top_p: 0.95
     top_k: 64
@@ -52,16 +52,16 @@ stage_options:
     request_options: {}
   implementation:
     <<: *gemma_stage_defaults
-    think: medium
+    think: low
     temperature: 0.4
     top_p: 0.9
   repair:
     <<: *gemma_stage_defaults
-    think: false
+    think: low
     temperature: 0.2
     top_p: 0.85
   novelty_check:
     <<: *gemma_stage_defaults
-    think: medium
+    think: low
     temperature: 0.1
     top_p: 0.8

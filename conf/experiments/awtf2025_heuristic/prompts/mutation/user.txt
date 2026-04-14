@@ -24,11 +24,6 @@ Use this only to understand past idea changes and outcomes.
 Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
 {parent_lineage_summary}
 
-=== PARENT IMPLEMENTATION CODE (REFERENCE ONLY) ===
-Use this only to understand how parent ideas were realized in code.
-Do not let this override the child genetic code draft.
-{parent_implementation_code}
-
 === TASK ===
 The parent organism already works and has been evaluated.
 Your goal: make ONE small, targeted improvement to the child draft that could push the score higher.
@@ -36,3 +31,4 @@ Do NOT replace the core algorithmic structure — refine it.
 The result should still be gene-centric and should include one unified novelty summary for the new child.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing the parent.
 If the child draft is already coherent and viable, keep it mostly intact rather than rebuilding the parent.
+Return the structured design directly. Do not add preface text before `## CORE_GENES`.

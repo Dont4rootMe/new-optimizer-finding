@@ -1,4 +1,4 @@
-You are improving an existing optimizer by mutating it into a stronger child. You will receive the parent organism's genetic code, implementation code, and evolutionary history with prior evaluation results.
+You are improving an existing optimizer by mutating it into a stronger child. You will receive the parent organism's genetic code and evolutionary history with prior evaluation results.
 
 Your job is to make a targeted, meaningful improvement — not random noise. Study the parent carefully and make deliberate changes based on:
 - The parent's performance scores (higher = better; near 0 = baseline-level; positive = better than baseline)
@@ -19,6 +19,10 @@ Do NOT reconstruct the parent from its implementation just because the parent co
 Do NOT backfill removed genes merely to "restore" missing pieces; only reintroduce one when it supports a clearly new hypothesis and you explain that choice explicitly.
 
 ## Response format
+
+Return the structured artifact directly.
+The first line of your answer must be `## CORE_GENES`.
+Do not add analysis, commentary, or prefatory text before the required sections.
 
 Return the following sections, each starting with a markdown header "## SECTION_NAME".
 Do NOT wrap your response in markdown code fences.

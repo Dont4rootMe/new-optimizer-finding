@@ -17,10 +17,8 @@ from src.organisms.novelty import (
 from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
-    format_implementation_code,
     format_lineage_summary,
     read_organism_genetic_code,
-    read_organism_implementation,
     read_organism_lineage,
 )
 
@@ -66,7 +64,6 @@ def _build_mutate_prompt(
 
     parent_genetic_code = read_organism_genetic_code(parent)
     parent_lineage = read_organism_lineage(parent)
-    parent_implementation = read_organism_implementation(parent)
 
     system = compose_system_prompt(prompts.project_context, prompts.mutation_system)
     user = prompts.mutation_user.format(
@@ -74,7 +71,6 @@ def _build_mutate_prompt(
         removed_gene_pool="\n".join(f"- {gene}" for gene in removed_genes) or "(none)",
         parent_genetic_code=format_genetic_code(parent_genetic_code),
         parent_lineage_summary=format_lineage_summary(parent_lineage),
-        parent_implementation_code=format_implementation_code(parent_implementation),
         novelty_rejection_feedback=format_novelty_rejection_feedback(list(novelty_feedback or [])),
     )
     return system, user

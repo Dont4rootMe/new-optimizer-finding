@@ -9,7 +9,6 @@ The secondary parent contributes a specific refinement, not a competing paradigm
 Priority order:
 1. analyze the child genetic code draft already selected by evolution
 2. use parent genetic codes and lineage to understand idea origin
-3. use parent implementations only as reference material
 
 The first parent is primary. The second parent is secondary.
 
@@ -32,6 +31,10 @@ Do not:
 - include Python code, variable names, or hardcoded constants in genes or summaries
 
 ## Response format
+
+Return the structured artifact directly.
+The first line of your answer must be `## CORE_GENES`.
+Do not add analysis, commentary, or prefatory text before the required sections.
 
 Return the following sections, each starting with `## SECTION_NAME`.
 Do NOT use markdown code fences.

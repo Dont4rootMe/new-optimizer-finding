@@ -330,6 +330,18 @@ class EvolverOrchestrator:
         state["active_experiment"] = exp_name
         task = self._build_organism_task(request, exp_name)
         self.pool.submit(task)
+        LOGGER.info(
+            "Queued eval organism=%s phase=%s experiment=%s resource=%s result=%s stdout=%s stderr=%s timeout_sec=%s retries=%s",
+            request.organism_id,
+            request.phase,
+            exp_name,
+            task.resource_class,
+            task.output_json_path,
+            task.stdout_path,
+            task.stderr_path,
+            task.timeout_sec,
+            task.max_retries,
+        )
 
     def _final_payload_for_task(self, payload: dict[str, Any], task_state: dict[str, Any]) -> dict[str, Any]:
         final_payload = dict(payload)
@@ -476,6 +488,28 @@ class EvolverOrchestrator:
         task_state["attempts"] = result.attempts
         task_state["status"] = payload_status
         task_state["error_msg"] = error_msg or None
+        log_message = (
+            "Eval result organism=%s phase=%s experiment=%s status=%s attempts=%s "
+            "duration_sec=%.2f device=%s rank=%s result=%s stdout=%s stderr=%s error=%s"
+        )
+        log_args = (
+            result.organism_id,
+            result.phase,
+            exp_name,
+            payload_status,
+            result.attempts,
+            float(result.duration_sec),
+            result.assigned_device,
+            result.assigned_rank,
+            result.result_json_path,
+            task_state.get("stdout_path"),
+            task_state.get("stderr_path"),
+            error_msg or "<none>",
+        )
+        if payload_status == "ok":
+            LOGGER.info(log_message, *log_args)
+        else:
+            LOGGER.warning(log_message, *log_args)
 
         summary = None
         eligible_error_status = {"failed", "timeout", "interrupted"}
@@ -493,6 +527,17 @@ class EvolverOrchestrator:
                 error_msg=error_msg,
                 repair_attempted=True,
             )
+            LOGGER.warning(
+                "Scheduling repair organism=%s phase=%s experiment=%s repair_attempt=%d/%d status=%s error=%s stderr=%s",
+                result.organism_id,
+                result.phase,
+                exp_name,
+                int(state["repair_attempts_used"]) + 1,
+                self.max_repair_attempts_per_organism,
+                payload_status,
+                error_msg,
+                task_state.get("stderr_path"),
+            )
             try:
                 await asyncio.to_thread(
                     self.repair_callback,
@@ -509,10 +554,25 @@ class EvolverOrchestrator:
                 payload["error_msg"] = combined_error
                 task_state["error_msg"] = combined_error
                 state["repair_attempts_used"] = int(state["repair_attempts_used"]) + 1
+                LOGGER.exception(
+                    "Repair failed organism=%s phase=%s experiment=%s repair_attempt=%d/%d",
+                    result.organism_id,
+                    result.phase,
+                    exp_name,
+                    int(state["repair_attempts_used"]),
+                    self.max_repair_attempts_per_organism,
+                )
                 summary = self._advance_request_after_final_result(request_key, exp_name, payload)
             else:
                 state["repair_attempts_used"] = int(state["repair_attempts_used"]) + 1
                 task_state["status"] = "queued"
+                LOGGER.info(
+                    "Repair completed; rescheduling eval organism=%s phase=%s experiment=%s next_attempt=%d",
+                    result.organism_id,
+                    result.phase,
+                    exp_name,
+                    int(result.attempts) + 1,
+                )
                 self._schedule_experiment(request_key, exp_name)
             return result, payload, summary
 

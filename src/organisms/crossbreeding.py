@@ -17,10 +17,8 @@ from src.organisms.novelty import (
 from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
-    format_implementation_code,
     format_lineage_summary,
     read_organism_genetic_code,
-    read_organism_implementation,
     read_organism_lineage,
 )
 
@@ -74,18 +72,14 @@ def _build_crossbreed_prompt(
 
     mother_lineage = read_organism_lineage(mother)
     father_lineage = read_organism_lineage(father)
-    mother_implementation = read_organism_implementation(mother)
-    father_implementation = read_organism_implementation(father)
 
     system = compose_system_prompt(prompts.project_context, prompts.crossover_system)
     user = prompts.crossover_user.format(
         inherited_gene_pool="\n".join(f"- {gene}" for gene in inherited_genes) or "(none)",
         mother_genetic_code=format_genetic_code(read_organism_genetic_code(mother)),
         mother_lineage_summary=format_lineage_summary(mother_lineage),
-        mother_implementation_code=format_implementation_code(mother_implementation),
         father_genetic_code=format_genetic_code(read_organism_genetic_code(father)),
         father_lineage_summary=format_lineage_summary(father_lineage),
-        father_implementation_code=format_implementation_code(father_implementation),
         novelty_rejection_feedback=format_novelty_rejection_feedback(list(novelty_feedback or [])),
     )
     return system, user

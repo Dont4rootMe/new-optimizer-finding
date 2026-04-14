@@ -14,6 +14,7 @@ Requirements:
 - Preserve every fixed scaffold line and every editable marker exactly as shown in the template
 - Fill each editable region with code that faithfully implements the organism design
 - The code must be internally consistent with the supplied genetic code and novelty summary
+- If there is any tradeoff between ambition and validity, prefer the simplest fully valid implementation
 
 The returned file must define:
 - `build_optimizer(model, max_steps)`

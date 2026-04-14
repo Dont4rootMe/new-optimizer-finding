@@ -315,7 +315,8 @@ def test_mutation_operator_produce_persists_artifacts_and_lineage(tmp_path: Path
     assert "=== INHERITED GENE POOL ===" in user_prompt
     assert "=== REMOVED GENES ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
-    assert "=== PARENT IMPLEMENTATION CODE ===" in user_prompt
+    assert "=== PARENT GENETIC CODE ===" in user_prompt
+    assert "IMPLEMENTATION CODE" not in user_prompt
     assert generator.calls[1][0] == "novelty_check"
     assert "=== CANDIDATE CHILD GENETIC CODE ===" in generator.calls[1][2]
     assert generator.calls[2][0] == "implementation"
@@ -383,8 +384,8 @@ def test_crossover_operator_produce_records_cross_island_lineage(tmp_path: Path)
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
     assert "MOTHER (primary parent" in user_prompt
     assert "FATHER (secondary parent" in user_prompt
-    assert "Mother implementation code" in user_prompt
-    assert "Father implementation code" in user_prompt
+    assert "Mother implementation code" not in user_prompt
+    assert "Father implementation code" not in user_prompt
     assert generator.calls[1][0] == "novelty_check"
     assert "=== CANDIDATE CHILD GENETIC CODE ===" in generator.calls[1][2]
     assert child.island_id == mother.island_id

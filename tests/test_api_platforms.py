@@ -287,6 +287,52 @@ def test_ollama_route_posts_chat_payload_and_parses_response(monkeypatch: pytest
     }
 
 
+def test_ollama_route_rejects_truncated_thinking_only_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    route_cfg = ApiRouteConfig(
+        route_id="ollama_gemma4_26b",
+        provider="ollama",
+        provider_model_id="gemma4:26b",
+        backend="ollama",
+        base_url="http://localhost:11434/api",
+        timeout_sec=45.0,
+    )
+    request = LlmRequest(
+        route_id="ollama_gemma4_26b",
+        stage="implementation",
+        system_prompt="system prompt",
+        user_prompt="user prompt",
+        seed=123,
+        metadata={"organism_id": "org001"},
+    )
+
+    class FakeHttpResponse:
+        def __enter__(self) -> "FakeHttpResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "done_reason": "length",
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "thinking": "I am still reasoning about the answer.",
+                    },
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(_http_request, timeout: float):
+        return FakeHttpResponse()
+
+    monkeypatch.setattr(provider_backends.urllib_request, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="exhausted reasoning budget before final answer"):
+        generate_direct(route_cfg, request)
+
+
 def test_ollama_route_applies_stage_specific_generation_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     route_cfg = ApiRouteConfig(
         route_id="ollama_qwen35_27b",

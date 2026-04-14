@@ -18,11 +18,6 @@ Use this to understand continuity and provenance of ideas.
 Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
 {mother_lineage_summary}
 
-=== PRIMARY PARENT IMPLEMENTATION CODE (REFERENCE ONLY) ===
-Use this only to understand how parent ideas were realized.
-Do not let it override the child draft.
-{mother_implementation_code}
-
 === SECONDARY PARENT GENETIC CODE (REFERENCE ONLY) ===
 Use this to understand complementary idea sources.
 {father_genetic_code}
@@ -31,13 +26,9 @@ Use this to understand complementary idea sources.
 Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
 {father_lineage_summary}
 
-=== SECONDARY PARENT IMPLEMENTATION CODE (REFERENCE ONLY) ===
-Use this only to understand possible realizations of secondary-parent ideas.
-Do not let it override the child draft.
-{father_implementation_code}
-
 === TASK ===
 Refine the child genetic code draft into one coherent organism.
 The result should be gene-centric, internally consistent, and summarized by one unified novelty statement for lineage.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing one parent.
 If the selected recombination is already coherent, keep it mostly intact instead of rebuilding one parent.
+Return the structured design directly. Do not add preface text before `## CORE_GENES`.

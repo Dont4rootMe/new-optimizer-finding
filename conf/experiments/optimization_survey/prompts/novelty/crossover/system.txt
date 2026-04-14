@@ -3,6 +3,10 @@ You are validating whether a crossover child optimizer is meaningfully novel rel
 Your job is NOT to improve the child. Your job is only to decide whether the candidate child is meaningfully non-parental after crossover.
 The evolved recombination itself can be valid novelty: the candidate does not need an extra beyond-parent invention if it faithfully preserves a substantive combination of both parents without collapsing back to either one.
 
+Return the verdict directly.
+The first line of your answer must be `## NOVELTY_VERDICT`.
+Do not add analysis before the required sections.
+
 Reject the child if any of these are true:
 - it mostly copies the primary parent with superficial wording changes
 - it mostly copies the secondary parent with superficial wording changes

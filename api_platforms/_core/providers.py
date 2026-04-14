@@ -235,6 +235,32 @@ def _single_line(value: str, *, limit: int = 120) -> str:
     return text[: limit - 3] + "..."
 
 
+def _ollama_response_summary(response_payload: dict[str, Any]) -> str:
+    message = response_payload.get("message", {})
+    if not isinstance(message, dict):
+        message = {}
+    content_text = str(message.get("content", "") or "").strip()
+    thinking_text = str(message.get("thinking", "") or "").strip()
+    parts = [
+        f"content_chars={len(content_text)}",
+        f"thinking_chars={len(thinking_text)}",
+    ]
+    done_reason = str(response_payload.get("done_reason", "") or "").strip()
+    if done_reason:
+        parts.append(f"done_reason={done_reason!r}")
+    for key in (
+        "prompt_eval_count",
+        "eval_count",
+        "total_duration",
+        "prompt_eval_duration",
+        "eval_duration",
+    ):
+        value = response_payload.get(key)
+        if value is not None:
+            parts.append(f"{key}={value}")
+    return ", ".join(parts)
+
+
 def _ollama_probe_summary(base_url: str | None, timeout_sec: float) -> str:
     probe_url = _ollama_tags_url(base_url)
     probe_timeout = min(3.0, max(1.0, float(timeout_sec)))
@@ -540,11 +566,28 @@ def generate_direct(route_cfg: ApiRouteConfig, request: LlmRequest) -> LlmRespon
         content_text = str(message.get("content", "")).strip()
         thinking_text = str(message.get("thinking", "")).strip()
 
+        done_reason = str(response_payload.get("done_reason", "")).strip() or None
+
+        if not content_text and thinking_text and done_reason == "length":
+            LOGGER.warning(
+                "Ollama truncated thinking-only response route=%s stage=%s organism_id=%s %s thinking_preview=%r",
+                route_cfg.route_id,
+                request.stage,
+                organism_id or "<missing>",
+                _ollama_response_summary(response_payload),
+                _single_line(thinking_text, limit=160),
+            )
+            raise RuntimeError(
+                "Ollama response exhausted reasoning budget before final answer "
+                f"(route='{route_cfg.route_id}', stage={request.stage!r}, "
+                f"organism_id={organism_id!r}, done_reason='length')."
+            )
+
         # Build the usable text from whatever Ollama returned.
         # When think mode is enabled, some models put all output into the
-        # thinking field and leave content empty.  We concatenate both so
-        # that downstream extractors (_extract_python) can find code blocks
-        # regardless of where the model placed them.
+        # thinking field and leave content empty. We keep accepting that only
+        # when the response terminated normally; truncated thinking-only output
+        # is treated as an error above.
         if content_text and thinking_text:
             text = thinking_text + "\n\n" + content_text
         elif content_text:
@@ -552,7 +595,22 @@ def generate_direct(route_cfg: ApiRouteConfig, request: LlmRequest) -> LlmRespon
         elif thinking_text:
             text = thinking_text
         else:
+            LOGGER.warning(
+                "Ollama response missing usable text route=%s stage=%s organism_id=%s %s",
+                route_cfg.route_id,
+                request.stage,
+                organism_id or "<missing>",
+                _ollama_response_summary(response_payload),
+            )
             raise RuntimeError("Ollama response did not contain usable message.content text output.")
+
+        LOGGER.info(
+            "Ollama response route=%s stage=%s organism_id=%s %s",
+            route_cfg.route_id,
+            request.stage,
+            organism_id or "<missing>",
+            _ollama_response_summary(response_payload),
+        )
 
         usage = {
             key: response_payload.get(key)

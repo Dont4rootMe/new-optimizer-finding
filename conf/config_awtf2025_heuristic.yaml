@@ -43,14 +43,18 @@ api_platforms:
     max_concurrency: 2
     stage_options:
       design:
-        think: high
+        think: medium
+        max_output_tokens: 12288
       implementation:
-        think: false
+        think: low
+        max_output_tokens: 12288
         temperature: 0.2
       repair:
         think: low
+        max_output_tokens: 12288
       novelty_check:
-        think: medium
+        think: low
+        max_output_tokens: 12288
 
   ollama_qwen35_35b:
     base_url: ${oc.env:OLLAMA_QWEN35_35B_BASE_URL,http://127.0.0.1:12435/api}
@@ -58,14 +62,18 @@ api_platforms:
     max_concurrency: 2
     stage_options:
       design:
-        think: high
+        think: medium
+        max_output_tokens: 12288
       implementation:
-        think: false
+        think: low
+        max_output_tokens: 12288
         temperature: 0.2
       repair:
         think: low
+        max_output_tokens: 12288
       novelty_check:
-        think: medium
+        think: low
+        max_output_tokens: 12288
 
   ollama_gemma4_31b:
     base_url: ${oc.env:OLLAMA_GEMMA4_31B_BASE_URL,http://127.0.0.1:12434/api}
@@ -73,14 +81,18 @@ api_platforms:
     max_concurrency: 2
     stage_options:
       design:
-        think: high
+        think: medium
+        max_output_tokens: 12288
       implementation:
-        think: false
+        think: low
+        max_output_tokens: 12288
         temperature: 0.2
       repair:
         think: low
+        max_output_tokens: 12288
       novelty_check:
-        think: medium
+        think: low
+        max_output_tokens: 12288
 
 hydra:
   run:
