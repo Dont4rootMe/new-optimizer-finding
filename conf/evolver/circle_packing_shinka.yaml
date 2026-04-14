@@ -57,14 +57,14 @@ operators:
 
 phases:
   simple:
-    eval_mode: smoke
+    eval_mode: full
     timeout_sec_per_eval: 120
     experiments:
       - unit_square_26
     allocation:
       enabled: false
   great_filter:
-    enabled: true
+    enabled: false
     interval_generations: 5
     eval_mode: full
     timeout_sec_per_eval: 120
