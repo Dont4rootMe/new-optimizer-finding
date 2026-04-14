@@ -222,41 +222,35 @@ def _plot_evaluations_per_generation(ax: Any, records: list[OrganismVizRecord]) 
 
 
 def _plot_operator_mix_by_generation(ax: Any, records: list[OrganismVizRecord]) -> None:
-    counts_by_generation = _offspring_operator_counts_by_generation(records)
-    generations = sorted(
-        {
-            generation
-            for category_counts in counts_by_generation.values()
-            for generation in category_counts
-        }
-    )
-    if not generations:
+    operator_totals = _offspring_operator_totals(records)
+    categories = [
+        category
+        for category in _OPERATOR_PLOT_ORDER
+        if operator_totals.get(category, 0) > 0
+    ]
+    if not categories:
         return _empty_panel(ax, "No offspring records yet.")
 
-    width = 0.24
-    offsets = [-width, 0.0, width]
-    x_positions = [float(generation) for generation in generations]
+    x_positions = list(range(len(categories)))
     bar_handles: list[Any] = []
     bar_labels: list[str] = []
-    for category, offset in zip(_OPERATOR_PLOT_ORDER, offsets, strict=True):
-        heights = [counts_by_generation[category].get(generation, 0) for generation in generations]
-        if any(height > 0 for height in heights):
-            container = ax.bar(
-                [position + offset for position in x_positions],
-                heights,
-                width=width,
-                color=_OPERATOR_PLOT_COLORS[category],
-                alpha=0.9,
-                label=_OPERATOR_PLOT_LABELS[category],
-            )
-            bar_handles.append(container[0])
-            bar_labels.append(_OPERATOR_PLOT_LABELS[category])
+    for x_position, category in zip(x_positions, categories, strict=True):
+        container = ax.bar(
+            [x_position],
+            [operator_totals[category]],
+            width=0.68,
+            color=_OPERATOR_PLOT_COLORS[category],
+            alpha=0.9,
+            label=_OPERATOR_PLOT_LABELS[category],
+        )
+        bar_handles.append(container[0])
+        bar_labels.append(_OPERATOR_PLOT_LABELS[category])
 
-    ax.set_title("Offspring Operators by Generation", fontsize=16, fontweight="bold")
-    ax.set_xlabel("Generation Created", fontsize=12, fontweight="bold")
+    ax.set_title("Created Organisms by Operator", fontsize=16, fontweight="bold")
+    ax.set_xlabel("Operator", fontsize=12, fontweight="bold")
     ax.set_ylabel("# Created Organisms", fontsize=12, fontweight="bold")
     ax.set_xticks(x_positions)
-    ax.set_xticklabels(generations)
+    ax.set_xticklabels([_OPERATOR_PLOT_LABELS[category] for category in categories], rotation=12, ha="right")
     ax.grid(True, axis="y", alpha=0.25)
 
     if bar_handles:
@@ -496,6 +490,16 @@ def _offspring_operator_counts_by_generation(
         counts[category][record.generation_created] += 1
 
     return {category: dict(per_generation) for category, per_generation in counts.items()}
+
+
+def _offspring_operator_totals(
+    records: list[OrganismVizRecord],
+) -> dict[str, int]:
+    counts_by_generation = _offspring_operator_counts_by_generation(records)
+    return {
+        category: sum(per_generation.values())
+        for category, per_generation in counts_by_generation.items()
+    }
 
 
 def _offspring_operator_category(

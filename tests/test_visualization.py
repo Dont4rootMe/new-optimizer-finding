@@ -12,6 +12,7 @@ from src.evolve.visualization import (
     _format_score,
     _maternal_lineage,
     _offspring_operator_counts_by_generation,
+    _offspring_operator_totals,
     _plot_best_vs_evaluations,
     _plot_best_vs_runtime,
     _plot_operator_mix_by_generation,
@@ -147,6 +148,57 @@ def test_offspring_operator_counts_split_within_inter_and_mutation() -> None:
     assert counts["inter_island_crossover"] == {2: 1}
 
 
+def test_offspring_operator_totals_aggregate_all_generations() -> None:
+    records = [
+        _record(organism_id="seed_a", simple_score=0.1, active=False, island_id="island_a"),
+        _record(organism_id="seed_b", simple_score=0.2, active=False, island_id="island_b"),
+        _record(
+            organism_id="mut_a",
+            simple_score=0.3,
+            active=False,
+            island_id="island_a",
+            generation_created=1,
+            operator="mutation",
+            mother_id="seed_a",
+        ),
+        _record(
+            organism_id="mut_b",
+            simple_score=0.35,
+            active=False,
+            island_id="island_a",
+            generation_created=2,
+            operator="mutation",
+            mother_id="mut_a",
+        ),
+        _record(
+            organism_id="cross_within",
+            simple_score=0.4,
+            active=False,
+            island_id="island_a",
+            generation_created=1,
+            operator="crossover",
+            mother_id="seed_a",
+            father_id="mut_a",
+        ),
+        _record(
+            organism_id="cross_inter",
+            simple_score=0.5,
+            active=True,
+            island_id="island_a",
+            generation_created=2,
+            operator="crossover",
+            mother_id="mut_b",
+            father_id="seed_b",
+        ),
+    ]
+
+    totals = _offspring_operator_totals(records)
+
+    assert totals["mutation"] == 2
+    assert totals["within_island_crossover"] == 1
+    assert totals["inter_island_crossover"] == 1
+
+
 def test_best_vs_evaluations_plots_current_best_maternal_line() -> None:
     t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
     records = [
@@ -237,7 +289,7 @@ def test_best_vs_runtime_plots_current_best_maternal_line() -> None:
         plt.close(fig)
 
 
-def test_operator_mix_plot_no_longer_draws_maternal_lineage_overlay() -> None:
+def test_operator_mix_plot_shows_aggregated_totals_without_lineage_overlay() -> None:
     records = [
         _record(organism_id="seed_a", simple_score=0.1, active=False, island_id="island_a"),
         _record(organism_id="seed_b", simple_score=0.2, active=False, island_id="island_b"),
@@ -267,6 +319,9 @@ def test_operator_mix_plot_no_longer_draws_maternal_lineage_overlay() -> None:
         _plot_operator_mix_by_generation(ax, records)
         labels = ax.get_legend_handles_labels()[1]
         assert "Current Best Maternal Line" not in labels
+        assert ax.get_title() == "Created Organisms by Operator"
+        bar_heights = [patch.get_height() for patch in ax.patches]
+        assert bar_heights == [1, 1]
         assert len(fig.axes) == 1
     finally:
         plt.close(fig)
