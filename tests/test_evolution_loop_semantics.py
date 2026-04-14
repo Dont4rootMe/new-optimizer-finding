@@ -93,15 +93,20 @@ def _cfg(tmp_path: Path, **overrides) -> object:
                     "inter_island_crossover": "unified",
                     "mutation": "unified",
                 },
+                "species_sampling": {
+                    "strategy": "weighted_rule",
+                    "weighted_rule_lambda": 1.0,
+                    "mutation_softmax_temperature": 1.0,
+                    "within_island_crossover_softmax_temperature": 1.0,
+                    "inter_island_crossover_softmax_temperature": 1.0,
+                },
             },
             "operators": {
                 "mutation": {
                     "gene_removal_probability": 0.2,
-                    "parent_selection_softmax_temperature": 1.0,
                 },
                 "crossover": {
                     "primary_parent_gene_inheritance_probability": 0.7,
-                    "parent_selection_softmax_temperature": 1.0,
                 },
             },
                 "phases": {
@@ -345,6 +350,92 @@ def test_inter_island_weight_can_force_inter_island_crossover_only(tmp_path: Pat
     assert calls["mutation"] == 0
     assert calls["within"] == 0
     assert calls["inter"] == 2
+
+
+def test_weighted_rule_parent_counts_accumulate_within_generation(tmp_path: Path, monkeypatch) -> None:
+    cfg = _cfg(tmp_path)
+    cfg.evolver.reproduction.operator_weights.within_island_crossover = 0.0
+    cfg.evolver.reproduction.operator_weights.inter_island_crossover = 0.0
+    cfg.evolver.reproduction.operator_weights.mutation = 1.0
+    cfg.evolver.reproduction.offspring_per_generation = 3
+    cfg.evolver.reproduction.species_sampling.strategy = "weighted_rule"
+    loop = EvolutionLoop(cfg)
+    parent_a = _make_organism(tmp_path, "a", "gradient_methods")
+    parent_b = _make_organism(tmp_path, "b", "gradient_methods")
+    active = {"gradient_methods": [parent_a, parent_b], "second_order": []}
+    snapshots: list[dict[str, int]] = []
+
+    def fake_weighted_rule_select_organisms(
+        population,
+        *,
+        parent_offspring_counts,
+        score_field,
+        weighted_rule_lambda,
+        k,
+        rng,
+    ):
+        del population, score_field, weighted_rule_lambda, k, rng
+        snapshots.append(dict(parent_offspring_counts))
+        return [parent_a]
+
+    monkeypatch.setattr(
+        "src.evolve.evolution_loop.weighted_rule_select_organisms",
+        fake_weighted_rule_select_organisms,
+    )
+
+    planned = loop._plan_offspring_generation(active)
+
+    assert len(planned) == 3
+    assert [plan.mother_id for plan in planned] == ["a", "a", "a"]
+    assert snapshots == [{}, {"a": 1}, {"a": 2}]
+
+
+def test_softmax_species_sampling_uses_route_specific_temperatures(tmp_path: Path, monkeypatch) -> None:
+    cfg = _cfg(tmp_path)
+    cfg.evolver.reproduction.offspring_per_generation = 3
+    cfg.evolver.reproduction.species_sampling.strategy = "softmax"
+    cfg.evolver.reproduction.species_sampling.mutation_softmax_temperature = 0.11
+    cfg.evolver.reproduction.species_sampling.within_island_crossover_softmax_temperature = 0.22
+    cfg.evolver.reproduction.species_sampling.inter_island_crossover_softmax_temperature = 0.33
+    loop = EvolutionLoop(cfg)
+    gradient_a = _make_organism(tmp_path, "a", "gradient_methods")
+    gradient_b = _make_organism(tmp_path, "b", "gradient_methods")
+    second_a = _make_organism(tmp_path, "c", "second_order")
+    second_b = _make_organism(tmp_path, "d", "second_order")
+    active = {
+        "gradient_methods": [gradient_a, gradient_b],
+        "second_order": [second_a, second_b],
+    }
+    calls: list[tuple[str, float, int]] = []
+
+    def fake_softmax_select_organisms(population, *, score_field, temperature, k, rng):
+        del score_field, rng
+        calls.append(("single", temperature, k))
+        return list(population[:k])
+
+    def fake_softmax_select_distinct_organisms(population, *, score_field, temperature, k, rng):
+        del score_field, rng
+        calls.append(("distinct", temperature, k))
+        return list(population[:k])
+
+    monkeypatch.setattr(
+        "src.evolve.evolution_loop.softmax_select_organisms",
+        fake_softmax_select_organisms,
+    )
+    monkeypatch.setattr(
+        "src.evolve.evolution_loop.softmax_select_distinct_organisms",
+        fake_softmax_select_distinct_organisms,
+    )
+
+    planned = loop._plan_offspring_generation(active)
+
+    assert len(planned) == 3
+    assert calls == [
+        ("distinct", 0.22, 2),
+        ("single", 0.33, 1),
+        ("single", 0.33, 1),
+        ("single", 0.11, 1),
+    ]
 
 
 def _make_seed_plan(organism_id: str, island_id: str) -> object:

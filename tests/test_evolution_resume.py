@@ -84,15 +84,20 @@ def _make_cfg(tmp_path: Path) -> object:
                         "inter_island_crossover": "unified",
                         "mutation": "unified",
                     },
+                    "species_sampling": {
+                        "strategy": "weighted_rule",
+                        "weighted_rule_lambda": 1.0,
+                        "mutation_softmax_temperature": 1.0,
+                        "within_island_crossover_softmax_temperature": 1.0,
+                        "inter_island_crossover_softmax_temperature": 1.0,
+                    },
                 },
                 "operators": {
                     "mutation": {
                         "gene_removal_probability": 0.2,
-                        "parent_selection_softmax_temperature": 1.0,
                     },
                     "crossover": {
                         "primary_parent_gene_inheritance_probability": 0.7,
-                        "parent_selection_softmax_temperature": 1.0,
                     },
                 },
                 "phases": {

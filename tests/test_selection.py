@@ -11,6 +11,8 @@ from src.evolve.selection import (
     softmax_select_distinct_organisms,
     softmax_select_organisms,
     uniform_select_organisms,
+    weighted_rule_select_distinct_organisms,
+    weighted_rule_select_organisms,
 )
 from src.evolve.types import OrganismMeta
 
@@ -81,6 +83,88 @@ def test_softmax_select_distinct_organisms_samples_without_replacement() -> None
     )
     assert len(picks) == 3
     assert len({pick.organism_id for pick in picks}) == 3
+
+
+def test_weighted_rule_select_biases_toward_higher_score_when_counts_match() -> None:
+    pop = [
+        _make_organism("low", 0.1),
+        _make_organism("mid", 0.5),
+        _make_organism("high", 1.0),
+    ]
+    picks = weighted_rule_select_organisms(
+        pop,
+        parent_offspring_counts={},
+        score_field="simple_score",
+        weighted_rule_lambda=4.0,
+        k=200,
+        rng=random.Random(0),
+    )
+    counts: dict[str, int] = {}
+    for pick in picks:
+        counts[pick.organism_id] = counts.get(pick.organism_id, 0) + 1
+    assert counts["high"] > counts["mid"] > counts["low"]
+
+
+def test_weighted_rule_select_downweights_parent_with_many_offspring() -> None:
+    pop = [
+        _make_organism("leader", 1.0),
+        _make_organism("challenger", 0.9),
+    ]
+    baseline = weighted_rule_select_organisms(
+        pop,
+        parent_offspring_counts={"leader": 0, "challenger": 0},
+        score_field="simple_score",
+        weighted_rule_lambda=6.0,
+        k=300,
+        rng=random.Random(0),
+    )
+    penalized = weighted_rule_select_organisms(
+        pop,
+        parent_offspring_counts={"leader": 8, "challenger": 0},
+        score_field="simple_score",
+        weighted_rule_lambda=6.0,
+        k=300,
+        rng=random.Random(0),
+    )
+    baseline_leader = sum(1 for pick in baseline if pick.organism_id == "leader")
+    penalized_leader = sum(1 for pick in penalized if pick.organism_id == "leader")
+    assert penalized_leader < baseline_leader
+
+
+def test_weighted_rule_select_distinct_organisms_samples_without_replacement() -> None:
+    pop = [
+        _make_organism("low", 0.1),
+        _make_organism("mid", 0.5),
+        _make_organism("high", 1.0),
+    ]
+    picks = weighted_rule_select_distinct_organisms(
+        pop,
+        parent_offspring_counts={"high": 2},
+        score_field="simple_score",
+        weighted_rule_lambda=4.0,
+        k=3,
+        rng=random.Random(0),
+    )
+    assert len(picks) == 3
+    assert len({pick.organism_id for pick in picks}) == 3
+
+
+def test_weighted_rule_select_falls_back_to_uniform_when_scores_are_non_finite() -> None:
+    pop = [
+        _make_organism("none", None),
+        _make_organism("nan", float("nan")),
+        _make_organism("inf", float("inf")),
+    ]
+    expected = uniform_select_organisms(pop, k=20, rng=random.Random(123))
+    actual = weighted_rule_select_organisms(
+        pop,
+        parent_offspring_counts={"none": 4},
+        score_field="simple_score",
+        weighted_rule_lambda=1.0,
+        k=20,
+        rng=random.Random(123),
+    )
+    assert [pick.organism_id for pick in actual] == [pick.organism_id for pick in expected]
 
 
 def test_select_top_k_per_island_keeps_boundaries() -> None:

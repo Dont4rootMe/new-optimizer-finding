@@ -80,6 +80,11 @@ def test_hydra_compose_config_and_experiments() -> None:
     assert cfg.evolver.islands.max_organisms_per_island == 5
     assert cfg.evolver.reproduction.offspring_per_generation == 10
     assert cfg.evolver.reproduction.operator_selection_strategy == "deterministic"
+    assert cfg.evolver.reproduction.species_sampling.strategy == "weighted_rule"
+    assert cfg.evolver.reproduction.species_sampling.weighted_rule_lambda == 1.0
+    assert cfg.evolver.reproduction.species_sampling.mutation_softmax_temperature == 1.0
+    assert cfg.evolver.reproduction.species_sampling.within_island_crossover_softmax_temperature == 1.0
+    assert cfg.evolver.reproduction.species_sampling.inter_island_crossover_softmax_temperature == 1.0
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
@@ -101,7 +106,9 @@ def test_hydra_compose_config_and_experiments() -> None:
     )
     assert cfg.evolver.reproduction.operator_weights.within_island_crossover == 1.0
     assert cfg.evolver.operators.mutation.gene_removal_probability == 0.2
+    assert "parent_selection_softmax_temperature" not in cfg.evolver.operators.mutation
     assert cfg.evolver.operators.crossover.primary_parent_gene_inheritance_probability == 0.7
+    assert "parent_selection_softmax_temperature" not in cfg.evolver.operators.crossover
     assert cfg.evolver.phases.simple.eval_mode == "smoke"
     assert cfg.evolver.phases.simple.timeout_sec_per_eval == 7200
     assert cfg.evolver.phases.great_filter.eval_mode == "full"
@@ -175,6 +182,11 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.creation.max_parallel_organisms == 5
     assert cfg.evolver.islands.seed_organisms_per_island == 3
     assert cfg.evolver.islands.max_organisms_per_island == 10
+    assert cfg.evolver.reproduction.species_sampling.strategy == "weighted_rule"
+    assert cfg.evolver.reproduction.species_sampling.weighted_rule_lambda == 1.0
+    assert cfg.evolver.reproduction.species_sampling.mutation_softmax_temperature == 1.0
+    assert cfg.evolver.reproduction.species_sampling.within_island_crossover_softmax_temperature == 1.0
+    assert cfg.evolver.reproduction.species_sampling.inter_island_crossover_softmax_temperature == 1.0
     assert "top_k_per_island" not in cfg.evolver.phases.simple
     assert cfg.evolver.phases.great_filter.top_h_per_island == 5
     assert cfg.evolver.reproduction.offspring_per_generation == 5

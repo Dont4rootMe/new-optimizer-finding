@@ -23,6 +23,8 @@ from src.evolve.selection import (
     select_top_k_per_island,
     softmax_select_distinct_organisms,
     softmax_select_organisms,
+    weighted_rule_select_distinct_organisms,
+    weighted_rule_select_organisms,
 )
 from src.evolve.storage import (
     generation_dir,
@@ -111,13 +113,14 @@ class EvolutionLoop:
         self.operator_selection_strategy = self._operator_selection_strategy()
         self.reproduction_operator_weights = self._reproduction_operator_weights()
         self.reproduction_island_sampling = self._reproduction_island_sampling()
+        self.species_sampling_strategy = self._species_sampling_strategy()
+        self.species_sampling_weighted_rule_lambda = self._species_sampling_weighted_rule_lambda()
+        self.mutation_softmax_temperature = self._mutation_softmax_temperature()
+        self.within_island_crossover_softmax_temperature = self._within_island_crossover_softmax_temperature()
+        self.inter_island_crossover_softmax_temperature = self._inter_island_crossover_softmax_temperature()
         self.mutation_gene_removal_probability = self._mutation_gene_removal_probability()
-        self.mutation_parent_selection_softmax_temperature = self._mutation_parent_selection_softmax_temperature()
         self.crossover_primary_parent_gene_inheritance_probability = (
             self._crossover_primary_parent_gene_inheritance_probability()
-        )
-        self.crossover_parent_selection_softmax_temperature = (
-            self._crossover_parent_selection_softmax_temperature()
         )
         self._validate_phase_selection_bounds()
 
@@ -170,19 +173,31 @@ class EvolutionLoop:
             _ROUTE_MUTATION: str(self._require_cfg_value("evolver.reproduction.island_sampling.mutation")),
         }
 
+    def _species_sampling_value(self, key: str) -> Any:
+        return self._require_cfg_value(f"evolver.reproduction.species_sampling.{key}")
+
+    def _species_sampling_strategy(self) -> str:
+        return str(self._species_sampling_value("strategy"))
+
+    def _species_sampling_weighted_rule_lambda(self) -> float:
+        return float(self._species_sampling_value("weighted_rule_lambda"))
+
+    def _mutation_softmax_temperature(self) -> float:
+        return float(self._species_sampling_value("mutation_softmax_temperature"))
+
+    def _within_island_crossover_softmax_temperature(self) -> float:
+        return float(self._species_sampling_value("within_island_crossover_softmax_temperature"))
+
+    def _inter_island_crossover_softmax_temperature(self) -> float:
+        return float(self._species_sampling_value("inter_island_crossover_softmax_temperature"))
+
     def _mutation_gene_removal_probability(self) -> float:
         return float(self._require_cfg_value("evolver.operators.mutation.gene_removal_probability"))
-
-    def _mutation_parent_selection_softmax_temperature(self) -> float:
-        return float(self._require_cfg_value("evolver.operators.mutation.parent_selection_softmax_temperature"))
 
     def _crossover_primary_parent_gene_inheritance_probability(self) -> float:
         return float(
             self._require_cfg_value("evolver.operators.crossover.primary_parent_gene_inheritance_probability")
         )
-
-    def _crossover_parent_selection_softmax_temperature(self) -> float:
-        return float(self._require_cfg_value("evolver.operators.crossover.parent_selection_softmax_temperature"))
 
     def _phase_cfg(self, phase: str) -> dict[str, Any]:
         payload = OmegaConf.select(self.cfg, f"evolver.phases.{phase}")
@@ -253,6 +268,31 @@ class EvolutionLoop:
                 "Invalid evolve config: evolver.reproduction.operator_selection_strategy "
                 "must be 'deterministic' or 'random'"
             )
+        if self.species_sampling_strategy not in {"softmax", "weighted_rule"}:
+            raise ValueError(
+                "Invalid evolve config: evolver.reproduction.species_sampling.strategy "
+                "must be 'softmax' or 'weighted_rule'"
+            )
+        if self.species_sampling_weighted_rule_lambda <= 0:
+            raise ValueError(
+                "Invalid evolve config: evolver.reproduction.species_sampling.weighted_rule_lambda must be > 0"
+            )
+        for key, temperature in (
+            ("mutation_softmax_temperature", self.mutation_softmax_temperature),
+            (
+                "within_island_crossover_softmax_temperature",
+                self.within_island_crossover_softmax_temperature,
+            ),
+            (
+                "inter_island_crossover_softmax_temperature",
+                self.inter_island_crossover_softmax_temperature,
+            ),
+        ):
+            if temperature <= 0:
+                raise ValueError(
+                    "Invalid evolve config: evolver.reproduction.species_sampling."
+                    f"{key} must be > 0"
+                )
 
     def _should_run_great_filter(self, generation: int) -> bool:
         return self._great_filter_enabled() and generation > 0 and generation % self._great_filter_interval() == 0
@@ -458,6 +498,59 @@ class EvolutionLoop:
         raise ValueError(
             f"Unsupported island sampling strategy '{strategy}' for reproduction route '{route}'."
         )
+
+    def _select_parent_organisms(
+        self,
+        population: list[OrganismMeta],
+        *,
+        k: int,
+        distinct: bool,
+        softmax_temperature: float,
+        parent_offspring_counts: dict[str, int],
+    ) -> list[OrganismMeta]:
+        if self.species_sampling_strategy == "softmax":
+            if distinct:
+                return softmax_select_distinct_organisms(
+                    population,
+                    score_field="simple_score",
+                    temperature=softmax_temperature,
+                    k=k,
+                    rng=self.rng,
+                )
+            return softmax_select_organisms(
+                population,
+                score_field="simple_score",
+                temperature=softmax_temperature,
+                k=k,
+                rng=self.rng,
+            )
+        if self.species_sampling_strategy == "weighted_rule":
+            if distinct:
+                return weighted_rule_select_distinct_organisms(
+                    population,
+                    parent_offspring_counts=parent_offspring_counts,
+                    score_field="simple_score",
+                    weighted_rule_lambda=self.species_sampling_weighted_rule_lambda,
+                    k=k,
+                    rng=self.rng,
+                )
+            return weighted_rule_select_organisms(
+                population,
+                parent_offspring_counts=parent_offspring_counts,
+                score_field="simple_score",
+                weighted_rule_lambda=self.species_sampling_weighted_rule_lambda,
+                k=k,
+                rng=self.rng,
+            )
+        raise ValueError(f"Unsupported species sampling strategy '{self.species_sampling_strategy}'.")
+
+    @staticmethod
+    def _increment_parent_offspring_counts(
+        parent_offspring_counts: dict[str, int],
+        *parents: OrganismMeta,
+    ) -> None:
+        for parent in parents:
+            parent_offspring_counts[parent.organism_id] = parent_offspring_counts.get(parent.organism_id, 0) + 1
 
     def _newborn_org_dir(
         self,
@@ -826,6 +919,7 @@ class EvolutionLoop:
 
         gen_dir = generation_dir(self.population_root, self.generation)
         planned_offspring: list[PlannedOrganismCreation] = []
+        parent_offspring_counts: dict[str, int] = {}
         for route in self._planned_reproduction_routes(active_by_island):
             if route == _ROUTE_MUTATION:
                 candidate_islands = self._eligible_island_ids_for_route(_ROUTE_MUTATION, active_by_island)
@@ -835,12 +929,12 @@ class EvolutionLoop:
                     count=1,
                     distinct=False,
                 )[0]
-                parent = softmax_select_organisms(
+                parent = self._select_parent_organisms(
                     active_by_island[island_id],
-                    score_field="simple_score",
-                    temperature=self.mutation_parent_selection_softmax_temperature,
                     k=1,
-                    rng=self.rng,
+                    distinct=False,
+                    softmax_temperature=self.mutation_softmax_temperature,
+                    parent_offspring_counts=parent_offspring_counts,
                 )[0]
                 organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=island_id)
                 operator_seed = self.rng.randint(0, 2**31 - 1)
@@ -876,12 +970,12 @@ class EvolutionLoop:
                     count=1,
                     distinct=False,
                 )[0]
-                primary_parent, secondary_parent = softmax_select_distinct_organisms(
+                primary_parent, secondary_parent = self._select_parent_organisms(
                     active_by_island[island_id],
-                    score_field="simple_score",
-                    temperature=self.crossover_parent_selection_softmax_temperature,
                     k=2,
-                    rng=self.rng,
+                    distinct=True,
+                    softmax_temperature=self.within_island_crossover_softmax_temperature,
+                    parent_offspring_counts=parent_offspring_counts,
                 )
                 if primary_parent.organism_id == secondary_parent.organism_id:
                     raise ValueError("Within-island crossover sampled duplicate parents; expected distinct organisms.")
@@ -919,19 +1013,19 @@ class EvolutionLoop:
                     count=2,
                     distinct=True,
                 )
-                primary_parent = softmax_select_organisms(
+                primary_parent = self._select_parent_organisms(
                     active_by_island[primary_island_id],
-                    score_field="simple_score",
-                    temperature=self.crossover_parent_selection_softmax_temperature,
                     k=1,
-                    rng=self.rng,
+                    distinct=False,
+                    softmax_temperature=self.inter_island_crossover_softmax_temperature,
+                    parent_offspring_counts=parent_offspring_counts,
                 )[0]
-                secondary_parent = softmax_select_organisms(
+                secondary_parent = self._select_parent_organisms(
                     active_by_island[secondary_island_id],
-                    score_field="simple_score",
-                    temperature=self.crossover_parent_selection_softmax_temperature,
                     k=1,
-                    rng=self.rng,
+                    distinct=False,
+                    softmax_temperature=self.inter_island_crossover_softmax_temperature,
+                    parent_offspring_counts=parent_offspring_counts,
                 )[0]
                 organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=primary_island_id)
                 operator_seed = self.rng.randint(0, 2**31 - 1)
@@ -963,6 +1057,10 @@ class EvolutionLoop:
                 raise ValueError(f"Unsupported reproduction route '{route}'")
 
             self._write_planned_organism_stub(plan)
+            if route == _ROUTE_MUTATION:
+                self._increment_parent_offspring_counts(parent_offspring_counts, parent)
+            else:
+                self._increment_parent_offspring_counts(parent_offspring_counts, primary_parent, secondary_parent)
             planned_offspring.append(plan)
         return planned_offspring
 

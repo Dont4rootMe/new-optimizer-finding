@@ -23,6 +23,24 @@ from src.evolve.storage import read_json, read_population_state
 LOGGER = logging.getLogger(__name__)
 
 OVERVIEW_FILENAME = "evolution_overview.png"
+_WITHIN_ISLAND_CROSSOVER = "within_island_crossover"
+_INTER_ISLAND_CROSSOVER = "inter_island_crossover"
+_MUTATION = "mutation"
+_OPERATOR_PLOT_ORDER = (
+    _WITHIN_ISLAND_CROSSOVER,
+    _INTER_ISLAND_CROSSOVER,
+    _MUTATION,
+)
+_OPERATOR_PLOT_LABELS = {
+    _WITHIN_ISLAND_CROSSOVER: "Crossbreeding",
+    _INTER_ISLAND_CROSSOVER: "Crossbreeding Across Islands",
+    _MUTATION: "Mutation",
+}
+_OPERATOR_PLOT_COLORS = {
+    _WITHIN_ISLAND_CROSSOVER: "#ff7f0e",
+    _INTER_ISLAND_CROSSOVER: "#9467bd",
+    _MUTATION: "#2ca02c",
+}
 
 @dataclass(frozen=True)
 class OrganismVizRecord:
@@ -64,7 +82,7 @@ def render_evolution_overview(population_root: str | Path) -> Path | None:
 
     _plot_best_vs_evaluations(axes[0, 0], records)
     _plot_evaluations_per_generation(axes[0, 1], records)
-    _plot_best_vs_generation(axes[0, 2], records)
+    _plot_operator_mix_by_generation(axes[0, 2], records)
     _plot_best_vs_runtime(axes[1, 0], records)
     _plot_score_by_island(axes[1, 1], records)
     _plot_score_by_model(axes[1, 2], records)
@@ -190,39 +208,71 @@ def _plot_evaluations_per_generation(ax: Any, records: list[OrganismVizRecord]) 
     ax.legend(loc="upper left", fontsize=9)
 
 
-def _plot_best_vs_generation(ax: Any, records: list[OrganismVizRecord]) -> None:
-    evaluated = _evaluated_records(records)
-    if not evaluated:
-        return _empty_panel(ax, "No evaluated organisms yet.")
+def _plot_operator_mix_by_generation(ax: Any, records: list[OrganismVizRecord]) -> None:
+    counts_by_generation = _offspring_operator_counts_by_generation(records)
+    lineage = [record for record in _maternal_lineage(records) if record.simple_score is not None]
 
-    evaluated.sort(key=lambda record: (record.generation_created, _time_sort_key(record), record.organism_id))
-    xs = [record.generation_created for record in evaluated]
-    ys = [record.simple_score for record in evaluated]
+    generations = sorted(
+        {
+            generation
+            for category_counts in counts_by_generation.values()
+            for generation in category_counts
+        }
+        | {record.generation_created for record in lineage}
+    )
+    if not generations:
+        return _empty_panel(ax, "No offspring or lineage records yet.")
 
-    generation_best: list[tuple[int, float]] = []
-    running_best = -float("inf")
-    for generation in sorted({record.generation_created for record in evaluated}):
-        generation_scores = [record.simple_score for record in evaluated if record.generation_created == generation]
-        if not generation_scores:
-            continue
-        running_best = max(running_best, max(generation_scores))
-        generation_best.append((generation, running_best))
+    width = 0.24
+    offsets = [-width, 0.0, width]
+    x_positions = [float(generation) for generation in generations]
+    bar_handles: list[Any] = []
+    bar_labels: list[str] = []
+    for category, offset in zip(_OPERATOR_PLOT_ORDER, offsets, strict=True):
+        heights = [counts_by_generation[category].get(generation, 0) for generation in generations]
+        if any(height > 0 for height in heights):
+            container = ax.bar(
+                [position + offset for position in x_positions],
+                heights,
+                width=width,
+                color=_OPERATOR_PLOT_COLORS[category],
+                alpha=0.9,
+                label=_OPERATOR_PLOT_LABELS[category],
+            )
+            bar_handles.append(container[0])
+            bar_labels.append(_OPERATOR_PLOT_LABELS[category])
 
-    ax.scatter(xs, ys, color="black", s=18, alpha=0.85, label="Individual Evals")
-    if generation_best:
-        ax.step(
-            [entry[0] for entry in generation_best],
-            [entry[1] for entry in generation_best],
-            where="post",
-            color="#d62728",
-            linewidth=2.0,
-            label="Best Score",
-        )
-    ax.set_title("Best Score vs Generation", fontsize=16, fontweight="bold")
+    ax.set_title("Offspring Operators by Generation", fontsize=16, fontweight="bold")
     ax.set_xlabel("Generation Created", fontsize=12, fontweight="bold")
-    ax.set_ylabel("Simple Score", fontsize=12, fontweight="bold")
-    ax.grid(True, alpha=0.25)
-    ax.legend(loc="lower right", fontsize=10)
+    ax.set_ylabel("# Created Organisms", fontsize=12, fontweight="bold")
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(generations)
+    ax.grid(True, axis="y", alpha=0.25)
+
+    line_handles: list[Any] = []
+    line_labels: list[str] = []
+    if lineage:
+        lineage_ax = ax.twinx()
+        (line_handle,) = lineage_ax.plot(
+            [record.generation_created for record in lineage],
+            [record.simple_score for record in lineage],
+            color="#1f77b4",
+            linestyle="--",
+            linewidth=2.0,
+            alpha=0.75,
+            marker="o",
+            markersize=5,
+            label="Current Best Maternal Line",
+        )
+        lineage_ax.set_ylabel("Simple Score", fontsize=12, fontweight="bold", color="#1f77b4")
+        lineage_ax.tick_params(axis="y", colors="#1f77b4")
+        line_handles.append(line_handle)
+        line_labels.append("Current Best Maternal Line")
+
+    legend_handles = bar_handles + line_handles
+    legend_labels = bar_labels + line_labels
+    if legend_handles:
+        ax.legend(legend_handles, legend_labels, loc="upper left", fontsize=9)
 
 
 def _plot_best_vs_runtime(ax: Any, records: list[OrganismVizRecord]) -> None:
@@ -359,6 +409,76 @@ def _best_active_simple_score(records: list[OrganismVizRecord]) -> float | None:
     if not all_scores:
         return None
     return max(all_scores)
+
+
+def _current_best_record(records: list[OrganismVizRecord]) -> OrganismVizRecord | None:
+    active_scored = [
+        record
+        for record in records
+        if record.active and record.simple_score is not None
+    ]
+    pool = active_scored or [record for record in records if record.simple_score is not None]
+    if not pool:
+        return None
+    return max(
+        pool,
+        key=lambda record: (
+            record.simple_score,
+            record.current_generation_active,
+            record.generation_created,
+            _time_sort_key(record),
+        ),
+    )
+
+
+def _maternal_lineage(records: list[OrganismVizRecord]) -> list[OrganismVizRecord]:
+    current_best = _current_best_record(records)
+    if current_best is None:
+        return []
+
+    records_by_id = {record.organism_id: record for record in records}
+    lineage: list[OrganismVizRecord] = []
+    seen: set[str] = set()
+    cursor: OrganismVizRecord | None = current_best
+    while cursor is not None and cursor.organism_id not in seen:
+        lineage.append(cursor)
+        seen.add(cursor.organism_id)
+        if cursor.mother_id is None:
+            break
+        cursor = records_by_id.get(cursor.mother_id)
+    lineage.reverse()
+    return lineage
+
+
+def _offspring_operator_counts_by_generation(
+    records: list[OrganismVizRecord],
+) -> dict[str, dict[int, int]]:
+    counts = {category: defaultdict(int) for category in _OPERATOR_PLOT_ORDER}
+    records_by_id = {record.organism_id: record for record in records}
+
+    for record in records:
+        category = _offspring_operator_category(record, records_by_id)
+        if category is None:
+            continue
+        counts[category][record.generation_created] += 1
+
+    return {category: dict(per_generation) for category, per_generation in counts.items()}
+
+
+def _offspring_operator_category(
+    record: OrganismVizRecord,
+    records_by_id: dict[str, OrganismVizRecord],
+) -> str | None:
+    if record.operator == _MUTATION:
+        return _MUTATION
+    if record.operator != "crossover":
+        return None
+    if record.father_id:
+        father = records_by_id.get(record.father_id)
+        if father is not None and father.island_id != record.island_id:
+            return _INTER_ISLAND_CROSSOVER
+        return _WITHIN_ISLAND_CROSSOVER
+    return _WITHIN_ISLAND_CROSSOVER
 
 
 def _cumulative_best(values: list[float]) -> list[float]:
