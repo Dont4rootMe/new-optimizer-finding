@@ -734,11 +734,11 @@ class CandidateGenerator(BaseLlmGenerator):
     def _retry_backoff_sec(attempt: int) -> float:
         """Compute backoff delay for retry *attempt* (1-based, delay applied after failure).
 
-        Schedule: 1 s, 5 s, 10 s, 15 s, 20 s, … (+5 s each step after the second).
+        Schedule: 1 s, 2 s, 3 s, 4 s, 5 s, … (+1 s each step after the second).
         """
         if attempt <= 1:
             return 1.0
-        return 5.0 * (attempt - 1)
+        return attempt
 
     def run_creation_stages_with_retries(
         self,
