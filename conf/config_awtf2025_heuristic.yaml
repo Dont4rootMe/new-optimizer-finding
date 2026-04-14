@@ -38,7 +38,7 @@ evolver:
 
 api_platforms:
   ollama_nemotron_cascade_2_30b:
-    base_url: ${oc.env:OLLAMA_NEMOTRON_CASCADE_2_30B_BASE_URL,http://127.0.0.1:12436/api}
+    base_url: ${oc.env:OLLAMA_NEMOTRON_CASCADE_2_30B_BASE_URL,http://127.0.0.1:12439/api}
     gpu_ranks: [2]
     max_concurrency: 3
     stage_options:
@@ -56,7 +56,7 @@ api_platforms:
         max_output_tokens: 6000
 
   ollama_qwen35_35b:
-    base_url: ${oc.env:OLLAMA_QWEN35_35B_BASE_URL,http://127.0.0.1:12435/api}
+    base_url: ${oc.env:OLLAMA_QWEN35_35B_BASE_URL,http://127.0.0.1:12438/api}
     gpu_ranks: [1]
     max_concurrency: 3
     stage_options:
@@ -74,7 +74,7 @@ api_platforms:
         max_output_tokens: 6000
 
   ollama_gemma4_31b:
-    base_url: ${oc.env:OLLAMA_GEMMA4_31B_BASE_URL,http://127.0.0.1:12434/api}
+    base_url: ${oc.env:OLLAMA_GEMMA4_31B_BASE_URL,http://127.0.0.1:12437/api}
     gpu_ranks: [0]
     max_concurrency: 3
     stage_options:

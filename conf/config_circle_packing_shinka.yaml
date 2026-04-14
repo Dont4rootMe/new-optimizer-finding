@@ -66,7 +66,7 @@ api_platforms:
         max_output_tokens: 6000
 
   ollama_nemotron_cascade_2_30b:
-    base_url: ${oc.env:OLLAMA_NEMOTRON_CASCADE2_30B_BASE_URL,http://127.0.0.1:12434/api}
+    base_url: ${oc.env:OLLAMA_NEMOTRON_CASCADE_2_30B_BASE_URL,http://127.0.0.1:12434/api}
     gpu_ranks: [0]
     max_concurrency: 3
     stage_options:
