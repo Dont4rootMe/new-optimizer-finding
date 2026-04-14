@@ -6,12 +6,12 @@ creation:
   max_attempts_to_create_organism: 3
   max_attempts_to_repair_organism_after_error: 2
   max_attempts_to_regenerate_organism_after_novelty_rejection: 2
-  max_parallel_organisms: 8
+  max_parallel_organisms: 20
 
 islands:
   dir: conf/experiments/circle_packing_shinka/prompts/islands
   seed_organisms_per_island: 5
-  max_organisms_per_island: 15
+  max_organisms_per_island: 20
 
 prompts:
   project_context: conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt
@@ -32,12 +32,12 @@ prompts:
   repair_user: conf/experiments/circle_packing_shinka/prompts/repair/user.txt
 
 reproduction:
-  offspring_per_generation: 5
-  operator_selection_strategy: deterministic
+  offspring_per_generation: 10
+  operator_selection_strategy: random
   operator_weights:
-    within_island_crossover: 1.0
-    inter_island_crossover: 0.5
-    mutation: 2.0
+    within_island_crossover: 0.7
+    inter_island_crossover: 0.2
+    mutation: 0.2
   island_sampling:
     within_island_crossover: unified
     inter_island_crossover: unified
