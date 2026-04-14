@@ -143,6 +143,7 @@ def test_all_shipped_api_platform_route_configs_instantiate() -> None:
         "claude_haiku_45": "claude-haiku-4.5",
         "ollama_gemma4_26b": "gemma4:26b",
         "ollama_gemma4_31b": "gemma4:31b",
+        "ollama_nemotron_cascade_2_30b": "nemotron-cascade-2:30b",
         "ollama_qwen35_27b": "qwen3.5:27b",
         "ollama_qwen35_35b": "qwen3.5:35b",
         "ollama_qwen35_122b": "qwen3.5:122b",
