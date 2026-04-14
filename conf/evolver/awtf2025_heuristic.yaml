@@ -6,7 +6,7 @@ creation:
   max_attempts_to_create_organism: 3
   max_attempts_to_repair_organism_after_error: 2
   max_attempts_to_regenerate_organism_after_novelty_rejection: 2
-  max_parallel_organisms: 5
+  max_parallel_organisms: 3
 
 islands:
   dir: conf/experiments/awtf2025_heuristic/prompts/islands
@@ -77,3 +77,7 @@ phases:
 llm:
   selection_strategy: random
   seed: 123
+
+  route_weights:
+    ollama_qwen35_27b: 1.0
+    ollama_gemma4_26b: 1.0

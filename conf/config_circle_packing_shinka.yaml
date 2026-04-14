@@ -26,13 +26,6 @@ paths:
   api_platform_runtime_root: ${oc.env:API_PLATFORM_RUNTIME_ROOT,./.api_platform_runtime}
   ollama_cache_root: ${oc.env:OLLAMA_MODELS,./ollama_cache}
 
-evolver:
-  creation:
-    max_parallel_organisms: 2
-  llm:
-    route_weights:
-      ollama_qwen35_27b: 1.0
-      ollama_gemma4_26b: 1.0
 
 api_platforms:
   ollama_qwen35_27b:
