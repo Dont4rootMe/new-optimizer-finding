@@ -29,7 +29,7 @@ paths:
 
 evolver:
   creation:
-    max_parallel_organisms: 5
+    max_parallel_organisms: 15
   llm:
     route_weights:
       ollama_nemotron_cascade_2_30b: 1.0
@@ -40,59 +40,56 @@ api_platforms:
   ollama_nemotron_cascade_2_30b:
     base_url: ${oc.env:OLLAMA_NEMOTRON_CASCADE_2_30B_BASE_URL,http://127.0.0.1:12436/api}
     gpu_ranks: [2]
-    max_concurrency: 2
+    max_concurrency: 3
     stage_options:
       design:
-        think: medium
-        max_output_tokens: 12288
+        think: false
+        max_output_tokens: 6000
       implementation:
-        think: low
-        max_output_tokens: 12288
-        temperature: 0.2
+        think: false
+        max_output_tokens: 6000
       repair:
-        think: low
-        max_output_tokens: 12288
+        think: false
+        max_output_tokens: 6000
       novelty_check:
-        think: low
-        max_output_tokens: 12288
+        think: false
+        max_output_tokens: 6000
 
   ollama_qwen35_35b:
     base_url: ${oc.env:OLLAMA_QWEN35_35B_BASE_URL,http://127.0.0.1:12435/api}
     gpu_ranks: [1]
-    max_concurrency: 2
+    max_concurrency: 3
     stage_options:
       design:
-        think: medium
-        max_output_tokens: 12288
+        think: false
+        max_output_tokens: 6000
       implementation:
-        think: low
-        max_output_tokens: 12288
-        temperature: 0.2
+        think: false
+        max_output_tokens: 6000
       repair:
-        think: low
-        max_output_tokens: 12288
+        think: false
+        max_output_tokens: 6000
       novelty_check:
-        think: low
-        max_output_tokens: 12288
+        think: false
+        max_output_tokens: 6000
 
   ollama_gemma4_31b:
     base_url: ${oc.env:OLLAMA_GEMMA4_31B_BASE_URL,http://127.0.0.1:12434/api}
     gpu_ranks: [0]
-    max_concurrency: 2
+    max_concurrency: 3
     stage_options:
       design:
-        think: medium
-        max_output_tokens: 12288
+        think: false
+        max_output_tokens: 6000
       implementation:
-        think: low
-        max_output_tokens: 12288
-        temperature: 0.2
+        think: false
+        max_output_tokens: 6000
       repair:
-        think: low
-        max_output_tokens: 12288
+        think: false
+        max_output_tokens: 6000
       novelty_check:
-        think: low
-        max_output_tokens: 12288
+        think: false
+        max_output_tokens: 6000
 
 hydra:
   run:
