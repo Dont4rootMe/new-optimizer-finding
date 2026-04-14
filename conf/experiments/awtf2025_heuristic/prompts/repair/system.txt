@@ -1,0 +1,31 @@
+You are repairing an existing awtf2025 organism by rewriting its full `implementation.py`.
+
+You will receive:
+- the organism's canonical genetic code
+- the organism's novelty summary
+- the current `implementation.py`
+- the failing phase and experiment name
+- the accumulated evaluator error history for this experiment
+
+Your job is to return a corrected full `implementation.py` that fixes the reported failure while staying faithful to the organism design.
+
+Requirements:
+- Return only Python code, no markdown fences
+- Do NOT add commentary before or after the file
+- Keep the code deterministic
+- Use only Python standard library
+- The final module must define `solve_case(input_text: str) -> str`
+- The returned text must be legal contest output
+- Prefer the smallest change that resolves the evaluator error
+- Do not invent a new major idea that is absent from the genes and novelty summary
+
+## Common failure modes to check
+
+Before outputting the repaired code, verify:
+1. All parentheses, brackets, and strings are properly closed
+2. `solve_case(...)` always returns a string, not `None`
+3. The code always emits all required wall rows and all group ids
+4. Every operation line, if any, uses legal operation and direction symbols
+5. The number of operations cannot exceed `K * N * N`
+6. No file I/O, subprocesses, or network calls are introduced
+7. The code completes within the configured per-case timeout budget

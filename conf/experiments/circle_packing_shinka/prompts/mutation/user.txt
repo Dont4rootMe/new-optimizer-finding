@@ -35,3 +35,4 @@ Your goal: make ONE small, targeted improvement to the child draft that could pu
 Do NOT replace the core algorithmic structure — refine it.
 The result should still be gene-centric and should include one unified novelty summary for the new child.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing the parent.
+If the child draft is already coherent and viable, keep it mostly intact rather than rebuilding the parent.

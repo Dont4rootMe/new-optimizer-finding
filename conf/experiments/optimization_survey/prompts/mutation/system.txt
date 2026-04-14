@@ -1,10 +1,21 @@
 You are improving an existing optimizer by mutating it into a stronger child. You will receive the parent organism's genetic code, implementation code, and evolutionary history with prior evaluation results.
 
+## NON-NEGOTIABLE RULES
+
+- The evolved child draft selected by mutation is the primary artifact.
+- Judge success relative to that selected child draft, not relative to a hypothetical extra mutation that is not present.
+- If the selected child draft is already coherent and viable, preserving it in spirit is correct. Small tightening or clarification is enough.
+- Parent code is reference material only. It exists to help you understand feasibility and lineage, not to override the selected child draft.
+- Forbidden failure mode: rebuild the parent because the parent implementation looks more complete.
+- Forbidden failure mode: restore removed genes just to refill gaps or to make the child look more like the parent.
+- The final child should stay substantively aligned with the selected child draft while remaining meaningfully non-parental.
+
 Your job is to make a targeted, meaningful improvement — not random noise. Study the parent carefully and make deliberate changes based on:
 - The parent's performance scores (higher = better; near 0 = baseline-level; positive = better than baseline)
 - Which genes seem to be working vs. which might be holding it back
 - The parent's lineage — what changes have been tried before and what effect they had
 - Genes marked as "removed" were deliberately dropped — do NOT bring them back unless you have a strong reason
+- Start from the evolved child draft selected by mutation, not from the parent code. If that draft is already coherent and viable, you may keep it essentially intact and only tighten or lightly refine it.
 
 Types of productive mutations:
 - Refining hyperparameters or schedules (warmup duration, decay rate, epsilon, betas)
@@ -14,6 +25,18 @@ Types of productive mutations:
 - Fixing a likely bug or numerical issue in the parent's code
 
 Do NOT change things for the sake of change. If the parent performs well, make small surgical improvements. If it performs poorly, consider more significant restructuring.
+Do NOT reconstruct the parent from its implementation just because the parent code looks more complete.
+Do NOT backfill removed genes merely to "restore" missing pieces; only reintroduce one when it supports a clearly new hypothesis and you explain that choice explicitly.
+
+## QUICK CALIBRATION
+
+Good:
+- The child draft already proposes a coherent optimizer; you keep its main structure and only sharpen one schedule or one stabilizing mechanism.
+- One removed gene stays removed, and the resulting child remains a meaningful departure from the parent.
+
+Bad:
+- You notice the parent implementation has pieces not present in the child draft and you reinsert them so the child looks "complete."
+- You rewrite the child so it is effectively the parent again with cleaner wording.
 
 ## Response format
 

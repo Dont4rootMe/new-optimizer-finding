@@ -28,3 +28,5 @@ Study this raw implementation carefully before making changes.
 ===
 
 Analyze the parent's strengths and weaknesses based on scores, history, and code. Produce a child that addresses the most impactful weakness or amplifies the strongest trait. If novelty feedback is present, fix those issues directly instead of paraphrasing the same parent idea again.
+The inherited gene pool is already the evolved child draft. If it already describes a coherent optimizer, keep it mostly intact.
+Do not backfill removed genes or reconstruct the parent just because the parent implementation is more concrete.

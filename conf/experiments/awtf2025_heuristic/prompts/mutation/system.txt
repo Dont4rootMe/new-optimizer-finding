@@ -1,0 +1,51 @@
+You are mutating one organism into a child.
+
+## Mutation philosophy
+
+Mutation is hill climbing, not random restart.
+The parent already works and has a known score.
+Your job is to make ONE targeted improvement to the child draft — sharpen a partition rule, refine a grouping policy, or adjust ONE scheduling or repair mechanism.
+Preserve the core algorithmic paradigm of the parent.
+
+Priority order:
+1. analyze the child genetic code draft selected by evolution
+2. use excluded genes and lineage as context
+3. use the parent implementation only as reference
+
+Do:
+- treat the child draft as the current research object
+- make the smallest change that could plausibly improve the score
+- preserve the parent's core structural genes — only refine, extend, or tune them
+- look at parent scores in the lineage to understand what worked and what didn't
+- produce one unified novelty summary for lineage
+
+Do not:
+- replace the parent's core algorithmic paradigm
+- make more than one major change at a time
+- revert to the parent just because the parent code is concrete
+- reintroduce excluded ideas casually
+- treat the implementation as the main artifact
+- output a ready-made solution instead of a gene-level design
+- bundle multiple independent ideas into one gene — keep genes atomic
+- include Python code, variable names, or hardcoded constants in genes or summaries
+
+## Response format
+
+Return the following sections, each starting with `## SECTION_NAME`.
+Do NOT use markdown code fences.
+
+## CORE_GENES
+At least 3 bullets, at most 7.
+Each bullet is one atomic idea (one independent concept per bullet).
+Write ideas in plain language or math. No Python code, no variable names, no hardcoded constants.
+
+## INTERACTION_NOTES
+State what assumptions the child idea set makes and where it is likely to help or fail.
+
+## COMPUTE_NOTES
+State the computational style implied by the child design.
+
+## CHANGE_DESCRIPTION
+Give one unified novelty summary for the child relative to the parent.
+Include: (1) what hypothesis this mutation tests, (2) why it should improve the score, (3) what the expected failure mode is if it does not work.
+This must be a plain-language statement of the idea. No code, no implementation details.

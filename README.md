@@ -35,8 +35,10 @@ Generic AI-for-science framework with:
 - `src/`: generic runtime, validation worker, and organism-first evolution engine
 - `experiments/optimization_survey/`: optimization-specific experiments and runtime helpers
 - `experiments/circle_packing_shinka/`: circle-packing task package inspired by ShinkaEvolve
+- `experiments/awtf2025_heuristic/`: AtCoder AWTF 2025 heuristic task package
 - `conf/experiments/optimization_survey/`: optimization-specific experiment configs and prompts
 - `conf/experiments/circle_packing_shinka/`: circle-packing configs and prompts
+- `conf/experiments/awtf2025_heuristic/`: awtf2025 configs, prompts, and research islands
 - `tests/`: contract and integration coverage
 
 ## Install
@@ -139,5 +141,27 @@ def run_packing():
 ```
 
 where `centers.shape == (26, 2)`, `radii.shape == (26,)`, and `reported_sum == sum(radii)`.
+
+## AWTF2025 Heuristic
+
+The repository also ships [`experiments/awtf2025_heuristic/`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/experiments/awtf2025_heuristic), a task family based on AtCoder World Tour Finals 2025 Heuristic A: Group Commands and Wall Planning.
+
+Use the dedicated preset:
+
+```bash
+python -m src.main --config-name config_awtf2025_heuristic mode=run +organism_dir=/absolute/path/to/organism
+./scripts/seed_population.sh --config-name config_awtf2025_heuristic
+./scripts/run_evolution.sh --config-name config_awtf2025_heuristic
+./scripts/run_evolution.sh --seed --config-name config_awtf2025_heuristic
+```
+
+Its organism contract is:
+
+```python
+def solve_case(input_text: str) -> str:
+    ...
+```
+
+The evaluator runs that function on a vendored fixed corpus of official `seed=0..99` inputs and maximizes `-mean_absolute_score`, where each per-case absolute score is the official `T + 100 * sum_k Manhattan(final_position_k, target_k)`.
 
 All user-facing entrypoints now require an explicit Hydra preset via `--config-name`.

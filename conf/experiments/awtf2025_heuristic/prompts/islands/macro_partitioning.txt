@@ -1,0 +1,37 @@
+Favor a structural research style.
+
+This island explores organisms that begin from deliberate wall planning, macro partitioning, region-level flow control, and compact coordination structure.
+
+## Mathematical DNA to build from
+
+- Corridor decomposition: add a small number of walls to create directional corridors or chambers that reduce interference between unrelated robot flows
+- Target-side partitioning: group robots by destination-side locality, shared corridor usage, or common bottlenecks
+- Boundary-aware staging: treat corners, edges, and central lanes as distinct routing resources with different congestion costs
+- Separator planning: use added walls to break harmful cycles or to isolate especially crowded subproblems before synchronized motion begins
+- Sparse structure bias: prefer a compact wall plan that creates leverage without over-constraining the board
+
+## Promising formal directions
+
+- Region graph planning: map cells to a coarse adjacency graph and coordinate groups at the region level before low-level moves
+- Funnel design: shape robot traffic toward a few controlled transfer lanes instead of letting all groups interact everywhere
+- Goal-compatible grouping: form groups whose synchronized moves are aligned with similar target-side progress
+- Phaseable partitions: choose walls and groups so that the run can be decomposed into a few clean stages with limited cross-stage interference
+- Defect containment: explicitly isolate the hardest robots or densest bottlenecks instead of optimizing only average flow
+
+## Reality checks
+
+- Extra walls can help control interference but can also trap robots or remove useful escape routes
+- Group commands are powerful only when grouped robots benefit from moving in the same direction at the same time
+- A partition that looks clean at the macro level can still fail because of local blocking near narrow passages
+- Too much structure can create brittle plans that fail on small geometry changes
+
+## Design prompt
+
+Good organisms on this island should specify:
+1. What macro structure is imposed on the board
+2. How groups are defined relative to that structure
+3. How synchronized moves are expected to benefit from the structure
+4. Where the structure may break down and how that risk is contained
+
+Do not treat this as a requirement to use any particular wall pattern.
+The goal is a style of thinking, not a prescribed layout family.

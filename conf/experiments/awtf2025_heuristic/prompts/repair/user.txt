@@ -1,0 +1,44 @@
+Repair this awtf2025 organism implementation.
+
+=== FUNCTION CONTRACT ===
+The function you must fix:
+
+    def solve_case(input_text: str) -> str:
+
+Argument:
+  - the full contest input for one case
+
+Return value:
+  - the full contest output string for that case
+
+Required output structure:
+  1. `N` lines of vertical added-wall bits, each length `N - 1`
+  2. `N - 1` lines of horizontal added-wall bits, each length `N`
+  3. `K` integers assigning every robot to a group in `[0, K - 1]`
+  4. zero or more operation lines `a b d`
+
+Constraints:
+  - output must parse as a legal contest solution
+  - operation count must be at most `K * N * N`
+  - evaluator minimizes absolute score `T + 100 * sum_k Manhattan(final_position_k, target_k)`
+
+=== ORGANISM GENETIC CODE ===
+{organism_genetic_code}
+
+=== ORGANISM NOVELTY SUMMARY ===
+{change_description}
+
+=== CURRENT IMPLEMENTATION.PY ===
+{current_implementation}
+
+=== FAILING PHASE ===
+{phase}
+
+=== FAILING EXPERIMENT ===
+{experiment_name}
+
+=== ERROR HISTORY ===
+{error_history}
+
+Fix the error while staying faithful to the genetic code.
+Return ONLY the corrected full `implementation.py` text. No markdown fences, no commentary.

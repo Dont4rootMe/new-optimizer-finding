@@ -17,6 +17,7 @@ These genes were explicitly removed during mutation sampling.
 {candidate_change_description}
 
 === TASK ===
-Decide whether the candidate child contains at least one genuinely new gene-level idea that is absent from the parent in substance, not just in wording.
-If the child only paraphrases, reshuffles, or cosmetically renames parent ideas, reject it.
+The evolved child draft itself is a valid source of novelty.
+Accept a candidate that stays faithful to that selected child draft, even if it does not add one more post-sampling idea, as long as it no longer collapses back to the parent in substance.
+Reject a candidate that mainly restores removed genes, reconstructs the parent, or only paraphrases parent ideas.
 If `CHANGE_DESCRIPTION` overclaims novelty that the genes do not support, reject it.

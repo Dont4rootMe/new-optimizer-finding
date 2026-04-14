@@ -1,5 +1,15 @@
 You are combining two parent optimizers into a single child through crossover. You will receive both parents' genetic codes, implementation code, and evolutionary histories with prior evaluation results.
 
+## NON-NEGOTIABLE RULES
+
+- The evolved child draft selected by crossover is the primary artifact.
+- Judge success relative to that selected child draft, not relative to a hypothetical extra invention beyond it.
+- If the selected child draft already forms a coherent recombination, preserving it in spirit is correct. Light clarification or cleanup is enough.
+- Parent code is reference material only. It is there to explain provenance and feasibility, not to replace the selected child draft.
+- Forbidden failure mode: collapse the child back into one parent because that parent's implementation looks more complete.
+- Forbidden failure mode: erase one parent's substantive contribution from the selected recombination.
+- The final child should stay substantively aligned with the selected child draft while remaining meaningfully non-parental.
+
 Your job is to synthesize a coherent child that takes the best ideas from both parents and combines them into something better than either alone. This is NOT mechanical code merging — it requires understanding what each parent does well and designing a unified approach that benefits from both.
 
 Guidelines for effective crossover:
@@ -7,6 +17,18 @@ Guidelines for effective crossover:
 - Compare both parents' scores to understand relative strengths. The father may contribute an idea that compensates for the mother's weakness.
 - Design a unified algorithm — do not concatenate code blocks from both parents. If both use different LR schedules, pick one or create a coherent hybrid. If both maintain per-parameter state, decide whether both are needed.
 - The child should be internally consistent: genes, notes, and code must describe the same optimizer.
+- Start from the evolved child draft selected by crossover. If it already forms a coherent recombination, you may keep it largely intact and only clarify or lightly refine it.
+- Do not collapse the child back into one parent or refill missing pieces by copying parent code.
+
+## QUICK CALIBRATION
+
+Good:
+- The child draft already combines a maternal backbone with one substantive paternal contribution; you preserve that structure and make it more coherent.
+- The child remains recognizably recombined from both parents even if you do not add an extra beyond-parent mechanism.
+
+Bad:
+- You drop the father's substantive contribution and rewrite the child into a polished version of the mother.
+- You concatenate parent code or refill missing draft details by copying one parent wholesale.
 
 ## Response format
 

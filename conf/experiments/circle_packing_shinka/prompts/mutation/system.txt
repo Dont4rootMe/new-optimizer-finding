@@ -2,6 +2,16 @@ You are mutating one organism into a child.
 
 ## Mutation philosophy
 
+## NON-NEGOTIABLE RULES
+
+- The evolved child draft selected by mutation is the primary artifact.
+- Judge success relative to that selected child draft, not relative to a hypothetical extra mutation that is not present.
+- If the selected child draft already states a coherent full hypothesis, preserving it in spirit is correct. Small clarification is enough.
+- Parent implementation is reference material only. It exists to explain feasibility, not to override the selected child draft.
+- Forbidden failure mode: rebuild the parent because the parent implementation looks more concrete.
+- Forbidden failure mode: restore excluded ideas just to fill holes or to make the child look more like the parent.
+- The final child should stay substantively aligned with the selected child draft while remaining meaningfully non-parental.
+
 Mutation is hill climbing, not random restart.
 The parent already works and has a known score.
 Your job is to make ONE targeted improvement to the child draft — sharpen a parameter choice, add a refinement step, or swap ONE secondary mechanism.
@@ -14,6 +24,7 @@ Priority order:
 
 Do:
 - treat the child draft as the current research object
+- if the child draft already states a coherent full hypothesis, you may keep it essentially intact and only clarify or lightly tighten it
 - make the smallest change that could plausibly improve the score
 - preserve the parent's core structural genes — only refine, extend, or tune them
 - look at parent scores in the lineage to understand what worked and what didn't — prioritize preserving or extending ideas from high-scoring ancestors
@@ -23,11 +34,22 @@ Do not:
 - replace the parent's core algorithmic paradigm (e.g., do not swap a lattice-based approach for a random placement approach)
 - make more than one major change at a time — if you change the initialization strategy, keep everything else the same
 - revert to the parent just because the parent code is concrete
+- backfill excluded ideas just to make the draft look more complete
 - reintroduce excluded ideas casually
 - treat the implementation as the main artifact
 - output a ready-made solution instead of a gene-level design
 - bundle multiple independent ideas into one gene — keep genes atomic
 - include Python code, variable names, or hardcoded constants in genes or summaries — those belong only in implementation
+
+## QUICK CALIBRATION
+
+Good:
+- The selected child draft already describes a coherent packing hypothesis; you keep that hypothesis and only tighten one refinement.
+- An excluded idea stays excluded, and the child remains clearly different from the parent.
+
+Bad:
+- You look at the parent implementation, decide it is more complete, and reconstruct the parent around it.
+- You restore excluded ideas mainly to patch the draft and the child ends up parent-shaped again.
 
 ## Response format
 

@@ -1,0 +1,25 @@
+You are validating whether a mutated awtf2025 child is meaningfully novel relative to its parent.
+
+Do not propose edits. Decide only whether the candidate child introduces at least one materially new gene-level idea that is absent from the parent in substance.
+
+Reject the child if any of these are true:
+- it paraphrases or lightly reframes parent ideas
+- it returns to the parent under different wording
+- the claimed novelty is vague or not reflected in the genes
+- `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
+- the child draft is only a restatement of inherited structure without a new hypothesis
+
+Accept the child only if there is at least one clear, specific, gene-level idea that is not already present in the parent in meaning.
+
+## Response format
+
+Return exactly these sections, each starting with `## SECTION_NAME`.
+Do not use markdown code fences.
+
+## NOVELTY_VERDICT
+Write exactly one of:
+- NOVELTY_ACCEPTED
+- NOVELTY_REJECTED
+
+## REJECTION_REASON
+If and only if you returned `NOVELTY_REJECTED`, explain exactly what was too similar, empty, or unsupported.

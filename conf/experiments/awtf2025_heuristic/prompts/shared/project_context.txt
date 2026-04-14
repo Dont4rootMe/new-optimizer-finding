@@ -1,0 +1,115 @@
+You are participating in an automated evolutionary search for better awtf2025 heuristic organisms.
+
+Task:
+- Solve AtCoder World Tour Finals 2025 Heuristic: Group Commands and Wall Planning
+- For each input, output added walls, robot groups, and an operation sequence
+- Minimize the absolute score `T + 100 * sum_k Manhattan(final_position_k, target_k)`
+
+## Primary research artifact
+
+The primary object is the organism's genetic code.
+
+Genetic code is not decoration. It is the canonical set of ideas that defines the organism:
+- how the organism decomposes the grid into controllable regions
+- how it chooses robot grouping and synchronized motion
+- how it routes robots while avoiding congestion and deadlock
+- what corrective or scheduling principles it relies on
+
+`implementation.py` is secondary. It is only the concrete realization of the genetic code.
+
+`CHANGE_DESCRIPTION` is also first-class:
+- it must summarize the single main novelty of the new organism
+- it is later written into lineage
+- it should describe the unified idea of the child, not a changelog of tiny edits
+
+## Evolution setting
+
+Organisms are created by:
+- seed
+- mutation
+- crossover
+
+Creation is two-stage:
+1. design stage: genetic code, interaction notes, compute notes, novelty summary
+2. implementation stage: faithful realization of that design as `implementation.py`
+
+In mutation and crossover, evolutionary sampling already proposes a child-side genetic draft.
+That draft is the main object you must work on.
+Parent code and parent lineage are reference context only.
+
+## Runtime contract
+
+The final program must define:
+
+`solve_case(input_text: str) -> str`
+
+The returned string is the full contest output for exactly one input case:
+1. `N` lines of vertical added-wall bits, each of length `N - 1`
+2. `N - 1` lines of horizontal added-wall bits, each of length `N`
+3. `K` integers assigning every robot to a group in `[0, K - 1]`
+4. zero or more operations, each as `a b d`
+
+Operation semantics:
+- `a = g` means a group command on group `b`
+- `a = i` means an individual command on robot `b`
+- `d` is one of `U`, `D`, `L`, `R`
+- the move count must be at most `K * N * N`
+
+Evaluator rules:
+- output must parse as a legal contest solution
+- added walls are merged with the original walls
+- moves are simulated with the official ordering rules for group commands
+- broken output, wrong function signature, parse failure, or runtime failure is treated as evaluation failure
+
+Score:
+- per case absolute score is `T + 100 * sum_k Manhattan(final_position_k, target_k)`
+- lower is better
+- repo fitness is `-mean_absolute_score` across the configured fixed corpus
+
+## Hard constraints
+
+- Use only Python standard library
+- No file I/O, subprocesses, network calls, or external solvers
+- Keep the program deterministic
+- Return only the required output string from `solve_case`
+- In implementation stage, return only final Python code
+
+## Genetic code rule
+
+Think in genes first, implementation second.
+
+Each gene must express one concrete idea.
+Do not replace the idea set with a hand-crafted answer.
+Do not treat parent code as the truth.
+Do not skip idea formation and jump straight to a full command script.
+
+Genes and CHANGE_DESCRIPTION are idea-level artifacts. They must NEVER contain:
+- Python code, code snippets, or inline code
+- specific variable names, function calls, or parsing instructions
+- hardcoded numeric constants presented as implementation knobs
+- full move sequences or literal contest output fragments
+
+They MAY contain:
+- high-level algorithmic ideas and principles
+- geometric or graph-based reasoning about the grid and walls
+- brief pseudocode in plain language
+- qualitative parameter descriptions
+
+## Gene atomicity
+
+Each gene must express exactly one independent, testable idea.
+
+Atomicity test:
+- If removing gene A makes gene B meaningless, they belong in ONE gene.
+- If gene A and gene B could independently be true or false, they MUST be separate genes.
+- If a gene contains "and" or "with" joining two distinct mechanisms, split it.
+
+Bad: "Partition the board into corridors and use greedy repair"
+  (two independent ideas bundled — macro partitioning and local repair)
+Good: "Partition the board into directional corridors using added walls" + "Apply deterministic local repair when synchronized moves create congestion"
+
+Bad: "Group robots by target quadrant and use staged release"
+  (grouping rule and scheduling rule are independent)
+Good: "Assign robots to groups by target-side locality" + "Release groups in deterministic stages based on remaining target distance"
+
+Why this matters: evolution operates on genes. If one gene contains two ideas, removing it loses both. Crossover inheriting it brings both. Coarse genes break the evolutionary mechanism.

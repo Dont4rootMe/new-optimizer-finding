@@ -1,0 +1,39 @@
+Convert this awtf2025 design into the final `implementation.py`.
+
+=== FUNCTION CONTRACT ===
+You must implement exactly this function:
+
+    def solve_case(input_text: str) -> str:
+
+Argument:
+  - `input_text`: the full contest input for exactly one case
+
+Return value:
+  - one string containing the full contest output for that case
+
+Required output structure:
+  1. `N` lines of vertical added-wall bits, each length `N - 1`
+  2. `N - 1` lines of horizontal added-wall bits, each length `N`
+  3. `K` integers assigning every robot to a group in `[0, K - 1]`
+  4. zero or more operations, each line formatted as `a b d`
+
+Evaluator rules:
+  - added walls are merged with the original walls
+  - operation type `a` must be `g` or `i`
+  - direction `d` must be `U`, `D`, `L`, or `R`
+  - the move count must be at most `K * N * N`
+  - lower absolute score is better: `T + 100 * sum_k Manhattan(final_position_k, target_k)`
+
+=== ORGANISM GENETIC CODE ===
+{organism_genetic_code}
+
+=== ORGANISM NOVELTY SUMMARY ===
+{change_description}
+
+=== FIXED IMPLEMENTATION TEMPLATE ===
+{implementation_template}
+
+Implement the supplied ideas faithfully.
+Do not add a new major idea that is absent from the genes and novelty summary.
+
+Return ONLY the final Python code. No markdown fences, no commentary before or after.

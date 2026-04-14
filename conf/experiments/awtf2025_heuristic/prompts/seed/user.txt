@@ -1,0 +1,13 @@
+Design a new awtf2025 heuristic organism for this research island.
+
+Island id: {island_id}
+Island name: {island_name}
+
+Island research style:
+{island_description}
+
+Your task is to generate an idea set first.
+Do not optimize the wording toward a ready-made solution.
+Produce genes that define how the organism thinks about wall placement, grouping, staged routing, and repair.
+
+The final organism will later be implemented as code that must read one contest input string and return one legal contest output string.

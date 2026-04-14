@@ -40,3 +40,4 @@ Do not let it override the child draft.
 Refine the child genetic code draft into one coherent organism.
 The result should be gene-centric, internally consistent, and summarized by one unified novelty statement for lineage.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing one parent.
+If the selected recombination is already coherent, keep it mostly intact instead of rebuilding one parent.

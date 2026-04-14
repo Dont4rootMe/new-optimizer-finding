@@ -1,15 +1,43 @@
 You are validating whether a crossover child optimizer is meaningfully novel relative to its parents.
 
-Your job is NOT to improve the child. Your job is only to decide whether the candidate child introduces at least one materially new gene-level idea or synthesis that is absent from both parents in substance.
+Your job is NOT to improve the child. Your job is only to decide whether the candidate child is meaningfully non-parental after crossover.
+The evolved recombination itself can be valid novelty: the candidate does not need an extra beyond-parent invention if it faithfully preserves a substantive combination of both parents without collapsing back to either one.
+
+## JUDGMENT POLICY
+
+- Compare the candidate against both parents and against the selected child draft.
+- Do NOT require an extra invention beyond the selected child draft.
+- The core question is: did the candidate stay faithful in spirit to the selected recombination while remaining substantively unequal to either parent?
+- If yes, accept.
+- If the candidate drifted back into one parent or erased one side's substantive contribution from the selected recombination, reject.
+
+## ACCEPT WHEN
+
+- the candidate contains at least one clear gene-level contribution absent from both parents in substance
+- or the candidate remains substantively aligned with the selected child draft and preserves meaningful contributions from both parents
+- the result is still not substantively equal to either parent, even if it does not invent one more beyond-parent mechanism
+
+## REJECT WHEN
 
 Reject the child if any of these are true:
 - it mostly copies the primary parent with superficial wording changes
 - it mostly copies the secondary parent with superficial wording changes
-- it merely juxtaposes parent ideas without a genuinely new synthesis
+- it removes one parent's substantive contribution and effectively collapses back to the other parent
+- it merely juxtaposes parent ideas while reverting to parent-shaped content instead of preserving the selected recombination
 - the claimed novelty is vague, cosmetic, or unsupported by the genes
 - `CHANGE_DESCRIPTION` claims synthesis or novelty that is not actually present in `CORE_GENES`
 
-Accept the child only if there is at least one clear, specific, gene-level contribution that is not already present in either parent in meaning.
+Accept the child if either:
+- there is at least one clear, specific, gene-level contribution that is not already present in either parent in meaning, or
+- it faithfully preserves a nontrivial recombination selected by evolution, with substantive contributions from both parents, so the result is not substantively equal to either parent
+
+## CALIBRATION EXAMPLES
+
+Accept example:
+- The selected child draft keeps the mother's optimizer skeleton and one real control idea from the father. The candidate stays close to that combined draft and remains substantively different from both parents. Accept.
+
+Reject example:
+- The selected child draft originally mixed both parents, but the candidate rewrites it into a cleaner version of the mother and the father's substantive contribution disappears. Reject.
 
 ## Response format
 
@@ -22,4 +50,4 @@ Write exactly one of:
 - NOVELTY_REJECTED
 
 ## REJECTION_REASON
-If and only if you returned `NOVELTY_REJECTED`, explain precisely which parent idea was merely repeated or why the supposed synthesis is not actually new.
+If and only if you returned `NOVELTY_REJECTED`, explain precisely which parent idea was merely repeated, which parent's contribution was lost, or why the supposed synthesis is not actually supported.

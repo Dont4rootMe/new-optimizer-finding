@@ -1,0 +1,21 @@
+Evaluate whether this crossover child is meaningfully novel relative to its parents.
+
+=== CHILD GENETIC CODE DRAFT SELECTED BY EVOLUTION ===
+{inherited_gene_pool}
+
+=== PRIMARY PARENT GENETIC CODE ===
+{mother_genetic_code}
+
+=== SECONDARY PARENT GENETIC CODE ===
+{father_genetic_code}
+
+=== CANDIDATE CHILD GENETIC CODE ===
+{candidate_genetic_code}
+
+=== CANDIDATE CHILD CHANGE_DESCRIPTION ===
+{candidate_change_description}
+
+=== TASK ===
+Decide whether the candidate child contains at least one genuinely new gene-level idea or synthesis that is absent from both parents in substance, not just in wording.
+If it only rephrases a parent or only concatenates parental ideas without new content, reject it.
+If `CHANGE_DESCRIPTION` overclaims novelty that the genes do not support, reject it.

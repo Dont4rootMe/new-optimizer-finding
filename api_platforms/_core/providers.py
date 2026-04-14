@@ -42,6 +42,22 @@ def _render_mock_implementation(template: str, organism_id: str, generation: int
                 "    return centers, radii, reported_sum"
             ),
         )
+    if "def solve_case(input_text: str) -> str:" in template:
+        return template.format(
+            imports="",
+            helpers=(
+                "def _build_empty_solution(input_text: str) -> str:\n"
+                "    lines = [line.strip() for line in input_text.splitlines() if line.strip()]\n"
+                "    if not lines:\n"
+                "        raise ValueError('input_text must not be empty.')\n"
+                "    n, k = map(int, lines[0].split())\n"
+                "    vertical = ['0' * (n - 1) for _ in range(n)]\n"
+                "    horizontal = ['0' * n for _ in range(n - 1)]\n"
+                "    groups = [str(i) for i in range(k)]\n"
+                "    return '\\n'.join(vertical + horizontal + groups)\n"
+            ),
+            solve_case_body="    return _build_empty_solution(input_text)",
+        )
 
     base = seed + generation + sum(ord(ch) for ch in organism_id[:8])
     use_sgd = (base % 2) == 0
@@ -86,6 +102,7 @@ def build_mock_text(request: LlmRequest) -> str:
     use_sgd = (base % 2) == 0
     opt_type = "SGD" if use_sgd else "AdamW"
     joined_prompt = f"{request.system_prompt}\n{request.user_prompt}".lower()
+    template = str(request.metadata.get("implementation_template", "")).strip()
     if request.stage == "novelty_check":
         return "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n"
     if "circle-packing" in joined_prompt or "circle packing" in joined_prompt or "run_packing" in joined_prompt:
@@ -102,7 +119,26 @@ def build_mock_text(request: LlmRequest) -> str:
                 "## CHANGE_DESCRIPTION\n"
                 "A deterministic staggered packing program that starts from a valid geometric template for 26 circles.\n"
             )
-        template = str(request.metadata.get("implementation_template", "")).strip()
+        if template:
+            return _render_mock_implementation(template, organism_id, generation, request.seed)
+    if (
+        "group commands and wall planning" in joined_prompt
+        or "awtf2025" in joined_prompt
+        or "solve_case(input_text: str)" in joined_prompt
+    ):
+        if request.stage == "design":
+            return (
+                "## CORE_GENES\n"
+                "- Deterministic empty-wall baseline that preserves the original traversable board and avoids accidental traps\n"
+                "- Identity group assignment so synchronized moves cannot create cross-robot interference in the baseline organism\n"
+                "- Output-construction strategy that always emits a legal no-op plan before later generations add smarter routing logic\n\n"
+                "## INTERACTION_NOTES\n"
+                "This design prioritizes legality and deterministic control over absolute score quality, which makes it a safe seed for later routing mutations.\n\n"
+                "## COMPUTE_NOTES\n"
+                "The method performs only lightweight input parsing and string construction, with no simulation or search inside the candidate.\n\n"
+                "## CHANGE_DESCRIPTION\n"
+                "A deterministic legal-output seed that keeps the board unchanged and isolates control decisions so later generations can add structure safely.\n"
+            )
         if template:
             return _render_mock_implementation(template, organism_id, generation, request.seed)
 
@@ -120,7 +156,6 @@ def build_mock_text(request: LlmRequest) -> str:
             f"Mock {opt_type} optimizer with warmup and cosine annealing for testing.\n"
         )
 
-    template = str(request.metadata.get("implementation_template", "")).strip()
     if template:
         return _render_mock_implementation(template, organism_id, generation, request.seed)
 

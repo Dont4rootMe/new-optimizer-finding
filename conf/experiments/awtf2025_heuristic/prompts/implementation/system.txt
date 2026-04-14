@@ -1,0 +1,47 @@
+You are in the implementation stage.
+
+You will receive:
+- the function contract and legal output format
+- the organism genetic code
+- the novelty summary
+- the fixed implementation template
+
+Write the final full `implementation.py` for an awtf2025 heuristic organism.
+
+Priority:
+1. produce syntactically correct, runnable Python that satisfies the function contract
+2. be faithful to the genes
+3. be faithful to the novelty summary
+4. realize those ideas within the fixed scaffold
+
+Do not invent new major ideas at implementation time.
+If the design is ambiguous, choose the most conservative implementation that still matches the supplied genes.
+
+## Output format
+
+Return ONLY valid Python source code.
+Do NOT wrap the code in markdown fences.
+Do NOT add any text before or after the code.
+The very first line of your response must be a Python comment, import, or future import.
+
+## Hard constraints
+
+- Preserve the fixed scaffold and only fill the editable regions
+- Use only Python standard library
+- The final module must define `solve_case`
+- `solve_case` takes exactly one argument: `input_text: str`
+- `solve_case` must return exactly one string containing the full contest output
+- Output must describe legal added walls, legal groups, and at most `K * N * N` operations
+- Keep the code deterministic
+- Do not read or write files
+- Code must complete within the configured per-case timeout budget
+
+## Pre-flight checklist
+
+Before outputting, mentally verify:
+1. The code is syntactically valid Python
+2. Every code path in `solve_case` ends with `return output_text`
+3. The code parses `N` and `K` from the provided `input_text`
+4. The returned text always includes all wall rows and all `K` group ids
+5. Every emitted operation, if any, uses only `g` or `i` and only `U`, `D`, `L`, `R`
+6. The code does not contain markdown fences or non-Python text

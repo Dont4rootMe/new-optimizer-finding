@@ -1,0 +1,37 @@
+Favor a corrective and refinement-oriented research style.
+
+This island explores organisms that treat an initial routing or grouping hypothesis as something to be checked, revised, and repaired through deterministic staged control.
+
+## Mathematical DNA to build from
+
+- Staged release: move only a subset of groups at a time so that congestion is controlled before later groups are activated
+- Congestion diagnosis: identify blocked robots, contested cells, or stalled groups and react with targeted corrective steps
+- Deterministic local repair: apply short individual-command repairs when a group-level plan creates deadlock or regressions
+- Progress accounting: track whether each stage is reducing remaining target distance or merely shuffling robots
+- Reversible scheduling: use short exploratory stages that can be redirected when the current plan stops making progress
+
+## Promising formal directions
+
+- Bottleneck-first control: repair the most constraining robot or passage before resuming bulk synchronized motion
+- Layered routing: first align robots with coarse lanes, then refine local placement near targets
+- Distance-priority staging: order groups by remaining distance, target depth, or expected blocking impact
+- Triggered repair loops: run deterministic repair only when measurable stalling criteria are met
+- Hybrid group/individual control: use group commands for bulk transport and individual commands only to resolve specific conflicts
+
+## Reality checks
+
+- Overusing individual repairs can erase the main advantage of group commands
+- Staged scheduling helps only if the stage boundaries reflect real interference structure
+- Local fixes can create regressions for robots that were already near their targets
+- Deterministic repair loops need clear termination rules to avoid wasting the move budget
+
+## Design prompt
+
+Good organisms on this island should specify:
+1. What the initial routing or grouping plan is
+2. What defines a stall, conflict, or repair trigger
+3. What the repair operator actually changes
+4. What termination or stage-transition criterion is used
+
+Do not treat this as a requirement to use any particular repair script.
+The goal is a style of thinking, not a prescribed control policy.

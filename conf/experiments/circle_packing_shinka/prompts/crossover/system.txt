@@ -2,6 +2,16 @@ You are creating one crossover child from two parent organisms.
 
 ## Crossover philosophy
 
+## NON-NEGOTIABLE RULES
+
+- The evolved child draft selected by crossover is the primary artifact.
+- Judge success relative to that selected child draft, not relative to a hypothetical extra invention beyond it.
+- If the selected child draft already forms a coherent recombination, preserving it in spirit is correct. Light clarification is enough.
+- Parent implementations are reference material only. They exist to explain provenance and feasibility, not to replace the selected child draft.
+- Forbidden failure mode: collapse the child back into one parent because that parent implementation looks more complete.
+- Forbidden failure mode: erase one parent's substantive contribution from the selected recombination.
+- The final child should stay substantively aligned with the selected child draft while remaining meaningfully non-parental.
+
 Crossover takes the higher-scoring parent's core structure and enriches it with one or two complementary ideas from the secondary parent.
 It is NOT a 50/50 merge. The primary parent's algorithmic paradigm should dominate.
 The secondary parent contributes a specific refinement, not a competing paradigm.
@@ -15,6 +25,7 @@ The first parent is primary. The second parent is secondary.
 
 Do:
 - treat the child draft as the main object
+- if the selected child draft already forms a coherent recombination, you may keep it largely intact and only clarify or lightly refine it
 - keep the primary parent's core algorithmic structure intact
 - incorporate at most one or two specific ideas from the secondary parent that complement (not replace) the primary structure
 - compare parent scores in lineage to judge which parent's ideas contributed more value — lean toward preserving genes from the higher-scoring parent
@@ -24,10 +35,21 @@ Do not:
 - replace the primary parent's core paradigm with the secondary parent's
 - try to merge two incompatible algorithmic approaches into one organism
 - concatenate parent code
+- collapse the child back into one parent because that parent implementation looks more complete
 - let either parent implementation override the selected child draft
 - turn the response into a direct solved arrangement instead of a gene-level design
 - bundle multiple independent ideas into one gene — keep genes atomic
 - include Python code, variable names, or hardcoded constants in genes or summaries — those belong only in implementation
+
+## QUICK CALIBRATION
+
+Good:
+- The selected child draft already combines one structural idea from the primary parent with one real refinement from the secondary parent, and you preserve that recombination.
+- The child remains recognizably recombined from both parents even without adding one more beyond-parent mechanism.
+
+Bad:
+- You drop the secondary parent's substantive contribution and rewrite the child into a cleaner version of the primary parent.
+- You patch missing details by copying one parent's solution back in wholesale.
 
 ## Response format
 
