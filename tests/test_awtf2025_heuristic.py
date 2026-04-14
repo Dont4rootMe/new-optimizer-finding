@@ -107,12 +107,16 @@ def test_awtf2025_config_composes() -> None:
 
     assert set(cfg.experiments.keys()) == {"group_commands_and_wall_planning"}
     assert "safety" not in cfg
-    assert set(cfg.api_platforms.keys()) == {"ollama_qwen35_27b", "ollama_gemma4_26b"}
+    assert set(cfg.api_platforms.keys()) == {
+        "ollama_nemotron_cascade_2_30b",
+        "ollama_qwen35_35b",
+        "ollama_gemma4_31b",
+    }
     assert cfg.experiments.group_commands_and_wall_planning.need_cuda is False
     assert cfg.evolver.phases.simple.experiments == ["group_commands_and_wall_planning"]
     assert cfg.evolver.phases.great_filter.enabled is True
     assert cfg.resources.evaluation.gpu_ranks == []
-    assert cfg.resources.evaluation.cpu_parallel_jobs == 5
+    assert cfg.resources.evaluation.cpu_parallel_jobs == 25
     assert cfg.evolver.prompts.project_context == "conf/experiments/awtf2025_heuristic/prompts/shared/project_context.txt"
 
 

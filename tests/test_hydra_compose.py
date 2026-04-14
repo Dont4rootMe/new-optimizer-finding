@@ -249,7 +249,11 @@ def test_awtf2025_heuristic_config_composes() -> None:
 
     assert set(cfg.experiments.keys()) == {"group_commands_and_wall_planning"}
     assert "safety" not in cfg
-    assert set(cfg.api_platforms.keys()) == {"ollama_qwen35_27b", "ollama_gemma4_26b"}
+    assert set(cfg.api_platforms.keys()) == {
+        "ollama_nemotron_cascade_2_30b",
+        "ollama_qwen35_35b",
+        "ollama_gemma4_31b",
+    }
     assert (
         cfg.experiments.group_commands_and_wall_planning._target_
         == "experiments.awtf2025_heuristic.group_commands_and_wall_planning.GroupCommandsAndWallPlanningExperiment"
@@ -259,7 +263,7 @@ def test_awtf2025_heuristic_config_composes() -> None:
     assert cfg.evolver.phases.simple.experiments == ["group_commands_and_wall_planning"]
     assert cfg.evolver.phases.great_filter.enabled is True
     assert cfg.resources.evaluation.gpu_ranks == []
-    assert cfg.resources.evaluation.cpu_parallel_jobs == 5
+    assert cfg.resources.evaluation.cpu_parallel_jobs == 25
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
     assert cfg.evolver.max_generations == 150
     assert cfg.mode == "evolve"
@@ -267,7 +271,7 @@ def test_awtf2025_heuristic_config_composes() -> None:
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
-    assert cfg.evolver.creation.max_parallel_organisms == 2
+    assert cfg.evolver.creation.max_parallel_organisms == 5
     assert cfg.evolver.islands.seed_organisms_per_island == 3
     assert cfg.evolver.islands.max_organisms_per_island == 10
     assert cfg.evolver.reproduction.species_sampling.strategy == "weighted_rule"
@@ -280,19 +284,36 @@ def test_awtf2025_heuristic_config_composes() -> None:
     assert cfg.evolver.phases.great_filter.eval_mode == "full"
     assert cfg.evolver.phases.great_filter.top_h_per_island == 5
     assert cfg.evolver.reproduction.offspring_per_generation == 5
-    assert set(cfg.evolver.llm.route_weights.keys()) == {"ollama_qwen35_27b", "ollama_gemma4_26b"}
-    assert cfg.evolver.llm.route_weights.ollama_qwen35_27b == 1.0
-    assert cfg.evolver.llm.route_weights.ollama_gemma4_26b == 1.0
-    assert cfg.api_platforms.ollama_qwen35_27b.max_concurrency == 1
-    assert cfg.api_platforms.ollama_gemma4_26b.max_concurrency == 1
+    assert set(cfg.evolver.llm.route_weights.keys()) == {
+        "ollama_nemotron_cascade_2_30b",
+        "ollama_qwen35_35b",
+        "ollama_gemma4_31b",
+    }
+    assert cfg.evolver.llm.route_weights.ollama_nemotron_cascade_2_30b == 1.0
+    assert cfg.evolver.llm.route_weights.ollama_qwen35_35b == 1.0
+    assert cfg.evolver.llm.route_weights.ollama_gemma4_31b == 1.0
+    assert cfg.api_platforms.ollama_nemotron_cascade_2_30b.max_concurrency == 2
+    assert cfg.api_platforms.ollama_qwen35_35b.max_concurrency == 2
+    assert cfg.api_platforms.ollama_gemma4_31b.max_concurrency == 2
     assert list(cfg.experiments.group_commands_and_wall_planning.validation.smoke_case_ids) == [0, 1, 2, 3, 4]
     assert len(cfg.experiments.group_commands_and_wall_planning.validation.full_case_ids) == 100
     assert cfg.experiments.group_commands_and_wall_planning.validation.aggregate == "mean"
 
-    qwen_route = instantiate(cfg.api_platforms.ollama_qwen35_27b, _recursive_=False)
-    gemma_route = instantiate(cfg.api_platforms.ollama_gemma4_26b, _recursive_=False)
-    assert qwen_route.route_id == "ollama_qwen35_27b"
-    assert qwen_route.provider_model_id == "qwen3.5:27b"
+    nemotron_route = instantiate(cfg.api_platforms.ollama_nemotron_cascade_2_30b, _recursive_=False)
+    qwen_route = instantiate(cfg.api_platforms.ollama_qwen35_35b, _recursive_=False)
+    gemma_route = instantiate(cfg.api_platforms.ollama_gemma4_31b, _recursive_=False)
+    assert nemotron_route.route_id == "ollama_nemotron_cascade_2_30b"
+    assert nemotron_route.provider_model_id == "nemotron-cascade-2:30b"
+    assert nemotron_route.base_url == "http://127.0.0.1:12436/api"
+    assert nemotron_route.gpu_ranks == [2]
+    assert nemotron_route.stage_options["design"]["think"] == "high"
+    assert nemotron_route.stage_options["implementation"]["think"] is False
+    assert nemotron_route.stage_options["implementation"]["temperature"] == 0.2
+    assert nemotron_route.stage_options["repair"]["think"] == "low"
+    assert nemotron_route.stage_options["novelty_check"]["think"] == "medium"
+    assert nemotron_route.request_options["num_ctx"] == 65536
+    assert qwen_route.route_id == "ollama_qwen35_35b"
+    assert qwen_route.provider_model_id == "qwen3.5:35b"
     assert qwen_route.base_url == "http://127.0.0.1:12435/api"
     assert qwen_route.gpu_ranks == [1]
     assert qwen_route.stage_options["design"]["think"] == "high"
@@ -300,18 +321,18 @@ def test_awtf2025_heuristic_config_composes() -> None:
     assert qwen_route.stage_options["implementation"]["think"] is False
     assert qwen_route.stage_options["implementation"]["temperature"] == 0.2
     assert qwen_route.stage_options["repair"]["think"] == "low"
-    assert qwen_route.stage_options["novelty_check"]["think"] == "high"
+    assert qwen_route.stage_options["novelty_check"]["think"] == "medium"
     assert qwen_route.stage_options["novelty_check"]["temperature"] == 0.1
     assert qwen_route.request_options["num_ctx"] == 65536
-    assert gemma_route.route_id == "ollama_gemma4_26b"
-    assert gemma_route.provider_model_id == "gemma4:26b"
+    assert gemma_route.route_id == "ollama_gemma4_31b"
+    assert gemma_route.provider_model_id == "gemma4:31b"
     assert gemma_route.base_url == "http://127.0.0.1:12434/api"
     assert gemma_route.gpu_ranks == [0]
     assert gemma_route.stage_options["design"]["think"] == "high"
     assert gemma_route.stage_options["implementation"]["think"] is False
     assert gemma_route.stage_options["implementation"]["temperature"] == 0.2
     assert gemma_route.stage_options["repair"]["think"] == "low"
-    assert gemma_route.stage_options["novelty_check"]["think"] == "high"
+    assert gemma_route.stage_options["novelty_check"]["think"] == "medium"
     assert gemma_route.stage_options["repair"]["top_k"] == 64
     assert gemma_route.stage_options["novelty_check"]["top_k"] == 64
 
@@ -329,4 +350,4 @@ def test_awtf2025_canonical_preset_accepts_standalone_validation_overrides() -> 
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
-    assert cfg.evolver.creation.max_parallel_organisms == 2
+    assert cfg.evolver.creation.max_parallel_organisms == 5
