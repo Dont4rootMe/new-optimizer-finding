@@ -38,25 +38,29 @@ api_platforms:
   ollama_qwen35_27b:
     base_url: ${oc.env:OLLAMA_QWEN35_27B_BASE_URL,http://127.0.0.1:12435/api}
     gpu_ranks: [1]
-    max_concurrency: 1
+    max_concurrency: 2
     stage_options:
       design:
         think: high
         temperature: 0.7
       implementation:
-        think: false
+        think: low
         temperature: 0.2
+      novelty_check:
+        think: high
   ollama_gemma4_26b:
     base_url: ${oc.env:OLLAMA_GEMMA4_26B_BASE_URL,http://127.0.0.1:12434/api}
     gpu_ranks: [0]
-    max_concurrency: 1
+    max_concurrency: 2
     stage_options:
       design:
         think: high
         temperature: 0.7
       implementation:
-        think: false
+        think: low
         temperature: 0.2
+      novelty_check:
+        think: high
 
 hydra:
   run:
