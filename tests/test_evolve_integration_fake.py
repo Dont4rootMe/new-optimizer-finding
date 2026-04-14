@@ -6,6 +6,7 @@ import asyncio
 import json
 from pathlib import Path
 
+import pytest
 from omegaconf import OmegaConf
 
 from src.evolve.evolution_loop import EvolutionLoop
@@ -41,7 +42,6 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
 
     return OmegaConf.create(
         {
-            "mode": "evolve",
             "seed": 7,
             "deterministic": False,
             "precision": "fp32",
@@ -83,15 +83,15 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                 },
             },
             "evolver": {
-                "enabled": True,
-                "generation": 0,
                 "resume": resume,
                 "max_generations": max_generations,
-                "fail_fast": False,
-                "max_generation_attempts": 1,
-                "eval_entrypoint_module": "src.validate.run_one",
-                "timeout_sec_per_eval": 60,
                 "max_retries_per_eval": 0,
+                "creation": {
+                    "max_attempts_to_create_organism": 1,
+                    "max_attempts_to_repair_organism_after_error": 1,
+                    "max_attempts_to_regenerate_organism_after_novelty_rejection": 1,
+                    "max_parallel_organisms": 1,
+                },
                 "islands": {
                     "dir": str(islands_dir),
                     "seed_organisms_per_island": 1,
@@ -103,11 +103,17 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                     "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
                     "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
                     "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
+                    "mutation_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/mutation/system.txt",
+                    "mutation_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/mutation/user.txt",
                     "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
                     "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
+                    "crossover_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/crossover/system.txt",
+                    "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                    "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
+                    "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
                 },
                 "reproduction": {
                     "offspring_per_generation": 2,
@@ -122,22 +128,26 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                         "inter_island_crossover": "unified",
                         "mutation": "unified",
                     },
+                    "species_sampling": {
+                        "strategy": "weighted_rule",
+                        "weighted_rule_lambda": 1.0,
+                        "mutation_softmax_temperature": 1.0,
+                        "within_island_crossover_softmax_temperature": 1.0,
+                        "inter_island_crossover_softmax_temperature": 1.0,
+                    },
                 },
                 "operators": {
                     "mutation": {
                         "gene_removal_probability": 0.2,
-                        "parent_selection_softmax_temperature": 1.0,
                     },
                     "crossover": {
                         "primary_parent_gene_inheritance_probability": 0.7,
-                        "parent_selection_softmax_temperature": 1.0,
                     },
                 },
                 "phases": {
                     "simple": {
                         "eval_mode": "smoke",
                         "timeout_sec_per_eval": 60,
-                        "top_k_per_island": 1,
                         "experiments": ["simple_a"],
                         "allocation": {"enabled": False},
                     },
@@ -159,16 +169,24 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
 
 def test_canonical_organism_first_pipeline_fake(tmp_path: Path) -> None:
     cfg = _canonical_cfg(tmp_path, max_generations=1, resume=False)
+    seed_summary = asyncio.run(EvolutionLoop(cfg).seed_population())
+    assert seed_summary["total_generations"] == 0
+    assert seed_summary["active_population_size"] == 2
+    pop_root = Path(str(cfg.paths.population_root))
+    overview_path = pop_root / "evolution_overview.png"
+    assert overview_path.exists()
+    seed_mtime_ns = overview_path.stat().st_mtime_ns
 
     summary = asyncio.run(EvolutionLoop(cfg).run())
 
     assert summary["total_generations"] == 1
     assert summary["active_population_size"] == 2
 
-    pop_root = Path(str(cfg.paths.population_root))
     state = read_json(pop_root / "population_state.json")
     assert state["current_generation"] == 1
     assert len(state["active_organisms"]) == 2
+    assert overview_path.exists()
+    assert overview_path.stat().st_mtime_ns >= seed_mtime_ns
 
     active_dirs = [Path(entry["organism_dir"]) for entry in state["active_organisms"]]
     for org_dir in active_dirs:
@@ -188,8 +206,84 @@ def test_canonical_organism_first_pipeline_fake(tmp_path: Path) -> None:
         assert summary_payload["hard_score"] is not None
 
 
+def test_seed_population_writes_generation_zero_state(tmp_path: Path) -> None:
+    cfg = _canonical_cfg(tmp_path, max_generations=1, resume=False)
+
+    summary = asyncio.run(EvolutionLoop(cfg).seed_population())
+
+    assert summary["total_generations"] == 0
+    assert summary["active_population_size"] == 2
+
+    pop_root = Path(str(cfg.paths.population_root))
+    state = read_json(pop_root / "population_state.json")
+    assert state["current_generation"] == 0
+    assert state["inflight_seed"] is None
+    assert len(state["active_organisms"]) == 2
+    overview_path = pop_root / "evolution_overview.png"
+    assert overview_path.exists()
+    assert overview_path.stat().st_size > 0
+
+
+def test_seed_population_raises_when_all_simple_evals_fail(tmp_path: Path) -> None:
+    cfg = _canonical_cfg(tmp_path, max_generations=1, resume=False)
+    cfg.experiments.simple_a._target_ = "tests.fixtures.fake_runner.AlwaysFailExperimentEvaluator"
+
+    with pytest.raises(RuntimeError, match="0 active organisms after simple evaluation"):
+        asyncio.run(EvolutionLoop(cfg).seed_population())
+
+    pop_root = Path(str(cfg.paths.population_root))
+    state = read_json(pop_root / "population_state.json")
+    assert state["active_organisms"] == []
+    assert state["inflight_seed"] is not None
+    assert state["inflight_seed"]["completed"] is True
+    assert state["inflight_seed"]["failed"] is True
+
+
+def test_seed_population_resumes_inflight_seed_plan(tmp_path: Path) -> None:
+    cfg = _canonical_cfg(tmp_path, max_generations=1, resume=True)
+    loop = EvolutionLoop(cfg)
+    loop.generation = 0
+    planned = loop._plan_seed_population()
+    loop._save_state(finalized_generation=0, inflight_seed=loop._serialize_inflight_seed(planned), inflight_generation=None)
+
+    summary = asyncio.run(EvolutionLoop(cfg).seed_population())
+
+    assert summary["total_generations"] == 0
+    pop_root = Path(str(cfg.paths.population_root))
+    state = read_json(pop_root / "population_state.json")
+    assert state["inflight_seed"] is None
+    assert len(state["active_organisms"]) == 2
+
+
+def test_run_requires_seeded_population(tmp_path: Path) -> None:
+    cfg = _canonical_cfg(tmp_path, max_generations=1, resume=False)
+
+    try:
+        asyncio.run(EvolutionLoop(cfg).run())
+    except FileNotFoundError as exc:
+        assert "seed_population.sh" in str(exc)
+    else:
+        raise AssertionError("EvolutionLoop.run() should require a pre-seeded population state")
+
+
+def test_run_rejects_inflight_seed_state(tmp_path: Path) -> None:
+    cfg = _canonical_cfg(tmp_path, max_generations=1, resume=True)
+    loop = EvolutionLoop(cfg)
+    loop.generation = 0
+    planned = loop._plan_seed_population()
+    loop._save_state(finalized_generation=0, inflight_seed=loop._serialize_inflight_seed(planned), inflight_generation=None)
+
+    try:
+        asyncio.run(EvolutionLoop(cfg).run())
+    except RuntimeError as exc:
+        assert "seed_population.sh" in str(exc)
+    else:
+        raise AssertionError("EvolutionLoop.run() should reject unfinished inflight_seed state")
+
+
 def test_canonical_multigeneration_resume_keeps_population_state_and_island_boundaries(tmp_path: Path) -> None:
     cfg_first = _canonical_cfg(tmp_path, max_generations=1, resume=False)
+    asyncio.run(EvolutionLoop(cfg_first).seed_population())
     asyncio.run(EvolutionLoop(cfg_first).run())
 
     cfg_resume = _canonical_cfg(tmp_path, max_generations=2, resume=True)

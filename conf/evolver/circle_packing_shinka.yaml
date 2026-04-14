@@ -1,0 +1,79 @@
+resume: true
+max_generations: 150
+max_retries_per_eval: 0
+
+creation:
+  max_attempts_to_create_organism: 3
+  max_attempts_to_repair_organism_after_error: 2
+  max_attempts_to_regenerate_organism_after_novelty_rejection: 2
+  max_parallel_organisms: 5
+
+islands:
+  dir: conf/experiments/circle_packing_shinka/prompts/islands
+  seed_organisms_per_island: 3
+  max_organisms_per_island: 10
+
+prompts:
+  project_context: conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt
+  seed_system: conf/experiments/circle_packing_shinka/prompts/seed/system.txt
+  seed_user: conf/experiments/circle_packing_shinka/prompts/seed/user.txt
+  mutation_system: conf/experiments/circle_packing_shinka/prompts/mutation/system.txt
+  mutation_user: conf/experiments/circle_packing_shinka/prompts/mutation/user.txt
+  mutation_novelty_system: conf/experiments/circle_packing_shinka/prompts/novelty/mutation/system.txt
+  mutation_novelty_user: conf/experiments/circle_packing_shinka/prompts/novelty/mutation/user.txt
+  crossover_system: conf/experiments/circle_packing_shinka/prompts/crossover/system.txt
+  crossover_user: conf/experiments/circle_packing_shinka/prompts/crossover/user.txt
+  crossover_novelty_system: conf/experiments/circle_packing_shinka/prompts/novelty/crossover/system.txt
+  crossover_novelty_user: conf/experiments/circle_packing_shinka/prompts/novelty/crossover/user.txt
+  implementation_system: conf/experiments/circle_packing_shinka/prompts/implementation/system.txt
+  implementation_user: conf/experiments/circle_packing_shinka/prompts/implementation/user.txt
+  implementation_template: conf/experiments/circle_packing_shinka/prompts/implementation/template.txt
+  repair_system: conf/experiments/circle_packing_shinka/prompts/repair/system.txt
+  repair_user: conf/experiments/circle_packing_shinka/prompts/repair/user.txt
+
+reproduction:
+  offspring_per_generation: 5
+  operator_selection_strategy: deterministic
+  operator_weights:
+    within_island_crossover: 1.0
+    inter_island_crossover: 0.5
+    mutation: 2.0
+  island_sampling:
+    within_island_crossover: unified
+    inter_island_crossover: unified
+    mutation: unified
+  species_sampling:
+    strategy: weighted_rule
+    weighted_rule_lambda: 1.0
+    mutation_softmax_temperature: 1.0
+    within_island_crossover_softmax_temperature: 1.0
+    inter_island_crossover_softmax_temperature: 1.0
+
+operators:
+  mutation:
+    gene_removal_probability: 0.1
+  crossover:
+    primary_parent_gene_inheritance_probability: 0.7
+
+phases:
+  simple:
+    eval_mode: smoke
+    timeout_sec_per_eval: 120
+    experiments:
+      - unit_square_26
+    allocation:
+      enabled: false
+  great_filter:
+    enabled: true
+    interval_generations: 5
+    eval_mode: full
+    timeout_sec_per_eval: 120
+    top_h_per_island: 5
+    experiments:
+      - unit_square_26
+    allocation:
+      enabled: false
+
+llm:
+  selection_strategy: random
+  seed: 123

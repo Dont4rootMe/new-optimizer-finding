@@ -1,0 +1,16 @@
+_target_: experiments.circle_packing_shinka.unit_square_26.UnitSquare26CirclePackingExperiment
+enabled: true
+name: unit_square_26
+need_cuda: false
+
+validation:
+  num_circles: 26
+  square_size: 1.0
+  validation_atol: 1.0e-6
+
+compute:
+  device: cpu
+  precision: fp32
+  num_workers: 0
+  smoke_steps: 1
+  max_steps: 1

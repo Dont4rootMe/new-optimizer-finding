@@ -1,0 +1,39 @@
+Repair this circle-packing organism implementation.
+
+=== FUNCTION CONTRACT ===
+The function you must fix:
+
+    def run_packing() -> tuple[np.ndarray, np.ndarray, float]:
+
+Arguments: none.
+Returns a 3-tuple:
+  1. centers: np.ndarray of shape (26, 2) — each row is (x, y) center of a circle
+  2. radii: np.ndarray of shape (26,) — radius of each circle
+  3. reported_sum: float — must equal np.sum(radii)
+
+Constraints:
+  - All values finite, all radii > 0
+  - Every circle fully inside [0, 1] x [0, 1]
+  - No overlaps between any pair of circles
+  - reported_sum must match np.sum(radii) within 1e-6
+
+=== ORGANISM GENETIC CODE ===
+{organism_genetic_code}
+
+=== ORGANISM NOVELTY SUMMARY ===
+{change_description}
+
+=== CURRENT IMPLEMENTATION.PY ===
+{current_implementation}
+
+=== FAILING PHASE ===
+{phase}
+
+=== FAILING EXPERIMENT ===
+{experiment_name}
+
+=== ERROR HISTORY ===
+{error_history}
+
+Fix the error while staying faithful to the genetic code.
+Return ONLY the corrected full `implementation.py` text. No markdown fences, no commentary.

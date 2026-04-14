@@ -16,6 +16,27 @@ from src.evolve.storage import write_json
 LOGGER = logging.getLogger(__name__)
 
 
+def _resolve_config_name(conf_dir: Path, explicit_config_name: str | None) -> str:
+    """Resolve config name for repo presets or runtime snapshots."""
+
+    if (conf_dir / "config.yaml").exists():
+        return "config"
+    if explicit_config_name:
+        config_name = str(explicit_config_name).strip()
+        if not config_name:
+            raise ValueError("--config_name must not be empty.")
+        if not (conf_dir / f"{config_name}.yaml").exists():
+            raise FileNotFoundError(
+                f"Config '{config_name}' was not found in {conf_dir}. "
+                "Pass a valid --config_name <preset>."
+            )
+        return config_name
+    raise FileNotFoundError(
+        f"Could not find runtime snapshot config.yaml in {conf_dir}. "
+        "For repo config directories, pass --config_name <preset> explicitly."
+    )
+
+
 def _prepare_experiment_cfg(
     cfg: DictConfig,
     experiment_name: str,
@@ -48,12 +69,6 @@ def _prepare_experiment_cfg(
     if not exp_cfg.data.get("root"):
         exp_cfg.data.root = str(Path(cfg.paths.data_root) / experiment_name)
 
-    if "safety" not in exp_cfg:
-        exp_cfg.safety = {}
-    for key, value in cfg.safety.items():
-        if key not in exp_cfg.safety or exp_cfg.safety[key] is None:
-            exp_cfg.safety[key] = value
-
     return exp_cfg
 
 
@@ -67,6 +82,7 @@ def main() -> None:
     parser.add_argument("--precision", default="bf16")
     parser.add_argument("--mode", choices=["smoke", "full"], default="smoke")
     parser.add_argument("--config_path", default="conf")
+    parser.add_argument("--config_name", default=None)
     parser.add_argument("--override", action="append", default=[])
     args = parser.parse_args()
 
@@ -80,7 +96,10 @@ def main() -> None:
     try:
         conf_dir = Path(args.config_path).expanduser().resolve()
         with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
-            cfg = compose(config_name="config", overrides=list(args.override))
+            cfg = compose(
+                config_name=_resolve_config_name(conf_dir, args.config_name),
+                overrides=list(args.override),
+            )
 
         experiment_name = str(args.experiment)
         if experiment_name not in cfg.experiments:

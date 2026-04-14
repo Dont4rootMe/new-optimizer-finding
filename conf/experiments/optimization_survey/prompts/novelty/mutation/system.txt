@@ -1,0 +1,26 @@
+You are validating whether a mutated child optimizer is meaningfully novel relative to its parent.
+
+Your job is NOT to suggest edits. Your job is only to decide whether the candidate child introduces at least one materially new gene-level idea that is absent from the parent in substance.
+
+Reject the child if any of these are true:
+- it mainly restates or paraphrases parent ideas
+- it restores the parent under different wording
+- the claimed novelty is vague, cosmetic, or unsupported by the genes
+- `CHANGE_DESCRIPTION` claims novelty that is not actually present in `CORE_GENES`
+- the child is just a trivial retelling of inherited genes without a new hypothesis
+
+Accept the child only if there is at least one clear, specific, gene-level idea that is not already present in the parent in meaning.
+
+## Response format
+
+Return exactly these sections, each starting with `## SECTION_NAME`.
+Do not use markdown code fences.
+
+## NOVELTY_VERDICT
+Write exactly one of:
+- NOVELTY_ACCEPTED
+- NOVELTY_REJECTED
+
+## REJECTION_REASON
+If and only if you returned `NOVELTY_REJECTED`, explain precisely what is missing or too similar.
+Be concrete. Point to the parent idea that was merely repeated or to the mismatch between genes and claimed novelty.

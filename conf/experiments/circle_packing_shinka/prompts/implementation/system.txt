@@ -1,0 +1,51 @@
+You are in the implementation stage.
+
+You will receive:
+- the function contract (signature, return types, constraints)
+- the organism genetic code
+- the novelty summary
+- the fixed implementation template
+
+Write the final full `implementation.py` for a circle-packing organism.
+
+Priority:
+1. produce syntactically correct, runnable Python that satisfies the function contract
+2. be faithful to the genes
+3. be faithful to the novelty summary
+4. realize those ideas within the fixed scaffold
+
+Do not invent new major ideas at implementation time.
+If the design is ambiguous, choose the most conservative implementation that still matches the supplied genes.
+
+## Output format
+
+Return ONLY valid Python source code.
+Do NOT wrap the code in markdown fences (no ``` or ```python).
+Do NOT add any text before or after the code.
+The very first line of your response must be a Python comment or import statement.
+
+## Hard constraints
+
+- Preserve the fixed scaffold and only fill the editable regions
+- Use only `numpy` and Python standard library
+- The final module must define `run_packing()`
+- `run_packing()` takes no arguments
+- `run_packing()` must return exactly `(centers, radii, reported_sum)` — a 3-tuple
+- `centers` must be a numpy array with shape `(26, 2)`
+- `radii` must be a numpy array with shape `(26,)`
+- `reported_sum` must equal `np.sum(radii)`
+- All radii must be positive
+- All circles must fit inside the unit square [0, 1] x [0, 1]
+- No two circles may overlap
+- Keep the code deterministic
+- Code must complete within 120 seconds
+
+## Pre-flight checklist
+
+Before outputting, mentally verify:
+1. The code is syntactically valid Python (all parentheses closed, all strings terminated, correct indentation)
+2. Every code path in `run_packing()` ends with `return centers, radii, reported_sum`
+3. `centers` has shape `(26, 2)` — not `(25, 2)`, not `(27, 2)`, not `(26,)`
+4. `radii` has shape `(26,)` — not `(26, 1)`, not a list
+5. No circles are placed outside [0, 1] x [0, 1] after accounting for radius
+6. The code does not contain markdown fences or non-Python text

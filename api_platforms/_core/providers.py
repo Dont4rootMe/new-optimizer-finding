@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 from urllib import error as urllib_error
+from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 from api_platforms._core.types import ApiRouteConfig, LlmRequest, LlmResponse
@@ -17,6 +18,31 @@ def _utc_now_iso() -> str:
 
 
 def _render_mock_implementation(template: str, organism_id: str, generation: int, seed: int) -> str:
+    if "def run_packing():" in template:
+        return template.format(
+            imports="",
+            helpers=(
+                "def _build_centers():\n"
+                "    rows = [\n"
+                "        (0.15, [0.10, 0.24, 0.38, 0.52, 0.66, 0.80, 0.94]),\n"
+                "        (0.33, [0.17, 0.31, 0.45, 0.59, 0.73, 0.87]),\n"
+                "        (0.51, [0.10, 0.24, 0.38, 0.52, 0.66, 0.80, 0.94]),\n"
+                "        (0.69, [0.17, 0.31, 0.45, 0.59, 0.73, 0.87]),\n"
+                "    ]\n"
+                "    centers = []\n"
+                "    for y_coord, xs in rows:\n"
+                "        for x_coord in xs:\n"
+                "            centers.append((x_coord, y_coord))\n"
+                "    return np.asarray(centers, dtype=float)\n"
+            ),
+            run_packing_body=(
+                "    centers = _build_centers()\n"
+                "    radii = np.full(26, 0.04, dtype=float)\n"
+                "    reported_sum = float(np.sum(radii))\n"
+                "    return centers, radii, reported_sum"
+            ),
+        )
+
     base = seed + generation + sum(ord(ch) for ch in organism_id[:8])
     use_sgd = (base % 2) == 0
     opt_type = "SGD" if use_sgd else "AdamW"
@@ -59,6 +85,27 @@ def build_mock_text(request: LlmRequest) -> str:
     base = int(request.seed) + generation + sum(ord(ch) for ch in organism_id[:8])
     use_sgd = (base % 2) == 0
     opt_type = "SGD" if use_sgd else "AdamW"
+    joined_prompt = f"{request.system_prompt}\n{request.user_prompt}".lower()
+    if request.stage == "novelty_check":
+        return "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n"
+    if "circle-packing" in joined_prompt or "circle packing" in joined_prompt or "run_packing" in joined_prompt:
+        if request.stage == "design":
+            return (
+                "## CORE_GENES\n"
+                "- Deterministic staggered-row layout with alternating long and short rows inside the unit square\n"
+                "- Uniform radius assignment chosen conservatively so border constraints and pairwise distances remain valid\n"
+                "- Geometry-first construction that computes centers from explicit row templates instead of random search\n\n"
+                "## INTERACTION_NOTES\n"
+                "This design favors stable valid packings with simple geometry and should work well as a seed for later refinements.\n\n"
+                "## COMPUTE_NOTES\n"
+                "The method is purely constructive, uses O(n) memory, and performs no iterative repair loops.\n\n"
+                "## CHANGE_DESCRIPTION\n"
+                "A deterministic staggered packing program that starts from a valid geometric template for 26 circles.\n"
+            )
+        template = str(request.metadata.get("implementation_template", "")).strip()
+        if template:
+            return _render_mock_implementation(template, organism_id, generation, request.seed)
+
     if request.stage == "design":
         return (
             "## CORE_GENES\n"
@@ -118,7 +165,11 @@ def _response_to_dict(value: Any) -> dict[str, Any]:
 
 
 def _ollama_chat_url(base_url: str | None) -> str:
-    normalized = str(base_url or "http://localhost:11434/api").rstrip("/")
+    normalized = str(base_url or "http://127.0.0.1:11434/api").rstrip("/")
+    parsed = urllib_parse.urlparse(normalized)
+    if parsed.hostname == "localhost":
+        netloc = parsed.netloc.replace("localhost", "127.0.0.1", 1)
+        normalized = urllib_parse.urlunparse(parsed._replace(netloc=netloc))
     if normalized.endswith("/chat"):
         return normalized
     if normalized.endswith("/api"):
@@ -126,14 +177,53 @@ def _ollama_chat_url(base_url: str | None) -> str:
     return normalized + "/api/chat"
 
 
+def _drop_none_entries(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _drop_none_entries(item) for key, item in value.items() if item is not None}
+    if isinstance(value, list):
+        return [_drop_none_entries(item) for item in value if item is not None]
+    return value
+
+
+def _ollama_stage_effective_config(route_cfg: ApiRouteConfig, stage: str) -> dict[str, Any]:
+    stage_cfg = route_cfg.stage_options.get(stage, {})
+    if not isinstance(stage_cfg, dict):
+        stage_cfg = {}
+
+    def _stage_override(key: str, default: Any) -> Any:
+        value = stage_cfg.get(key, default)
+        return default if value is None else value
+
+    request_options = dict(route_cfg.request_options)
+    override_request_options = stage_cfg.get("request_options", {})
+    if isinstance(override_request_options, dict):
+        request_options.update({key: value for key, value in override_request_options.items()})
+
+    return {
+        "temperature": _stage_override("temperature", route_cfg.temperature),
+        "max_output_tokens": _stage_override("max_output_tokens", route_cfg.max_output_tokens),
+        "top_p": _stage_override("top_p", route_cfg.top_p),
+        "top_k": _stage_override("top_k", route_cfg.top_k),
+        "think": _stage_override("think", route_cfg.think),
+        "keep_alive": _stage_override("keep_alive", route_cfg.keep_alive),
+        "raw": _stage_override("raw", route_cfg.raw),
+        "format": _stage_override("format", route_cfg.format),
+        "logprobs": _stage_override("logprobs", route_cfg.logprobs),
+        "top_logprobs": _stage_override("top_logprobs", route_cfg.top_logprobs),
+        "request_options": request_options,
+    }
+
+
 def _ollama_request_payload(route_cfg: ApiRouteConfig, request: LlmRequest) -> dict[str, Any]:
-    options = dict(route_cfg.request_options)
-    options.setdefault("temperature", float(route_cfg.temperature))
-    options.setdefault("num_predict", int(route_cfg.max_output_tokens))
-    if route_cfg.top_p is not None:
-        options.setdefault("top_p", float(route_cfg.top_p))
-    if route_cfg.top_k is not None:
-        options.setdefault("top_k", int(route_cfg.top_k))
+    effective = _ollama_stage_effective_config(route_cfg, request.stage)
+
+    options = dict(effective["request_options"])
+    options.setdefault("temperature", float(effective["temperature"]))
+    options.setdefault("num_predict", int(effective["max_output_tokens"]))
+    if effective["top_p"] is not None:
+        options.setdefault("top_p", float(effective["top_p"]))
+    if effective["top_k"] is not None:
+        options.setdefault("top_k", int(effective["top_k"]))
 
     payload: dict[str, Any] = {
         "model": route_cfg.provider_model_id,
@@ -142,13 +232,21 @@ def _ollama_request_payload(route_cfg: ApiRouteConfig, request: LlmRequest) -> d
             {"role": "user", "content": request.user_prompt},
         ],
         "stream": False,
-        "options": options,
+        "options": _drop_none_entries(options),
     }
-    if route_cfg.think is not None:
-        payload["think"] = route_cfg.think
-    if route_cfg.keep_alive is not None:
-        payload["keep_alive"] = route_cfg.keep_alive
-    return payload
+    if effective["think"] is not None:
+        payload["think"] = effective["think"]
+    if effective["keep_alive"] is not None:
+        payload["keep_alive"] = effective["keep_alive"]
+    if effective["raw"] is not None:
+        payload["raw"] = bool(effective["raw"])
+    if effective["format"] is not None:
+        payload["format"] = effective["format"]
+    if effective["logprobs"] is not None:
+        payload["logprobs"] = bool(effective["logprobs"])
+    if effective["top_logprobs"] is not None:
+        payload["top_logprobs"] = int(effective["top_logprobs"])
+    return _drop_none_entries(payload)
 
 
 def _openai_output_text(response_payload: dict[str, Any]) -> str:
@@ -295,8 +393,21 @@ def generate_direct(route_cfg: ApiRouteConfig, request: LlmRequest) -> LlmRespon
         message = response_payload.get("message", {})
         if not isinstance(message, dict):
             message = {}
-        text = str(message.get("content", "")).strip()
-        if not text:
+        content_text = str(message.get("content", "")).strip()
+        thinking_text = str(message.get("thinking", "")).strip()
+
+        # Build the usable text from whatever Ollama returned.
+        # When think mode is enabled, some models put all output into the
+        # thinking field and leave content empty.  We concatenate both so
+        # that downstream extractors (_extract_python) can find code blocks
+        # regardless of where the model placed them.
+        if content_text and thinking_text:
+            text = thinking_text + "\n\n" + content_text
+        elif content_text:
+            text = content_text
+        elif thinking_text:
+            text = thinking_text
+        else:
             raise RuntimeError("Ollama response did not contain usable message.content text output.")
 
         usage = {

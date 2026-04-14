@@ -10,6 +10,7 @@ from pathlib import Path
 from omegaconf import OmegaConf
 
 from src.evolve.evolution_loop import EvolutionLoop
+from src.evolve.orchestrator import DEFAULT_EVAL_ENTRYPOINT_MODULE, EvolverOrchestrator
 from src.evolve.types import OrganismMeta
 from src.organisms.organism import save_organism_artifacts
 
@@ -47,11 +48,15 @@ def _cfg(tmp_path: Path, **overrides) -> object:
             },
         },
         "evolver": {
-            "generation": 0,
             "resume": False,
-            "enabled": True,
             "max_generations": 1,
-            "eval_entrypoint_module": "tests.fixtures.fake_eval",
+            "_eval_entrypoint_module": "tests.fixtures.fake_eval",
+            "creation": {
+                "max_attempts_to_create_organism": 1,
+                "max_attempts_to_repair_organism_after_error": 1,
+                "max_attempts_to_regenerate_organism_after_novelty_rejection": 1,
+                "max_parallel_organisms": 1,
+            },
             "islands": {
                 "dir": str(islands_dir),
                 "seed_organisms_per_island": 3,
@@ -63,11 +68,17 @@ def _cfg(tmp_path: Path, **overrides) -> object:
                 "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
                 "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
                 "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
+                "mutation_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/mutation/system.txt",
+                "mutation_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/mutation/user.txt",
                 "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
                 "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
+                "crossover_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/crossover/system.txt",
+                "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
                 "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                 "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                 "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
+                "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
             },
             "reproduction": {
                 "offspring_per_generation": 2,
@@ -82,25 +93,29 @@ def _cfg(tmp_path: Path, **overrides) -> object:
                     "inter_island_crossover": "unified",
                     "mutation": "unified",
                 },
+                "species_sampling": {
+                    "strategy": "weighted_rule",
+                    "weighted_rule_lambda": 1.0,
+                    "mutation_softmax_temperature": 1.0,
+                    "within_island_crossover_softmax_temperature": 1.0,
+                    "inter_island_crossover_softmax_temperature": 1.0,
+                },
             },
             "operators": {
                 "mutation": {
                     "gene_removal_probability": 0.2,
-                    "parent_selection_softmax_temperature": 1.0,
                 },
                 "crossover": {
                     "primary_parent_gene_inheritance_probability": 0.7,
-                    "parent_selection_softmax_temperature": 1.0,
                 },
             },
-            "phases": {
-                "simple": {
-                    "eval_mode": "smoke",
-                    "timeout_sec_per_eval": 60,
-                    "top_k_per_island": 2,
-                    "experiments": ["simple_a"],
-                    "allocation": {"enabled": False},
-                },
+                "phases": {
+                    "simple": {
+                        "eval_mode": "smoke",
+                        "timeout_sec_per_eval": 60,
+                        "experiments": ["simple_a"],
+                        "allocation": {"enabled": False},
+                    },
                 "great_filter": {
                     "enabled": True,
                     "interval_generations": 1,
@@ -202,6 +217,21 @@ def test_inter_island_sampling_is_unified_and_distinct(tmp_path: Path) -> None:
 
     observed = primary_counts["gradient_methods"] / draws
     assert abs(observed - 0.5) < 0.03
+
+
+def test_orchestrator_defaults_to_run_one_and_reads_queue_sizes(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        resources={"evaluation": {"gpu_ranks": [2, 4], "cpu_parallel_jobs": 3}},
+        evolver={"_eval_entrypoint_module": None},
+    )
+    orchestrator = EvolverOrchestrator(cfg)
+    try:
+        assert orchestrator.eval_entrypoint_module == DEFAULT_EVAL_ENTRYPOINT_MODULE
+        assert orchestrator.gpu_ranks == [2, 4]
+        assert orchestrator.cpu_parallel_jobs == 3
+    finally:
+        orchestrator.close()
 
 
 def test_deterministic_operator_selection_allocates_exact_counts(tmp_path: Path) -> None:
@@ -322,11 +352,154 @@ def test_inter_island_weight_can_force_inter_island_crossover_only(tmp_path: Pat
     assert calls["inter"] == 2
 
 
-def test_max_proposal_jobs_bounds_seed_parallelism(tmp_path: Path, monkeypatch) -> None:
+def test_weighted_rule_parent_counts_accumulate_within_generation(tmp_path: Path, monkeypatch) -> None:
+    cfg = _cfg(tmp_path)
+    cfg.evolver.reproduction.operator_weights.within_island_crossover = 0.0
+    cfg.evolver.reproduction.operator_weights.inter_island_crossover = 0.0
+    cfg.evolver.reproduction.operator_weights.mutation = 1.0
+    cfg.evolver.reproduction.offspring_per_generation = 3
+    cfg.evolver.reproduction.species_sampling.strategy = "weighted_rule"
+    loop = EvolutionLoop(cfg)
+    parent_a = _make_organism(tmp_path, "a", "gradient_methods")
+    parent_b = _make_organism(tmp_path, "b", "gradient_methods")
+    active = {"gradient_methods": [parent_a, parent_b], "second_order": []}
+    snapshots: list[dict[str, int]] = []
+
+    def fake_weighted_rule_select_organisms(
+        population,
+        *,
+        parent_offspring_counts,
+        score_field,
+        weighted_rule_lambda,
+        k,
+        rng,
+    ):
+        del population, score_field, weighted_rule_lambda, k, rng
+        snapshots.append(dict(parent_offspring_counts))
+        return [parent_a]
+
+    monkeypatch.setattr(
+        "src.evolve.evolution_loop.weighted_rule_select_organisms",
+        fake_weighted_rule_select_organisms,
+    )
+
+    planned = loop._plan_offspring_generation(active)
+
+    assert len(planned) == 3
+    assert [plan.mother_id for plan in planned] == ["a", "a", "a"]
+    assert snapshots == [{}, {"a": 1}, {"a": 2}]
+
+
+def test_softmax_species_sampling_uses_route_specific_temperatures(tmp_path: Path, monkeypatch) -> None:
+    cfg = _cfg(tmp_path)
+    cfg.evolver.reproduction.offspring_per_generation = 3
+    cfg.evolver.reproduction.species_sampling.strategy = "softmax"
+    cfg.evolver.reproduction.species_sampling.mutation_softmax_temperature = 0.11
+    cfg.evolver.reproduction.species_sampling.within_island_crossover_softmax_temperature = 0.22
+    cfg.evolver.reproduction.species_sampling.inter_island_crossover_softmax_temperature = 0.33
+    loop = EvolutionLoop(cfg)
+    gradient_a = _make_organism(tmp_path, "a", "gradient_methods")
+    gradient_b = _make_organism(tmp_path, "b", "gradient_methods")
+    second_a = _make_organism(tmp_path, "c", "second_order")
+    second_b = _make_organism(tmp_path, "d", "second_order")
+    active = {
+        "gradient_methods": [gradient_a, gradient_b],
+        "second_order": [second_a, second_b],
+    }
+    calls: list[tuple[str, float, int]] = []
+
+    def fake_softmax_select_organisms(population, *, score_field, temperature, k, rng):
+        del score_field, rng
+        calls.append(("single", temperature, k))
+        return list(population[:k])
+
+    def fake_softmax_select_distinct_organisms(population, *, score_field, temperature, k, rng):
+        del score_field, rng
+        calls.append(("distinct", temperature, k))
+        return list(population[:k])
+
+    monkeypatch.setattr(
+        "src.evolve.evolution_loop.softmax_select_organisms",
+        fake_softmax_select_organisms,
+    )
+    monkeypatch.setattr(
+        "src.evolve.evolution_loop.softmax_select_distinct_organisms",
+        fake_softmax_select_distinct_organisms,
+    )
+
+    planned = loop._plan_offspring_generation(active)
+
+    assert len(planned) == 3
+    assert calls == [
+        ("distinct", 0.22, 2),
+        ("single", 0.33, 1),
+        ("single", 0.33, 1),
+        ("single", 0.11, 1),
+    ]
+
+
+def _make_seed_plan(organism_id: str, island_id: str) -> object:
+    """Minimal `PlannedOrganismCreation` stub for `_assign_batch_routes` tests.
+
+    The method only reads `organism_id`, so any object exposing that attribute
+    works and we avoid pulling in the full `PlannedOrganismCreation` ctor here.
+    """
+
+    class _Plan:
+        pass
+
+    plan = _Plan()
+    plan.organism_id = organism_id
+    plan.island_id = island_id
+    return plan
+
+
+def test_assign_batch_routes_spreads_two_plans_across_two_equal_routes(
+    tmp_path: Path,
+) -> None:
+    cfg = _cfg(tmp_path)
+    loop = EvolutionLoop(cfg)
+    loop.generator.route_weights = {"route_a": 1.0, "route_b": 1.0}
+    plans = [
+        _make_seed_plan("org-aaaa", "gradient_methods"),
+        _make_seed_plan("org-bbbb", "second_order"),
+    ]
+    assignment = loop._assign_batch_routes(plans)
+    assert set(assignment.values()) == {"route_a", "route_b"}
+    # Deterministic: same inputs -> same mapping
+    assert assignment == loop._assign_batch_routes(plans)
+
+
+def test_assign_batch_routes_returns_empty_for_single_positive_route(
+    tmp_path: Path,
+) -> None:
+    cfg = _cfg(tmp_path)
+    loop = EvolutionLoop(cfg)
+    loop.generator.route_weights = {"only_route": 1.0, "zero_route": 0.0}
+    plans = [_make_seed_plan(f"org-{i}", "gradient_methods") for i in range(4)]
+    assert loop._assign_batch_routes(plans) == {}
+
+
+def test_assign_batch_routes_respects_weight_proportions(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    loop = EvolutionLoop(cfg)
+    loop.generator.route_weights = {"heavy": 3.0, "light": 1.0}
+    plans = [_make_seed_plan(f"org-{i:02d}", "gradient_methods") for i in range(8)]
+    assignment = loop._assign_batch_routes(plans)
+    counts = {"heavy": 0, "light": 0}
+    for route in assignment.values():
+        counts[route] += 1
+    # Hamilton apportionment for 8 plans with 3:1 weights => 6:2
+    assert counts == {"heavy": 6, "light": 2}
+
+
+def test_max_parallel_organisms_bounds_seed_parallelism(tmp_path: Path, monkeypatch) -> None:
     cfg = _cfg(
         tmp_path,
         evolver={
-            "max_proposal_jobs": 2,
+            "creation": {
+                "max_parallel_organisms": 2,
+            },
             "islands": {
                 "seed_organisms_per_island": 4,
             },

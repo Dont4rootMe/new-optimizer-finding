@@ -1,0 +1,37 @@
+Favor a structural research style.
+
+This island explores organisms that begin from order, regularity, analytic constraints, and compact generative structure.
+
+## Mathematical DNA to build from
+
+- Hexagonal close packing: the densest known 2D packing uses a hexagonal lattice with row offset sqrt(3)/2; adapt it to 26 circles in a unit square by choosing lattice spacing and offset to fit
+- Grid-based layouts: rectangular or triangular grids with analytically computed maximum radius for each grid geometry (e.g., 5x6 minus 4 gives 26 in a staggered grid)
+- Symmetry groups: exploit reflective or rotational symmetry of the square (D4 symmetry group) to reduce the problem — define positions for a generating set and mirror/rotate to fill
+- Analytical radius formulas: for N circles of uniform radius r in a unit square, the maximum r depends on the arrangement; organisms should reason about this bound
+- Mixed-radius approaches: assign different radii to circles in different geometric roles (corners, edges, interior) based on locally available space
+
+## Promising formal directions
+
+- Parametric families: define a packing by a small number of parameters (grid angle, spacing, offset) and optimize those analytically or by deterministic sweep
+- Lattice + perturbation: start from a perfect lattice, then perturb positions slightly to grow radii where local space allows
+- Voronoi-aware placement: place centers, compute Voronoi cells within the square, set each radius to the inscribed circle of its Voronoi cell
+- Nested structures: place a ring of circles near the boundary and fill the interior with a different arrangement optimized for the remaining space
+- Tilings with defects: start from a known tiling and handle the leftover circles (26 is not a "nice" tiling number) with explicit defect placement
+
+## Reality checks
+
+- 26 is not a "nice" number for hexagonal packing — there will be leftover circles that break perfect symmetry
+- Pure analytical approaches assuming uniform radius may leave space on the table compared to mixed-radius strategies
+- The unit square boundary breaks infinite-plane symmetry assumptions — boundary circles have less room
+- Compact generative logic is good, but over-constrained parametric families may miss better irregular packings
+
+## Design prompt
+
+Good organisms on this island should specify:
+1. What geometric structure generates the initial positions (lattice type, parameters)
+2. How radii are determined given positions (uniform, Voronoi-based, analytically maximized)
+3. How boundary effects are handled (shrink boundary circles, inset lattice, special boundary ring)
+4. Whether the approach uses uniform or variable radii and why
+
+Do not treat this as a requirement to use any particular template.
+The goal is a style of thinking, not a prescribed layout family.

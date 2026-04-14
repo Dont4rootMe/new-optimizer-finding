@@ -57,12 +57,6 @@ class ExperimentRunner:
         if not merged.data.get("root"):
             merged.data.root = str(Path(self.cfg.paths.data_root) / exp_name)
 
-        if "safety" not in merged:
-            merged.safety = {}
-        for key, value in self.cfg.safety.items():
-            if key not in merged.safety or merged.safety[key] is None:
-                merged.safety[key] = value
-
         return merged
 
     def _apply_run_validation_overrides(self, exp_name: str, merged: DictConfig) -> None:

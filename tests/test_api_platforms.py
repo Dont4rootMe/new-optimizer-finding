@@ -11,6 +11,7 @@ import pytest
 from omegaconf import OmegaConf
 
 from api_platforms import ApiPlatformRegistry, LlmRequest
+from api_platforms._core import registry as registry_module
 from api_platforms._core import providers as provider_backends
 from api_platforms._core.providers import generate_direct
 from api_platforms._core.types import ApiRouteConfig
@@ -27,18 +28,28 @@ def _cfg(tmp_path: Path, *, routes: dict, route_weights: dict[str, float]) -> ob
             },
             "api_platforms": routes,
             "evolver": {
-                "max_generation_attempts": 1,
+                "creation": {
+                    "max_attempts_to_create_organism": 1,
+                    "max_attempts_to_repair_organism_after_error": 1,
+                    "max_attempts_to_regenerate_organism_after_novelty_rejection": 1,
+                },
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
                     "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
                     "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
                     "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
                     "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
+                    "mutation_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/mutation/system.txt",
+                    "mutation_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/mutation/user.txt",
                     "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
                     "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
+                    "crossover_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/crossover/system.txt",
+                    "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                    "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
+                    "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
                 },
                 "llm": {
                     "selection_strategy": "random",
@@ -77,6 +88,31 @@ def test_registry_reuses_singleton_broker_between_clients(tmp_path: Path) -> Non
     finally:
         registry_a.stop()
         registry_b.stop()
+
+
+def test_registry_health_probe_uses_short_timeout_for_startup_checks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _cfg(
+        tmp_path,
+        routes={"mock": {"_target_": "api_platforms.mock.platform.build_platform", "timeout_sec": 1800}},
+        route_weights={"mock": 1.0},
+    )
+    registry = ApiPlatformRegistry(cfg)
+    socket_path = registry._socket_path("mock")
+    socket_path.parent.mkdir(parents=True, exist_ok=True)
+    socket_path.touch()
+    observed: dict[str, float] = {}
+
+    def fake_send_ipc_message(socket_path: str, payload: dict[str, object], timeout_sec: float):
+        observed["timeout_sec"] = timeout_sec
+        raise TimeoutError("stale broker socket")
+
+    monkeypatch.setattr(registry_module, "send_ipc_message", fake_send_ipc_message)
+
+    assert registry._broker_healthy("mock") is False
+    assert observed["timeout_sec"] <= 2.0
 
 
 def test_mock_local_route_processes_requests_concurrently(tmp_path: Path) -> None:
@@ -211,7 +247,7 @@ def test_ollama_route_posts_chat_payload_and_parses_response(monkeypatch: pytest
 
     response = generate_direct(route_cfg, request)
 
-    assert captured["url"] == "http://localhost:11434/api/chat"
+    assert captured["url"] == "http://127.0.0.1:11434/api/chat"
     assert captured["timeout"] == 45.0
     assert captured["method"] == "POST"
     assert captured["headers"] == {
@@ -248,3 +284,95 @@ def test_ollama_route_posts_chat_payload_and_parses_response(monkeypatch: pytest
         "eval_count": 19,
         "eval_duration": 4,
     }
+
+
+def test_ollama_route_applies_stage_specific_generation_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    route_cfg = ApiRouteConfig(
+        route_id="ollama_qwen35_27b",
+        provider="ollama",
+        provider_model_id="qwen3.5:27b",
+        backend="ollama",
+        base_url="http://127.0.0.1:11435/api",
+        temperature=0.7,
+        max_output_tokens=4096,
+        timeout_sec=30.0,
+        top_p=0.92,
+        top_k=40,
+        think=False,
+        keep_alive="15m",
+        request_options={
+            "num_ctx": 65536,
+            "repeat_penalty": 1.05,
+            "min_p": None,
+        },
+        stage_options={
+            "design": {
+                "think": "high",
+                "temperature": 0.2,
+                "max_output_tokens": 1536,
+                "top_k": 12,
+                "raw": True,
+                "logprobs": True,
+                "top_logprobs": 4,
+                "request_options": {
+                    "num_ctx": 32768,
+                    "repeat_penalty": 1.15,
+                    "presence_penalty": 0.1,
+                    "min_p": None,
+                },
+            }
+        },
+    )
+    request = LlmRequest(
+        route_id="ollama_qwen35_27b",
+        stage="design",
+        system_prompt="system prompt",
+        user_prompt="user prompt",
+        seed=123,
+        metadata={"organism_id": "org001"},
+    )
+    captured: dict[str, object] = {}
+
+    class FakeHttpResponse:
+        def __enter__(self) -> "FakeHttpResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"message": {"role": "assistant", "content": "generated text"}}).encode("utf-8")
+
+    def fake_urlopen(http_request, timeout: float):
+        captured["timeout"] = timeout
+        captured["body"] = json.loads(http_request.data.decode("utf-8"))
+        return FakeHttpResponse()
+
+    monkeypatch.setattr(provider_backends.urllib_request, "urlopen", fake_urlopen)
+
+    response = generate_direct(route_cfg, request)
+
+    assert captured["timeout"] == 30.0
+    assert captured["body"] == {
+        "model": "qwen3.5:27b",
+        "messages": [
+            {"role": "system", "content": "system prompt"},
+            {"role": "user", "content": "user prompt"},
+        ],
+        "stream": False,
+        "options": {
+            "num_ctx": 32768,
+            "repeat_penalty": 1.15,
+            "presence_penalty": 0.1,
+            "temperature": 0.2,
+            "num_predict": 1536,
+            "top_p": 0.92,
+            "top_k": 12,
+        },
+        "think": "high",
+        "keep_alive": "15m",
+        "raw": True,
+        "logprobs": True,
+        "top_logprobs": 4,
+    }
+    assert response.raw_request == captured["body"]

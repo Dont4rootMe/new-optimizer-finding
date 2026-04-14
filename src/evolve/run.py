@@ -9,22 +9,23 @@ import hydra
 from omegaconf import DictConfig
 
 from api_platforms import ApiPlatformRegistry
+from src.runtime_config import ensure_root_runtime_config
 
 LOGGER = logging.getLogger(__name__)
 
 
 def run_evolution(cfg: DictConfig) -> dict:
-    """Run canonical organism-first multi-generation evolution loop."""
+    """Run canonical organism-first evolution from an already seeded population."""
 
-    if not bool(cfg.evolver.enabled):
-        LOGGER.info("evolver.enabled=false, skipping evolve run")
-        return {}
+    ensure_root_runtime_config(cfg, context="src.evolve.run")
 
     from src.evolve.evolution_loop import EvolutionLoop
 
     registry = ApiPlatformRegistry(cfg)
     try:
+        LOGGER.info("Starting API platform registry for routes: %s", ", ".join(registry.available_route_ids))
         registry.start()
+        LOGGER.info("API platform registry ready")
         loop = EvolutionLoop(cfg, llm_registry=registry)
         result = asyncio.run(loop.run())
         LOGGER.info("Evolution complete: %s", result)
@@ -33,14 +34,13 @@ def run_evolution(cfg: DictConfig) -> dict:
         registry.stop()
 
 
-@hydra.main(config_path="../../conf", config_name="config", version_base=None)
+@hydra.main(config_path="../../conf", config_name=None, version_base=None)
 def main(cfg: DictConfig) -> None:
     """Standalone module entrypoint for evolve mode."""
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
+    from src.evolve.seed_run import _ensure_console_logging
+
+    _ensure_console_logging()
     run_evolution(cfg)
 
 

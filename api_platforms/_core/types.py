@@ -33,8 +33,13 @@ class ApiRouteConfig:
     top_k: int | None = None
     do_sample: bool = True
     request_options: dict[str, Any] = field(default_factory=dict)
+    stage_options: dict[str, dict[str, Any]] = field(default_factory=dict)
     think: str | bool | None = None
     keep_alive: str | int | None = None
+    raw: bool | None = None
+    format: str | dict[str, Any] | None = None
+    logprobs: bool | None = None
+    top_logprobs: int | None = None
     mock_delay_sec: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:

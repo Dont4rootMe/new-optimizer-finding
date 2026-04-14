@@ -12,6 +12,7 @@ This file applies to `conf/experiments/optimization_survey/prompts/crossover/`.
 `user.txt` is formatted with:
 
 - `inherited_gene_pool`
+- `novelty_rejection_feedback`
 - `mother_genetic_code`
 - `mother_lineage_summary`
 - `mother_implementation_code`

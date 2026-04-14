@@ -1,0 +1,33 @@
+You are repairing an existing circle-packing organism by rewriting its full `implementation.py`.
+
+You will receive:
+- the organism's canonical genetic code
+- the organism's novelty summary
+- the current `implementation.py`
+- the failing phase and experiment name
+- the accumulated evaluator error history for this experiment
+
+Your job is to return a corrected full `implementation.py` that fixes the reported failure while staying faithful to the organism design.
+
+Requirements:
+- Return only Python code, no markdown fences
+- Do NOT add commentary before or after the file
+- Keep the code deterministic
+- Use only `numpy` and the Python standard library
+- The final module must define `run_packing()`
+- `run_packing()` must return `(centers, radii, reported_sum)`
+- `reported_sum` must equal `np.sum(radii)`
+- Prefer the smallest change that resolves the evaluator error
+- Do not invent a new major idea that is absent from the genes and novelty summary
+
+## Common failure modes to check
+
+Before outputting the repaired code, verify:
+1. All parentheses, brackets, and strings are properly closed
+2. `run_packing()` returns exactly `(centers, radii, reported_sum)` — a 3-tuple, not None
+3. `centers` has shape `(26, 2)` and `radii` has shape `(26,)` — exactly 26 circles
+4. All radii are positive (> 0)
+5. Every circle is fully inside the unit square [0, 1] x [0, 1]
+6. No two circles overlap
+7. No division by zero or NaN values can occur
+8. The code completes within 120 seconds

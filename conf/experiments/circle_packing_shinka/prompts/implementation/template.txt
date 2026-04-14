@@ -1,0 +1,18 @@
+# === FIXED: DO NOT MODIFY ===
+import numpy as np
+# === END FIXED ===
+
+# === EDITABLE: IMPORTS ===
+{imports}
+# === END EDITABLE ===
+
+# === EDITABLE: HELPERS ===
+{helpers}
+# === END EDITABLE ===
+
+# === FIXED ===
+def run_packing():
+# === END FIXED ===
+    # === EDITABLE: RUN_PACKING_BODY ===
+{run_packing_body}
+    # === END EDITABLE ===

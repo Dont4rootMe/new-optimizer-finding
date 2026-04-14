@@ -40,10 +40,14 @@ def _make_cfg(tmp_path: Path) -> object:
             "experiments": {},
             "api_platforms": {"mock": {"_target_": "api_platforms.mock.platform.build_platform"}},
             "evolver": {
-                "generation": 3,
                 "resume": True,
-                "enabled": True,
                 "max_generations": 3,
+                "creation": {
+                    "max_attempts_to_create_organism": 1,
+                    "max_attempts_to_repair_organism_after_error": 1,
+                    "max_attempts_to_regenerate_organism_after_novelty_rejection": 1,
+                    "max_parallel_organisms": 1,
+                },
                 "islands": {
                     "dir": str(islands_dir),
                     "seed_organisms_per_island": 2,
@@ -55,11 +59,17 @@ def _make_cfg(tmp_path: Path) -> object:
                     "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
                     "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
                     "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
+                    "mutation_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/mutation/system.txt",
+                    "mutation_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/mutation/user.txt",
                     "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
                     "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
+                    "crossover_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/crossover/system.txt",
+                    "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                    "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
+                    "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
                 },
                 "reproduction": {
                     "offspring_per_generation": 1,
@@ -74,22 +84,26 @@ def _make_cfg(tmp_path: Path) -> object:
                         "inter_island_crossover": "unified",
                         "mutation": "unified",
                     },
+                    "species_sampling": {
+                        "strategy": "weighted_rule",
+                        "weighted_rule_lambda": 1.0,
+                        "mutation_softmax_temperature": 1.0,
+                        "within_island_crossover_softmax_temperature": 1.0,
+                        "inter_island_crossover_softmax_temperature": 1.0,
+                    },
                 },
                 "operators": {
                     "mutation": {
                         "gene_removal_probability": 0.2,
-                        "parent_selection_softmax_temperature": 1.0,
                     },
                     "crossover": {
                         "primary_parent_gene_inheritance_probability": 0.7,
-                        "parent_selection_softmax_temperature": 1.0,
                     },
                 },
                 "phases": {
                     "simple": {
                         "eval_mode": "smoke",
                         "timeout_sec_per_eval": 60,
-                        "top_k_per_island": 2,
                         "experiments": [],
                         "allocation": {},
                     },

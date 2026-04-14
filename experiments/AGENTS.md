@@ -23,7 +23,7 @@ That evaluator may delegate to package-local helpers such as:
 - Optional dependency experiments should raise [`OptionalDependencyError`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/experiments/optimization_survey/_runtime/errors.py) with a clear install hint.
 - If you add a new experiment package, also update:
   - `conf/experiments/<family>/<name>.yaml`
-  - `conf/config.yaml`
+  - the relevant top-level preset such as `conf/config_optimization_survey.yaml` or `conf/config_circle_packing_shinka.yaml`
   - the experiment YAML `_target_`
   - tests
 

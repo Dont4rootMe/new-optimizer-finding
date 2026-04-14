@@ -67,6 +67,7 @@ class OrganismMeta:
     prompt_hash: str = ""
     seed: int = 0
     pipeline_state: str = ""
+    error_msg: str | None = None
     planned_phase_evaluations: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -94,6 +95,7 @@ class OrganismMeta:
             "prompt_hash": self.prompt_hash,
             "seed": self.seed,
             "pipeline_state": self.pipeline_state,
+            "error_msg": self.error_msg,
             "planned_phase_evaluations": dict(self.planned_phase_evaluations),
         }
 
@@ -245,8 +247,8 @@ class PlannedPhaseEvaluation:
 
 
 @dataclass(slots=True)
-class PlannedOffspring:
-    """Persistent generation-plan entry for one not-yet-finalized offspring."""
+class PlannedOrganismCreation:
+    """Persistent creation-plan entry for one not-yet-finalized organism."""
 
     organism_id: str
     organism_dir: str
@@ -273,7 +275,7 @@ class PlannedOffspring:
         return payload
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "PlannedOffspring":
+    def from_dict(cls, payload: dict[str, Any]) -> "PlannedOrganismCreation":
         phase_payload = dict(payload.get("planned_phase_evaluations", {}))
         return cls(
             organism_id=str(payload["organism_id"]),
@@ -300,3 +302,8 @@ class PlannedOffspring:
                 for phase, plan in phase_payload.items()
             },
         )
+
+
+# Backward-compatible alias while the runtime migrates from offspring-only planning
+# to a shared seed/offspring creation pipeline.
+PlannedOffspring = PlannedOrganismCreation

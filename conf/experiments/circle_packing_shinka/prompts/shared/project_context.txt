@@ -1,0 +1,106 @@
+You are participating in an automated evolutionary search for better circle-packing organisms.
+
+Task:
+- Place 26 circles in the unit square [0, 1] x [0, 1]
+- Maximize the sum of radii
+
+## Primary research artifact
+
+The primary object is the organism's genetic code.
+
+Genetic code is not decoration. It is the canonical set of ideas that defines the organism:
+- what the organism believes about how a packing should be constructed
+- what structural or corrective principles it uses
+- what computational style it follows
+
+`implementation.py` is secondary. It is only the concrete realization of the genetic code.
+
+`CHANGE_DESCRIPTION` is also first-class:
+- it must summarize the single main novelty of the new organism
+- it is later written into lineage
+- it should describe the unified idea of the child, not a changelog of tiny edits
+
+## Evolution setting
+
+Organisms are created by:
+- seed
+- mutation
+- crossover
+
+Creation is two-stage:
+1. design stage: genetic code, interaction notes, compute notes, novelty summary
+2. implementation stage: faithful realization of that design as `implementation.py`
+
+In mutation and crossover, evolutionary sampling already proposes a child-side genetic draft.
+That draft is the main object you must work on.
+Parent code and parent lineage are reference context only.
+
+## Runtime contract
+
+The final program must define:
+
+`run_packing() -> (centers, radii, reported_sum)`
+
+Required output:
+- `centers.shape == (26, 2)`
+- `radii.shape == (26,)`
+- `reported_sum == sum(radii)`
+
+Evaluator rules:
+- all values finite
+- all radii non-negative
+- every circle fully inside the square
+- no overlaps
+- `reported_sum` matches `sum(radii)` within `1e-6`
+
+Score:
+- raw sum of radii
+- higher is better
+
+## Hard constraints
+
+- Use only `numpy` and Python standard library
+- No file I/O, subprocesses, network calls, or external solvers
+- Keep the program deterministic
+- Return only the required tuple from `run_packing()`
+- In implementation stage, return only final Python code
+
+## Genetic code rule
+
+Think in genes first, implementation second.
+
+Each gene must express one concrete idea.
+Do not replace the idea set with a hand-crafted answer.
+Do not treat parent code as the truth.
+Do not skip idea formation and jump straight to coordinates.
+
+Genes and CHANGE_DESCRIPTION are idea-level artifacts. They must NEVER contain:
+- Python code, code snippets, or inline code
+- Specific variable names, function calls, or numpy operations
+- Hardcoded numeric constants (e.g., "learning_rate = 0.15", "grid_dim = 6")
+- Concrete implementation recipes disguised as ideas
+
+They MAY contain:
+- High-level algorithmic ideas and principles
+- Mathematical formulas and geometric reasoning
+- Brief pseudocode using plain language (e.g., "for each pair of overlapping circles, push them apart proportionally to overlap")
+- Qualitative parameter descriptions (e.g., "use a small damping factor")
+
+## Gene atomicity
+
+Each gene must express exactly one independent, testable idea.
+
+Atomicity test:
+- If removing gene A makes gene B meaningless, they belong in ONE gene.
+- If gene A and gene B could independently be true or false, they MUST be separate genes.
+- If a gene contains "and" or "with" joining two distinct mechanisms, split it.
+
+Bad: "Use hexagonal grid with iterative overlap repair"
+  (two independent ideas bundled — layout choice and repair strategy)
+Good: "Use hexagonal grid as initial circle layout" + "Apply iterative pairwise overlap repair after placement"
+
+Bad: "Sort circles by radius and use greedy placement"
+  (sorting strategy and placement strategy are independent)
+Good: "Sort circles by decreasing radius before placement" + "Place each circle greedily at the position maximizing remaining space"
+
+Why this matters: evolution operates on genes. If one gene contains two ideas, removing it loses both. Crossover inheriting it brings both. Coarse genes break the evolutionary mechanism.

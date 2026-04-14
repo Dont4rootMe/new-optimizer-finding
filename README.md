@@ -34,7 +34,9 @@ Generic AI-for-science framework with:
 
 - `src/`: generic runtime, validation worker, and organism-first evolution engine
 - `experiments/optimization_survey/`: optimization-specific experiments and runtime helpers
+- `experiments/circle_packing_shinka/`: circle-packing task package inspired by ShinkaEvolve
 - `conf/experiments/optimization_survey/`: optimization-specific experiment configs and prompts
+- `conf/experiments/circle_packing_shinka/`: circle-packing configs and prompts
 - `tests/`: contract and integration coverage
 
 ## Install
@@ -57,26 +59,27 @@ pip install -e .[evolve]
 Smoke enabled experiments:
 
 ```bash
-python -m src.main mode=smoke
+python -m src.main --config-name config_optimization_survey mode=smoke
 ```
 
 Collect baseline stats:
 
 ```bash
-python -m src.main mode=stats
+python -m src.main --config-name config_optimization_survey mode=stats
 ```
 
 Run experiments against a concrete organism:
 
 ```bash
-python -m src.main mode=run organism_dir=/absolute/path/to/organism
+python -m src.main --config-name config_optimization_survey mode=run +organism_dir=/absolute/path/to/organism
 ```
 
 ## Evolution
 
 ```bash
-export OPENAI_API_KEY=...
-python -m src.main mode=evolve
+./scripts/seed_population.sh --config-name config_optimization_survey
+./scripts/run_evolution.sh --config-name config_optimization_survey
+./scripts/run_evolution.sh --seed --config-name config_optimization_survey
 ```
 
 The evolution engine is task-blind. It operates on organism folders and delegates all task-specific behavior to the configured experiments.
@@ -97,3 +100,44 @@ class CandidateController:
     def step(self, weights, grads, activations, step_fn): ...
     def zero_grad(self, set_to_none=True): ...
 ```
+
+## Circle Packing Shinka
+
+The repository also ships [`experiments/circle_packing_shinka/`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/experiments/circle_packing_shinka), a task family based on the ShinkaEvolve circle-packing benchmark.
+
+Use the dedicated preset:
+
+```bash
+python -m src.main --config-name config_circle_packing_shinka mode=run +organism_dir=/absolute/path/to/organism
+./scripts/seed_population.sh --config-name config_circle_packing_shinka
+./scripts/run_evolution.sh --config-name config_circle_packing_shinka
+./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka
+```
+
+That preset isolates the two local Ollama routes by default:
+
+- `gemma4:26b` on `http://127.0.0.1:12434/api` with `gpu_ranks=[0]`
+- `qwen3.5:27b` on `http://127.0.0.1:12435/api` with `gpu_ranks=[1]`
+
+The `scripts/*` wrappers auto-start one local Ollama service per distinct local `base_url`, pin it to the configured route GPU when `gpu_ranks` is set, and pull missing models before `seed` or `evolve` starts.
+By default, local Ollama weights are stored in `./ollama_cache` at the project root. Override that with `paths.ollama_cache_root=/absolute/path` or `OLLAMA_MODELS=/absolute/path`.
+
+## Concurrency knobs
+
+- `evolver.creation.max_parallel_organisms`: maximum number of organisms being created in parallel. Each creation task includes both LLM stages for one organism.
+- `evolver.creation.max_attempts_to_create_organism`: retry budget for one organism creation when LLM output or provider calls fail.
+- `evolver.creation.max_attempts_to_repair_organism_after_error`: maximum number of LLM repair passes after explicit evaluator errors for one organism phase evaluation.
+- `resources.evaluation.cpu_parallel_jobs`: number of CPU-only evaluation tasks that can run at once.
+- `resources.evaluation.gpu_ranks`: GPU evaluation worker slots. The number of concurrent GPU evaluation tasks equals the number of configured ranks.
+- `api_platforms.<route>.max_concurrency`: backend request concurrency for one routed model service, such as a local Ollama instance.
+
+Its organism contract is:
+
+```python
+def run_packing():
+    return centers, radii, reported_sum
+```
+
+where `centers.shape == (26, 2)`, `radii.shape == (26,)`, and `reported_sum == sum(radii)`.
+
+All user-facing entrypoints now require an explicit Hydra preset via `--config-name`.

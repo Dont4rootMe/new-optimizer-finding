@@ -49,9 +49,13 @@ class _BrokerClient(ApiPlatformClient):
         self.socket_path = socket_path
         self.timeout_sec = float(timeout_sec)
 
-    def ping(self) -> bool:
+    def ping(self, timeout_sec: float | None = None) -> bool:
         try:
-            payload = send_ipc_message(str(self.socket_path), {"type": "ping"}, self.timeout_sec)
+            payload = send_ipc_message(
+                str(self.socket_path),
+                {"type": "ping"},
+                self.timeout_sec if timeout_sec is None else float(timeout_sec),
+            )
         except Exception:  # noqa: BLE001
             return False
         return bool(payload.get("ok") and payload.get("pong"))
@@ -157,6 +161,10 @@ class ApiPlatformRegistry:
             self._clients[route_id] = _BrokerClient(self._socket_path(route_id), route_cfg.timeout_sec)
         return self._clients[route_id]
 
+    def _broker_probe_timeout_sec(self, route_id: str) -> float:
+        route_timeout = float(self.route_configs[route_id].timeout_sec)
+        return max(0.2, min(2.0, route_timeout))
+
     def _cleanup_stale_leases(self, route_id: str) -> None:
         for lease_path in self._lease_dir(route_id).glob("lease_*_*.json"):
             parts = lease_path.stem.split("_")
@@ -189,7 +197,7 @@ class ApiPlatformRegistry:
         socket_path = self._socket_path(route_id)
         if not socket_path.exists():
             return False
-        return self._client_for(route_id).ping()
+        return self._client_for(route_id).ping(timeout_sec=self._broker_probe_timeout_sec(route_id))
 
     def _spawn_broker(self, route_id: str) -> subprocess.Popen[Any]:
         route_cfg = self.route_configs[route_id]

@@ -13,6 +13,7 @@ This file applies to `conf/experiments/optimization_survey/prompts/mutation/`.
 
 - `inherited_gene_pool`
 - `removed_gene_pool`
+- `novelty_rejection_feedback`
 - `parent_genetic_code`
 - `parent_lineage_summary`
 - `parent_implementation_code`

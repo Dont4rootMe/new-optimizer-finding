@@ -18,10 +18,12 @@ This file applies to `src/validate/`.
   - `--precision`
   - `--mode`
   - `--config_path`
+  - `--config_name`
   - `--override`
 - Always write `output_json`, including failure cases.
 - The written payload must be a dict with at least `score`.
 - This worker should prepare and run one experiment only. Heavy orchestration belongs elsewhere.
+- `config.yaml` snapshots are auto-detected; repo-root config directories require explicit `--config_name`.
 
 ## Verification
 

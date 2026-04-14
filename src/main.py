@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-import logging
-
 import hydra
 from omegaconf import DictConfig
 
+from src.evolve.seed_run import _ensure_console_logging
+from src.runtime_config import ensure_root_runtime_config
 
-@hydra.main(config_path="../conf", config_name="config", version_base=None)
+
+@hydra.main(config_path="../conf", config_name=None, version_base=None)
 def main(cfg: DictConfig) -> None:
     """Dispatch to validate or evolve mode based on config."""
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
+    _ensure_console_logging()
+    ensure_root_runtime_config(cfg, context="src.main")
 
-    mode = str(cfg.mode)
+    mode = str(cfg.get("mode", "evolve"))
     if mode == "evolve":
         from src.evolve.run import run_evolution
 
