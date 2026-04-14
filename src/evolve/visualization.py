@@ -166,9 +166,22 @@ def _plot_best_vs_evaluations(ax: Any, records: list[OrganismVizRecord]) -> None
     xs = list(range(1, len(evaluated) + 1))
     ys = [record.simple_score for record in evaluated]
     best_scores = _cumulative_best(ys)
+    lineage = _maternal_lineage_points_by_evaluations(records, evaluated)
 
     ax.scatter(xs, ys, color="black", s=18, alpha=0.85, label="Individual Evals")
     ax.plot(xs, best_scores, color="#d62728", linewidth=2.0, label="Best Score")
+    if lineage:
+        ax.plot(
+            [point[0] for point in lineage],
+            [point[1] for point in lineage],
+            color="#1f77b4",
+            linestyle="--",
+            linewidth=2.0,
+            alpha=0.8,
+            marker="o",
+            markersize=5,
+            label="Current Best Maternal Line",
+        )
     ax.set_title("Best Score vs Evaluations", fontsize=16, fontweight="bold")
     ax.set_xlabel("# Evaluated Organisms", fontsize=12, fontweight="bold")
     ax.set_ylabel("Simple Score", fontsize=12, fontweight="bold")
@@ -210,18 +223,15 @@ def _plot_evaluations_per_generation(ax: Any, records: list[OrganismVizRecord]) 
 
 def _plot_operator_mix_by_generation(ax: Any, records: list[OrganismVizRecord]) -> None:
     counts_by_generation = _offspring_operator_counts_by_generation(records)
-    lineage = [record for record in _maternal_lineage(records) if record.simple_score is not None]
-
     generations = sorted(
         {
             generation
             for category_counts in counts_by_generation.values()
             for generation in category_counts
         }
-        | {record.generation_created for record in lineage}
     )
     if not generations:
-        return _empty_panel(ax, "No offspring or lineage records yet.")
+        return _empty_panel(ax, "No offspring records yet.")
 
     width = 0.24
     offsets = [-width, 0.0, width]
@@ -249,30 +259,8 @@ def _plot_operator_mix_by_generation(ax: Any, records: list[OrganismVizRecord]) 
     ax.set_xticklabels(generations)
     ax.grid(True, axis="y", alpha=0.25)
 
-    line_handles: list[Any] = []
-    line_labels: list[str] = []
-    if lineage:
-        lineage_ax = ax.twinx()
-        (line_handle,) = lineage_ax.plot(
-            [record.generation_created for record in lineage],
-            [record.simple_score for record in lineage],
-            color="#1f77b4",
-            linestyle="--",
-            linewidth=2.0,
-            alpha=0.75,
-            marker="o",
-            markersize=5,
-            label="Current Best Maternal Line",
-        )
-        lineage_ax.set_ylabel("Simple Score", fontsize=12, fontweight="bold", color="#1f77b4")
-        lineage_ax.tick_params(axis="y", colors="#1f77b4")
-        line_handles.append(line_handle)
-        line_labels.append("Current Best Maternal Line")
-
-    legend_handles = bar_handles + line_handles
-    legend_labels = bar_labels + line_labels
-    if legend_handles:
-        ax.legend(legend_handles, legend_labels, loc="upper left", fontsize=9)
+    if bar_handles:
+        ax.legend(bar_handles, bar_labels, loc="upper left", fontsize=9)
 
 
 def _plot_best_vs_runtime(ax: Any, records: list[OrganismVizRecord]) -> None:
@@ -288,9 +276,22 @@ def _plot_best_vs_runtime(ax: Any, records: list[OrganismVizRecord]) -> None:
     xs = [(record.simple_eval_finished_at - t0).total_seconds() for record in evaluated if record.simple_eval_finished_at]
     ys = [record.simple_score for record in evaluated]
     best_scores = _cumulative_best(ys)
+    lineage = _maternal_lineage_points_by_runtime(records, evaluated, t0)
 
     ax.scatter(xs, ys, color="black", s=18, alpha=0.85, label="Individual Evals")
     ax.plot(xs, best_scores, color="#d62728", linewidth=2.0, label="Best Score")
+    if lineage:
+        ax.plot(
+            [point[0] for point in lineage],
+            [point[1] for point in lineage],
+            color="#1f77b4",
+            linestyle="--",
+            linewidth=2.0,
+            alpha=0.8,
+            marker="o",
+            markersize=5,
+            label="Current Best Maternal Line",
+        )
     ax.xaxis.set_major_formatter(FuncFormatter(_format_elapsed_seconds))
     ax.set_title("Best Score vs Runtime", fontsize=16, fontweight="bold")
     ax.set_xlabel("Elapsed Runtime", fontsize=12, fontweight="bold")
@@ -448,6 +449,38 @@ def _maternal_lineage(records: list[OrganismVizRecord]) -> list[OrganismVizRecor
         cursor = records_by_id.get(cursor.mother_id)
     lineage.reverse()
     return lineage
+
+
+def _maternal_lineage_points_by_evaluations(
+    records: list[OrganismVizRecord],
+    evaluated: list[OrganismVizRecord],
+) -> list[tuple[int, float]]:
+    eval_index_by_id = {
+        record.organism_id: idx + 1
+        for idx, record in enumerate(evaluated)
+    }
+    return [
+        (eval_index_by_id[record.organism_id], float(record.simple_score))
+        for record in _maternal_lineage(records)
+        if record.simple_score is not None and record.organism_id in eval_index_by_id
+    ]
+
+
+def _maternal_lineage_points_by_runtime(
+    records: list[OrganismVizRecord],
+    evaluated: list[OrganismVizRecord],
+    t0: datetime,
+) -> list[tuple[float, float]]:
+    elapsed_by_id = {
+        record.organism_id: float((record.simple_eval_finished_at - t0).total_seconds())
+        for record in evaluated
+        if record.simple_eval_finished_at is not None
+    }
+    return [
+        (elapsed_by_id[record.organism_id], float(record.simple_score))
+        for record in _maternal_lineage(records)
+        if record.simple_score is not None and record.organism_id in elapsed_by_id
+    ]
 
 
 def _offspring_operator_counts_by_generation(
