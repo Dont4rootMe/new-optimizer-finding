@@ -10,8 +10,8 @@ creation:
 
 islands:
   dir: conf/experiments/circle_packing_shinka/prompts/islands
-  seed_organisms_per_island: 3
-  max_organisms_per_island: 10
+  seed_organisms_per_island: 5
+  max_organisms_per_island: 15
 
 prompts:
   project_context: conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt
