@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -11,6 +12,8 @@ from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 from api_platforms._core.types import ApiRouteConfig, LlmRequest, LlmResponse
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _utc_now_iso() -> str:
@@ -212,6 +215,49 @@ def _ollama_chat_url(base_url: str | None) -> str:
     return normalized + "/api/chat"
 
 
+def _ollama_tags_url(base_url: str | None) -> str:
+    normalized = str(base_url or "http://127.0.0.1:11434/api").rstrip("/")
+    parsed = urllib_parse.urlparse(normalized)
+    if parsed.hostname == "localhost":
+        netloc = parsed.netloc.replace("localhost", "127.0.0.1", 1)
+        normalized = urllib_parse.urlunparse(parsed._replace(netloc=netloc))
+    if normalized.endswith("/chat"):
+        return normalized[: -len("/chat")] + "/tags"
+    if normalized.endswith("/api"):
+        return normalized + "/tags"
+    return normalized + "/api/tags"
+
+
+def _single_line(value: str, *, limit: int = 120) -> str:
+    text = " ".join(str(value).split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def _ollama_probe_summary(base_url: str | None, timeout_sec: float) -> str:
+    probe_url = _ollama_tags_url(base_url)
+    probe_timeout = min(3.0, max(1.0, float(timeout_sec)))
+    probe_request = urllib_request.Request(probe_url, method="GET")
+    try:
+        with urllib_request.urlopen(probe_request, timeout=probe_timeout) as response:
+            status = getattr(response, "status", None)
+            body_prefix = _single_line(response.read(160).decode("utf-8", errors="replace"))
+        if body_prefix:
+            return f"url={probe_url!r} ok=True status={status} body_prefix={body_prefix!r}"
+        return f"url={probe_url!r} ok=True status={status}"
+    except urllib_error.HTTPError as exc:
+        error_body = _single_line(exc.read(160).decode("utf-8", errors="replace"))
+        if error_body:
+            return f"url={probe_url!r} ok=False status={exc.code} body_prefix={error_body!r}"
+        return f"url={probe_url!r} ok=False status={exc.code}"
+    except urllib_error.URLError as exc:
+        reason = getattr(exc, "reason", exc)
+        return f"url={probe_url!r} ok=False error={type(reason).__name__}: {reason}"
+    except Exception as exc:  # noqa: BLE001
+        return f"url={probe_url!r} ok=False error={type(exc).__name__}: {exc}"
+
+
 def _drop_none_entries(value: Any) -> Any:
     if isinstance(value, dict):
         return {key: _drop_none_entries(item) for key, item in value.items() if item is not None}
@@ -402,6 +448,7 @@ def generate_direct(route_cfg: ApiRouteConfig, request: LlmRequest) -> LlmRespon
         import json
 
         request_payload = _ollama_request_payload(route_cfg, request)
+        request_url = _ollama_chat_url(route_cfg.base_url)
         encoded = json.dumps(request_payload).encode("utf-8")
         headers = {"Content-Type": "application/json"}
         api_key_env = str(route_cfg.api_key_env or "").strip()
@@ -411,18 +458,80 @@ def generate_direct(route_cfg: ApiRouteConfig, request: LlmRequest) -> LlmRespon
                 headers["Authorization"] = f"Bearer {api_key}"
 
         http_request = urllib_request.Request(
-            _ollama_chat_url(route_cfg.base_url),
+            request_url,
             data=encoded,
             headers=headers,
             method="POST",
         )
+        organism_id = str(request.metadata.get("organism_id", ""))
+        timeout_sec = float(route_cfg.timeout_sec)
         try:
-            with urllib_request.urlopen(http_request, timeout=float(route_cfg.timeout_sec)) as response:
-                response_payload = json.loads(response.read().decode("utf-8"))
+            with urllib_request.urlopen(http_request, timeout=timeout_sec) as response:
+                raw_response = response.read().decode("utf-8")
         except urllib_error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
+            LOGGER.exception(
+                "Ollama HTTP error route=%s url=%s stage=%s organism_id=%s timeout=%s",
+                route_cfg.route_id,
+                request_url,
+                request.stage,
+                organism_id or "<missing>",
+                timeout_sec,
+            )
             raise RuntimeError(
-                f"Ollama request failed for route '{route_cfg.route_id}' with status {exc.code}: {error_body}"
+                f"Ollama request failed for route '{route_cfg.route_id}' at {request_url!r} "
+                f"(stage={request.stage!r}, organism_id={organism_id!r}, timeout={timeout_sec}): "
+                f"HTTP {exc.code}: {_single_line(error_body)!r}"
+            ) from exc
+        except urllib_error.URLError as exc:
+            reason = getattr(exc, "reason", exc)
+            probe_summary = _ollama_probe_summary(route_cfg.base_url, timeout_sec)
+            LOGGER.exception(
+                "Ollama network error route=%s url=%s stage=%s organism_id=%s timeout=%s probe={%s}",
+                route_cfg.route_id,
+                request_url,
+                request.stage,
+                organism_id or "<missing>",
+                timeout_sec,
+                probe_summary,
+            )
+            raise RuntimeError(
+                f"Ollama request failed for route '{route_cfg.route_id}' at {request_url!r} "
+                f"(stage={request.stage!r}, organism_id={organism_id!r}, timeout={timeout_sec}): "
+                f"{type(reason).__name__}: {reason}; tags_probe={probe_summary}"
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            probe_summary = _ollama_probe_summary(route_cfg.base_url, timeout_sec)
+            LOGGER.exception(
+                "Ollama unexpected error route=%s url=%s stage=%s organism_id=%s timeout=%s probe={%s}",
+                route_cfg.route_id,
+                request_url,
+                request.stage,
+                organism_id or "<missing>",
+                timeout_sec,
+                probe_summary,
+            )
+            raise RuntimeError(
+                f"Ollama request failed for route '{route_cfg.route_id}' at {request_url!r} "
+                f"(stage={request.stage!r}, organism_id={organism_id!r}, timeout={timeout_sec}): "
+                f"{type(exc).__name__}: {exc}; tags_probe={probe_summary}"
+            ) from exc
+
+        try:
+            response_payload = json.loads(raw_response)
+        except json.JSONDecodeError as exc:
+            LOGGER.exception(
+                "Ollama returned non-JSON route=%s url=%s stage=%s organism_id=%s timeout=%s",
+                route_cfg.route_id,
+                request_url,
+                request.stage,
+                organism_id or "<missing>",
+                timeout_sec,
+            )
+            raise RuntimeError(
+                f"Ollama request for route '{route_cfg.route_id}' at {request_url!r} "
+                f"returned non-JSON response (stage={request.stage!r}, organism_id={organism_id!r}): "
+                f"{_single_line(raw_response)!r}"
             ) from exc
 
         message = response_payload.get("message", {})

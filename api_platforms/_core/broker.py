@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import multiprocessing as mp
 import os
 import queue
@@ -16,6 +17,8 @@ from api_platforms._core.local_worker import local_worker_main
 from api_platforms._core.providers import generate_direct
 from api_platforms._core.types import ApiPlatformBroker, ApiRouteConfig, LlmRequest, LlmResponse
 from src.evolve.storage import ensure_dir, write_json
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _utc_now_iso() -> str:
@@ -148,6 +151,16 @@ class RouteBroker(ApiPlatformBroker):
                 "backend": self.route_cfg.backend,
                 "started_at": _utc_now_iso(),
             },
+        )
+        LOGGER.info(
+            "Started route broker route=%s backend=%s provider=%s base_url=%s max_concurrency=%s gpu_ranks=%s socket=%s",
+            self.route_cfg.route_id,
+            self.route_cfg.backend,
+            self.route_cfg.provider,
+            self.route_cfg.base_url,
+            self.route_cfg.max_concurrency,
+            list(self.route_cfg.gpu_ranks or []),
+            self.socket_path,
         )
 
     def _handle_message(self, payload: dict[str, Any]) -> dict[str, Any]:

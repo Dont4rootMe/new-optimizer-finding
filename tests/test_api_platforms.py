@@ -6,6 +6,7 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib import error as urllib_error
 
 import pytest
 from omegaconf import OmegaConf
@@ -376,3 +377,55 @@ def test_ollama_route_applies_stage_specific_generation_overrides(monkeypatch: p
         "top_logprobs": 4,
     }
     assert response.raw_request == captured["body"]
+
+
+def test_ollama_route_wraps_network_errors_with_request_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    route_cfg = ApiRouteConfig(
+        route_id="ollama_qwen35_27b",
+        provider="ollama",
+        provider_model_id="qwen3.5:27b",
+        backend="ollama",
+        base_url="http://localhost:11435/api",
+        timeout_sec=30.0,
+    )
+    request = LlmRequest(
+        route_id="ollama_qwen35_27b",
+        stage="design",
+        system_prompt="system prompt",
+        user_prompt="user prompt",
+        seed=123,
+        metadata={"organism_id": "org001"},
+    )
+
+    class FakeTagsResponse:
+        status = 200
+
+        def __enter__(self) -> "FakeTagsResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self, _size: int = -1) -> bytes:
+            return b'{"models":[]}'
+
+    def fake_urlopen(http_request, timeout: float):
+        assert timeout in {30.0, 3.0}
+        if http_request.full_url == "http://127.0.0.1:11435/api/chat":
+            raise urllib_error.URLError(ConnectionRefusedError(111, "Connection refused"))
+        if http_request.full_url == "http://127.0.0.1:11435/api/tags":
+            return FakeTagsResponse()
+        raise AssertionError(f"unexpected URL {http_request.full_url!r}")
+
+    monkeypatch.setattr(provider_backends.urllib_request, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        generate_direct(route_cfg, request)
+
+    message = str(excinfo.value)
+    assert "route 'ollama_qwen35_27b'" in message
+    assert "http://127.0.0.1:11435/api/chat" in message
+    assert "stage='design'" in message
+    assert "organism_id='org001'" in message
+    assert "ConnectionRefusedError: [Errno 111] Connection refused" in message
+    assert "tags_probe=url='http://127.0.0.1:11435/api/tags' ok=True status=200" in message
