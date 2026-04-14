@@ -179,7 +179,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
-    assert cfg.evolver.creation.max_parallel_organisms == 5
+    assert cfg.evolver.creation.max_parallel_organisms == 2
     assert cfg.evolver.islands.seed_organisms_per_island == 3
     assert cfg.evolver.islands.max_organisms_per_island == 10
     assert cfg.evolver.reproduction.species_sampling.strategy == "weighted_rule"
@@ -193,8 +193,8 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert set(cfg.evolver.llm.route_weights.keys()) == {"ollama_qwen35_27b", "ollama_gemma4_26b"}
     assert cfg.evolver.llm.route_weights.ollama_qwen35_27b == 1.0
     assert cfg.evolver.llm.route_weights.ollama_gemma4_26b == 1.0
-    assert cfg.api_platforms.ollama_qwen35_27b.max_concurrency == 5
-    assert cfg.api_platforms.ollama_gemma4_26b.max_concurrency == 5
+    assert cfg.api_platforms.ollama_qwen35_27b.max_concurrency == 1
+    assert cfg.api_platforms.ollama_gemma4_26b.max_concurrency == 1
 
     qwen_route = instantiate(cfg.api_platforms.ollama_qwen35_27b, _recursive_=False)
     gemma_route = instantiate(cfg.api_platforms.ollama_gemma4_26b, _recursive_=False)
@@ -202,15 +202,21 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert qwen_route.provider_model_id == "qwen3.5:27b"
     assert qwen_route.base_url == "http://127.0.0.1:12435/api"
     assert qwen_route.gpu_ranks == [1]
-    assert qwen_route.stage_options["design"]["think"] == "medium"
+    assert qwen_route.stage_options["design"]["think"] == "high"
+    assert qwen_route.stage_options["design"]["temperature"] == 0.7
     assert qwen_route.stage_options["implementation"]["max_output_tokens"] == 4096
+    assert qwen_route.stage_options["implementation"]["think"] is False
+    assert qwen_route.stage_options["implementation"]["temperature"] == 0.2
     assert qwen_route.stage_options["novelty_check"]["temperature"] == 0.1
     assert qwen_route.request_options["num_ctx"] == 65536
     assert gemma_route.route_id == "ollama_gemma4_26b"
     assert gemma_route.provider_model_id == "gemma4:26b"
     assert gemma_route.base_url == "http://127.0.0.1:12434/api"
     assert gemma_route.gpu_ranks == [0]
-    assert gemma_route.stage_options["implementation"]["think"] == "medium"
+    assert gemma_route.stage_options["design"]["think"] == "high"
+    assert gemma_route.stage_options["design"]["temperature"] == 0.7
+    assert gemma_route.stage_options["implementation"]["think"] is False
+    assert gemma_route.stage_options["implementation"]["temperature"] == 0.2
     assert gemma_route.stage_options["repair"]["top_k"] == 64
     assert gemma_route.stage_options["novelty_check"]["top_k"] == 64
 
@@ -228,7 +234,7 @@ def test_circle_packing_canonical_preset_accepts_standalone_validation_overrides
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
-    assert cfg.evolver.creation.max_parallel_organisms == 5
+    assert cfg.evolver.creation.max_parallel_organisms == 2
 
 
 def test_awtf2025_heuristic_config_composes() -> None:
