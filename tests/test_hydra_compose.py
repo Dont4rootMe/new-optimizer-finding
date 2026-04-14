@@ -133,28 +133,32 @@ def test_optimization_survey_canonical_preset_accepts_standalone_validation_over
 
 def test_all_shipped_api_platform_route_configs_instantiate() -> None:
     conf_dir = ROOT / "conf"
-    route_names = {
-        "mock",
-        "gpt_5_4",
-        "gpt_5_4_mini",
-        "gpt_5_4_nano",
-        "claude_opus_46",
-        "claude_sonnet_46",
-        "claude_haiku_45",
-        "ollama_gemma4_26b",
-        "ollama_qwen35_27b",
-        "gemma_4_26b_a4b_it",
-        "gemma_4_31b_it",
-        "qwen35_27b_claude46_opus_distilled",
-        "qwen35_27b",
-        "qwen35_35b_a3b",
+    route_expectations = {
+        "mock": "mock-model",
+        "gpt_5_4": "gpt-5.4",
+        "gpt_5_4_mini": "gpt-5.4-mini",
+        "gpt_5_4_nano": "gpt-5.4-nano",
+        "claude_opus_46": "claude-opus-4.6",
+        "claude_sonnet_46": "claude-sonnet-4.6",
+        "claude_haiku_45": "claude-haiku-4.5",
+        "ollama_gemma4_26b": "gemma4:26b",
+        "ollama_gemma4_31b": "gemma4:31b",
+        "ollama_qwen35_27b": "qwen3.5:27b",
+        "ollama_qwen35_35b": "qwen3.5:35b",
+        "ollama_qwen35_122b": "qwen3.5:122b",
+        "gemma_4_26b_a4b_it": "google/gemma-4-26B-A4B-it",
+        "gemma_4_31b_it": "google/gemma-4-31B-it",
+        "qwen35_27b_claude46_opus_distilled": "Jackrong/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled",
+        "qwen35_27b": "Qwen/Qwen3.5-27B",
+        "qwen35_35b_a3b": "Qwen/Qwen3.5-35B-A3B",
     }
     with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
-        for route_name in route_names:
+        for route_name, provider_model_id in route_expectations.items():
             overrides = [] if route_name == "mock" else [f"+api_platforms@api_platforms.{route_name}={route_name}"]
             cfg = compose(config_name="config_optimization_survey", overrides=overrides)
             route_cfg = instantiate(cfg.api_platforms[route_name], _recursive_=False)
             assert route_cfg.route_id == route_name
+            assert route_cfg.provider_model_id == provider_model_id
 
 
 def test_circle_packing_shinka_config_composes() -> None:
