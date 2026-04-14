@@ -15,7 +15,7 @@ num_workers: 0
 resources:
   evaluation:
     gpu_ranks: []
-    cpu_parallel_jobs: 5
+    cpu_parallel_jobs: 25
 
 paths:
   data_root: ${oc.env:AIFS_DATA_ROOT,./data}
