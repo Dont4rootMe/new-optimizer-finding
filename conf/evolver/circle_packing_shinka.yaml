@@ -1,5 +1,5 @@
 resume: true
-max_generations: 150
+max_generations: 50
 max_retries_per_eval: 0
 
 creation:
