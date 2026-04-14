@@ -939,6 +939,61 @@ _ensure_ollama_model() {
     "$(_ollama_pull_url "$base_url")" | _stream_ollama_pull_progress "$model"
 }
 
+_ollama_chat_url() {
+  local base_url
+  base_url="$(_normalize_ollama_base_url "$1")"
+  if [[ "$base_url" == */api/chat ]]; then
+    printf '%s\n' "$base_url"
+    return
+  fi
+  if [[ "$base_url" == */api ]]; then
+    printf '%s\n' "${base_url}/chat"
+    return
+  fi
+  printf '%s\n' "${base_url}/api/chat"
+}
+
+_warmup_ollama_model() {
+  local base_url="$1"
+  local model="$2"
+  local chat_url max_wait_sec attempt status_code
+
+  chat_url="$(_ollama_chat_url "$base_url")"
+  max_wait_sec=300
+
+  echo "Warming up model ${model} at ${base_url} (forcing GPU load)..."
+  local start_ts
+  start_ts="$(date +%s)"
+
+  for attempt in $(seq 1 "$max_wait_sec"); do
+    status_code="$(
+      curl -sS -o /dev/null -w '%{http_code}' --max-time "$max_wait_sec" \
+        -H 'Content-Type: application/json' \
+        -X POST \
+        -d "{\"model\":\"${model}\",\"messages\":[{\"role\":\"user\",\"content\":\"say ok\"}],\"stream\":false,\"options\":{\"num_predict\":4}}" \
+        "$chat_url" 2>/dev/null
+    )" || true
+
+    if [[ "$status_code" == "200" ]]; then
+      local elapsed=$(( $(date +%s) - start_ts ))
+      echo "  model ${model} warmed up successfully (${elapsed}s)."
+      return 0
+    fi
+
+    if [[ "$status_code" == "500" || "$status_code" == "503" || "$status_code" == "000" ]]; then
+      sleep 2
+      continue
+    fi
+
+    echo "  warmup got HTTP ${status_code}, retrying in 2s..."
+    sleep 2
+  done
+
+  echo "Warning: model ${model} warmup did not get HTTP 200 within ${max_wait_sec}s (last status=${status_code})." >&2
+  echo "  Proceeding anyway — first real requests may be slow or fail if the model is still loading." >&2
+  return 0
+}
+
 ensure_ollama_runtime() {
   local root_dir="$1"
   shift
@@ -1018,5 +1073,11 @@ ensure_ollama_runtime() {
       echo "Error: failed to prepare Ollama model ${model} for route ${route_id}." >&2
       return 1
     }
+  done
+
+  for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
+    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency <<<"$route"
+    base_url="$(_normalize_ollama_base_url "$base_url")"
+    _warmup_ollama_model "$base_url" "$model"
   done
 }

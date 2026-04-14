@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 from pathlib import Path
 
 from omegaconf import DictConfig
@@ -729,6 +730,16 @@ class CandidateGenerator(BaseLlmGenerator):
             generation=generation,
         )
 
+    @staticmethod
+    def _retry_backoff_sec(attempt: int) -> float:
+        """Compute backoff delay for retry *attempt* (1-based, delay applied after failure).
+
+        Schedule: 1 s, 5 s, 10 s, 15 s, 20 s, … (+5 s each step after the second).
+        """
+        if attempt <= 1:
+            return 1.0
+        return 5.0 * (attempt - 1)
+
     def run_creation_stages_with_retries(
         self,
         *,
@@ -764,6 +775,13 @@ class CandidateGenerator(BaseLlmGenerator):
                     max_attempts,
                     last_error,
                 )
+                if attempt < max_attempts:
+                    delay = self._retry_backoff_sec(attempt)
+                    _announce(
+                        f"organism {organism_id} retrying in {delay:.0f}s "
+                        f"(attempt {attempt}/{max_attempts})"
+                    )
+                    time.sleep(delay)
 
         raise RuntimeError(
             "Failed to generate valid organism after "
