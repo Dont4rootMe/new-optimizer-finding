@@ -24,7 +24,7 @@ paths:
   runs_root: ${oc.env:AIFS_RUNS_ROOT,./runs}
   candidate_results_dirname: results
   population_root: ${oc.env:POP_ROOT,./populations/circle-packing}
-  api_platform_runtime_root: ${oc.env:API_PLATFORM_RUNTIME_ROOT,./.api_platform_runtime}
+  api_platform_runtime_root: ${oc.env:API_PLATFORM_RUNTIME_ROOT,./.api_platform_runtime_circle-packing}
   ollama_cache_root: ${oc.env:OLLAMA_MODELS,./ollama_cache}
 
 
