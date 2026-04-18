@@ -33,6 +33,7 @@ from pathlib import Path
 
 from hydra import compose, initialize_config_dir
 
+from api_platforms._core.config import derive_ollama_instance_configs
 from api_platforms._core.discovery import load_route_configs
 
 
@@ -83,12 +84,13 @@ def main() -> int:
     for route_id, route_cfg in sorted(load_route_configs(cfg).items()):
         if route_cfg.backend != "ollama":
             continue
-        base_url = str(route_cfg.base_url or "http://127.0.0.1:11434/api").rstrip("/")
-        gpu_ranks = ",".join(str(rank) for rank in route_cfg.gpu_ranks)
-        max_concurrency = max(1, int(route_cfg.max_concurrency))
-        print(
-            f"OLLAMA_ROUTE={route_id}|{base_url}|{route_cfg.provider_model_id}|{gpu_ranks}|{max_concurrency}"
-        )
+        for instance_cfg in derive_ollama_instance_configs(route_cfg):
+            base_url = str(instance_cfg.base_url or "http://127.0.0.1:11434/api").rstrip("/")
+            gpu_ranks = ",".join(str(rank) for rank in instance_cfg.gpu_ranks)
+            max_concurrency = max(1, int(instance_cfg.max_concurrency))
+            print(
+                f"OLLAMA_ROUTE={route_id}|{base_url}|{instance_cfg.provider_model_id}|{gpu_ranks}|{max_concurrency}"
+            )
     return 0
 
 
@@ -793,7 +795,7 @@ PY
 _start_local_ollama() {
   local base_url="$1"
   local runtime_root="$2"
-  local gpu_rank="${3:-}"
+  local gpu_group="${3:-}"
   local models_dir="${4:-}"
   local num_parallel="${5:-}"
   local origin log_dir log_name stdout_log stderr_log pid_file
@@ -806,8 +808,8 @@ _start_local_ollama() {
 
   origin="$(_ollama_origin "$base_url")"
   launch_env=(env "OLLAMA_HOST=${origin}" "OLLAMA_MODELS=${models_dir}")
-  if [[ -n "$gpu_rank" ]]; then
-    launch_env+=("CUDA_VISIBLE_DEVICES=${gpu_rank}")
+  if [[ -n "$gpu_group" ]]; then
+    launch_env+=("CUDA_VISIBLE_DEVICES=${gpu_group}")
   fi
   if [[ -n "$num_parallel" && "$num_parallel" -gt 0 ]]; then
     launch_env+=("OLLAMA_NUM_PARALLEL=${num_parallel}")
@@ -820,8 +822,8 @@ _start_local_ollama() {
   stderr_log="${log_dir}/serve.${log_name}.stderr.log"
   pid_file="${log_dir}/serve.${log_name}.pid"
 
-  if [[ -n "$gpu_rank" ]]; then
-    echo "Starting local Ollama server for ${base_url} on gpu:${gpu_rank} (num_parallel=${num_parallel:-default})."
+  if [[ -n "$gpu_group" ]]; then
+    echo "Starting local Ollama server for ${base_url} on gpu:${gpu_group} (num_parallel=${num_parallel:-default})."
   else
     echo "Starting local Ollama server for ${base_url} (num_parallel=${num_parallel:-default})."
   fi
@@ -885,8 +887,8 @@ _start_local_ollama() {
       ;;
   esac
 
-  if [[ -n "$gpu_rank" && "$verdict" == "cpu" ]]; then
-    echo "Error: Ollama at ${base_url} (requested gpu:${gpu_rank}) fell back to CPU-only inference." >&2
+  if [[ -n "$gpu_group" && "$verdict" == "cpu" ]]; then
+    echo "Error: Ollama at ${base_url} (requested gpu:${gpu_group}) fell back to CPU-only inference." >&2
     echo "  Running a quantized qwen35 on CPU takes tens of minutes per generation and will look like a hang." >&2
     echo "  Inspect: tail -n 80 ${stderr_log}" >&2
     echo "  Likely cause: this Ollama build is missing CUDA runtime libs (common with conda-forge ollama)." >&2
@@ -904,7 +906,7 @@ _start_local_ollama() {
 _ensure_ollama_server() {
   local base_url="$1"
   local runtime_root="$2"
-  local gpu_rank="${3:-}"
+  local gpu_group="${3:-}"
   local models_dir="${4:-}"
   local num_parallel="${5:-}"
   if _ollama_healthcheck "$base_url"; then
@@ -912,7 +914,7 @@ _ensure_ollama_server() {
   fi
 
   if _ollama_is_local "$base_url"; then
-    _start_local_ollama "$base_url" "$runtime_root" "$gpu_rank" "$models_dir" "$num_parallel" || return 1
+    _start_local_ollama "$base_url" "$runtime_root" "$gpu_group" "$models_dir" "$num_parallel" || return 1
     return 0
   fi
 
@@ -1012,18 +1014,13 @@ ensure_ollama_runtime() {
   declare -A server_gpu_by_url=()
   declare -A server_url_by_gpu=()
   declare -A server_num_parallel_by_url=()
-  local route route_id base_url model gpu_ranks_csv gpu_rank max_concurrency
+  local route route_id base_url model gpu_ranks_csv gpu_group max_concurrency
+  local -a gpu_group_ranks=()
+  local rank
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
     IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
-    gpu_rank=""
-    if [[ -n "$gpu_ranks_csv" ]]; then
-      if [[ "$gpu_ranks_csv" == *,* ]]; then
-        echo "Error: local Ollama route ${route_id} must define at most one gpu_ranks entry, got '${gpu_ranks_csv}'." >&2
-        return 1
-      fi
-      gpu_rank="$gpu_ranks_csv"
-    fi
+    gpu_group="$gpu_ranks_csv"
     if [[ -z "$max_concurrency" || "$max_concurrency" -lt 1 ]]; then
       max_concurrency=1
     fi
@@ -1031,21 +1028,26 @@ ensure_ollama_runtime() {
       continue
     fi
     if [[ -n "${server_gpu_by_url[$base_url]+x}" ]]; then
-      if [[ "${server_gpu_by_url[$base_url]}" != "$gpu_rank" ]]; then
-        echo "Error: local Ollama base_url ${base_url} is assigned conflicting gpu_ranks (${server_gpu_by_url[$base_url]} vs ${gpu_rank})." >&2
+      if [[ "${server_gpu_by_url[$base_url]}" != "$gpu_group" ]]; then
+        echo "Error: local Ollama base_url ${base_url} is assigned conflicting gpu_ranks (${server_gpu_by_url[$base_url]} vs ${gpu_group})." >&2
         echo "Use distinct base_url values for routes that must stay on different GPUs." >&2
         return 1
       fi
     else
-      server_gpu_by_url["$base_url"]="$gpu_rank"
+      server_gpu_by_url["$base_url"]="$gpu_group"
     fi
-    if [[ -n "$gpu_rank" ]]; then
-      if [[ -n "${server_url_by_gpu[$gpu_rank]+x}" && "${server_url_by_gpu[$gpu_rank]}" != "$base_url" ]]; then
-        echo "Error: local Ollama gpu:${gpu_rank} is assigned to multiple base_url values (${server_url_by_gpu[$gpu_rank]} and ${base_url})." >&2
-        echo "Each local Ollama GPU should correspond to exactly one local service base_url." >&2
-        return 1
-      fi
-      server_url_by_gpu["$gpu_rank"]="$base_url"
+    gpu_group_ranks=()
+    if [[ -n "$gpu_group" ]]; then
+      IFS=',' read -r -a gpu_group_ranks <<<"$gpu_group"
+      for rank in "${gpu_group_ranks[@]}"; do
+        [[ -n "$rank" ]] || continue
+        if [[ -n "${server_url_by_gpu[$rank]+x}" && "${server_url_by_gpu[$rank]}" != "$base_url" ]]; then
+          echo "Error: local Ollama gpu:${rank} is assigned to multiple base_url values (${server_url_by_gpu[$rank]} and ${base_url})." >&2
+          echo "Each local Ollama GPU should correspond to exactly one local service base_url." >&2
+          return 1
+        fi
+        server_url_by_gpu["$rank"]="$base_url"
+      done
     fi
     # Server serves every route mapped to the same base_url simultaneously,
     # so the number of parallel slots must cover the *sum* of the routes'
@@ -1063,10 +1065,10 @@ ensure_ollama_runtime() {
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
     IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
-    gpu_rank="${server_gpu_by_url[$base_url]-}"
+    gpu_group="${server_gpu_by_url[$base_url]-}"
     num_parallel="${server_num_parallel_by_url[$base_url]-}"
     if [[ -z "${started_base_urls[$base_url]+x}" ]]; then
-      _ensure_ollama_server "$base_url" "$OLLAMA_RUNTIME_ROOT" "$gpu_rank" "$OLLAMA_MODELS_DIR" "$num_parallel" || return 1
+      _ensure_ollama_server "$base_url" "$OLLAMA_RUNTIME_ROOT" "$gpu_group" "$OLLAMA_MODELS_DIR" "$num_parallel" || return 1
       started_base_urls["$base_url"]=1
     fi
     _ensure_ollama_model "$base_url" "$model" "$OLLAMA_MODELS_DIR" || {

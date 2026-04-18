@@ -12,10 +12,12 @@ import pytest
 from omegaconf import OmegaConf
 
 from api_platforms import ApiPlatformRegistry, LlmRequest
+from api_platforms._core import broker as broker_module
 from api_platforms._core import registry as registry_module
 from api_platforms._core import providers as provider_backends
+from api_platforms._core.config import build_route_config, derive_ollama_instance_configs
 from api_platforms._core.providers import generate_direct
-from api_platforms._core.types import ApiRouteConfig
+from api_platforms._core.types import ApiRouteConfig, LlmResponse
 from src.evolve.generator import CandidateGenerator
 from src.evolve.types import Island
 
@@ -155,6 +157,95 @@ def test_mock_local_route_processes_requests_concurrently(tmp_path: Path) -> Non
         assert elapsed < 1.1
     finally:
         registry.stop()
+
+
+def test_build_route_config_normalizes_grouped_ollama_gpu_ranks() -> None:
+    route_cfg = build_route_config(
+        route_id="ollama_qwen35_122b",
+        provider="ollama",
+        provider_model_id="qwen3.5:122b",
+        backend="ollama",
+        base_url="http://127.0.0.1:11434/api",
+        gpu_ranks=[[0, 1, 2], [3, 4, 5]],
+        max_concurrency=3,
+    )
+
+    assert route_cfg.gpu_ranks == [0, 1, 2, 3, 4, 5]
+    assert route_cfg.gpu_rank_groups == [[0, 1, 2], [3, 4, 5]]
+
+    instances = derive_ollama_instance_configs(route_cfg)
+    assert [instance.base_url for instance in instances] == [
+        "http://127.0.0.1:11434/api",
+        "http://127.0.0.1:11435/api",
+    ]
+    assert [instance.gpu_ranks for instance in instances] == [[0, 1, 2], [3, 4, 5]]
+    assert all(instance.gpu_rank_groups == [instance.gpu_ranks] for instance in instances)
+    assert all(instance.max_concurrency == 3 for instance in instances)
+
+
+def test_non_ollama_route_rejects_multi_gpu_grouped_gpu_ranks() -> None:
+    with pytest.raises(ValueError, match="Only ollama routes support multi-GPU grouped gpu_ranks"):
+        build_route_config(
+            route_id="mock_local",
+            provider="mock_local",
+            provider_model_id="mock-local-model",
+            backend="mock_local",
+            gpu_ranks=[[0, 1], [2, 3]],
+        )
+
+
+def test_ollama_broker_dispatches_across_grouped_instances(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    route_cfg = build_route_config(
+        route_id="ollama_qwen35_122b",
+        provider="ollama",
+        provider_model_id="qwen3.5:122b",
+        backend="ollama",
+        base_url="http://127.0.0.1:11434/api",
+        gpu_ranks=[[0, 1, 2], [3, 4, 5]],
+        max_concurrency=1,
+        timeout_sec=5.0,
+    )
+
+    def fake_generate_direct(instance_cfg: ApiRouteConfig, request: LlmRequest) -> LlmResponse:
+        time.sleep(0.15)
+        return LlmResponse(
+            text=f"ok:{request.metadata['organism_id']}",
+            route_id=instance_cfg.route_id,
+            provider=instance_cfg.provider,
+            provider_model_id=instance_cfg.provider_model_id,
+            raw_request={"base_url": instance_cfg.base_url},
+            raw_response={"base_url": instance_cfg.base_url, "gpu_ranks": list(instance_cfg.gpu_ranks)},
+            usage={},
+            started_at="2026-01-01T00:00:00+0000",
+            finished_at="2026-01-01T00:00:01+0000",
+        )
+
+    monkeypatch.setattr(broker_module, "generate_direct", fake_generate_direct)
+
+    broker = broker_module.RouteBroker(route_cfg, tmp_path / "runtime")
+    try:
+        def run_one(index: int) -> str:
+            request = LlmRequest(
+                route_id="ollama_qwen35_122b",
+                stage="design",
+                system_prompt="sys",
+                user_prompt=f"user {index}",
+                seed=123,
+                metadata={"organism_id": f"org{index}"},
+            )
+            payload = broker._handle_message({"type": "generate", "request": request.to_dict()})
+            assert payload["ok"] is True
+            return str(payload["response"]["raw_response"]["base_url"])
+
+        started = time.perf_counter()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            urls = list(pool.map(run_one, range(2)))
+        elapsed = time.perf_counter() - started
+
+        assert set(urls) == {"http://127.0.0.1:11434/api", "http://127.0.0.1:11435/api"}
+        assert elapsed < 0.35
+    finally:
+        broker.stop()
 
 
 def test_seed_generation_uses_one_route_for_both_stages(tmp_path: Path) -> None:

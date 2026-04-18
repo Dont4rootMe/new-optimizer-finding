@@ -123,6 +123,9 @@ PY
                 printf '{"status":"verifying sha256 digest"}\\n'
                 printf '{"status":"success"}\\n'
                 ;;
+              */api/chat)
+                printf '200'
+                ;;
               *)
                 echo "unexpected curl url: $url" >&2
                 exit 1
@@ -356,7 +359,8 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
     _write_fake_python(
         fake_python,
         ollama_routes=[
-            ("ollama_qwen35_27b", "http://127.0.0.1:11435/api", "qwen3.5:27b", "1"),
+            ("ollama_qwen35_122b", "http://127.0.0.1:11434/api", "qwen3.5:122b", "0,1,2"),
+            ("ollama_qwen35_122b", "http://127.0.0.1:11435/api", "qwen3.5:122b", "3,4,5"),
         ],
     )
     _write_fake_local_ollama_commands(fake_bin)
@@ -381,7 +385,7 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
 
     assert completed.returncode == 0
     assert "Starting local Ollama server" in completed.stdout
-    assert "Pulling Ollama model qwen3.5:27b" in completed.stdout
+    assert completed.stdout.count("Pulling Ollama model qwen3.5:122b") == 2
     assert "local model store:" in completed.stdout
     assert "downloading:" in completed.stdout
     module_calls = [
@@ -393,8 +397,10 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
         "-m src.main --config-name config_circle_packing_shinka mode=evolve",
     ]
     ollama_calls = ollama_calls_path.read_text(encoding="utf-8")
-    assert "host=127.0.0.1:11435 gpu=1 | serve" in ollama_calls
-    assert "host=127.0.0.1:11435 gpu=1 | stopped" in ollama_calls
+    assert "host=127.0.0.1:11434 gpu=0,1,2 | serve" in ollama_calls
+    assert "host=127.0.0.1:11435 gpu=3,4,5 | serve" in ollama_calls
+    assert "host=127.0.0.1:11434 gpu=0,1,2 | stopped" in ollama_calls
+    assert "host=127.0.0.1:11435 gpu=3,4,5 | stopped" in ollama_calls
     curl_calls = curl_calls_path.read_text(encoding="utf-8").splitlines()
     assert any("/api/tags" in line for line in curl_calls)
     assert any("/api/pull" in line for line in curl_calls)

@@ -108,6 +108,9 @@ PY
                 printf '{"status":"verifying sha256 digest"}\\n'
                 printf '{"status":"success"}\\n'
                 ;;
+              */api/chat)
+                printf '200'
+                ;;
               *)
                 echo "unexpected curl url: $url" >&2
                 exit 1
@@ -314,7 +317,7 @@ def test_seed_population_shell_wrapper_auto_starts_local_ollama(tmp_path: Path) 
     _write_fake_python(
         fake_python,
         ollama_routes=[
-            ("ollama_qwen35_27b", "http://127.0.0.1:11434/api", "qwen3.5:27b", "0"),
+            ("ollama_qwen35_122b", "http://127.0.0.1:11434/api", "qwen3.5:122b", "0,1,2"),
         ],
     )
     _write_fake_local_ollama_commands(fake_bin)
@@ -339,7 +342,7 @@ def test_seed_population_shell_wrapper_auto_starts_local_ollama(tmp_path: Path) 
 
     assert completed.returncode == 0
     assert "Starting local Ollama server" in completed.stdout
-    assert "Pulling Ollama model qwen3.5:27b" in completed.stdout
+    assert "Pulling Ollama model qwen3.5:122b" in completed.stdout
     assert "local model store:" in completed.stdout
     assert "pulling manifest" in completed.stdout
     assert "downloading:" in completed.stdout
@@ -352,8 +355,8 @@ def test_seed_population_shell_wrapper_auto_starts_local_ollama(tmp_path: Path) 
         "-m src.evolve.seed_run --config-name config_circle_packing_shinka",
     ]
     ollama_calls = ollama_calls_path.read_text(encoding="utf-8")
-    assert "host=127.0.0.1:11434 gpu=0 | serve" in ollama_calls
-    assert "host=127.0.0.1:11434 gpu=0 | stopped" in ollama_calls
+    assert "host=127.0.0.1:11434 gpu=0,1,2 | serve" in ollama_calls
+    assert "host=127.0.0.1:11434 gpu=0,1,2 | stopped" in ollama_calls
     curl_calls = curl_calls_path.read_text(encoding="utf-8").splitlines()
     assert any("/api/tags" in line for line in curl_calls)
     assert any("/api/pull" in line for line in curl_calls)
@@ -373,8 +376,8 @@ def test_seed_population_shell_wrapper_auto_starts_multiple_local_ollama_servers
     _write_fake_python(
         fake_python,
         ollama_routes=[
-            ("ollama_gemma4_26b", "http://127.0.0.1:11434/api", "gemma4:26b", "0"),
-            ("ollama_qwen35_27b", "http://127.0.0.1:11435/api", "qwen3.5:27b", "1"),
+            ("ollama_qwen35_122b", "http://127.0.0.1:11434/api", "qwen3.5:122b", "0,1,2"),
+            ("ollama_qwen35_122b", "http://127.0.0.1:11435/api", "qwen3.5:122b", "3,4,5"),
         ],
     )
     _write_fake_local_ollama_commands(fake_bin)
@@ -398,10 +401,9 @@ def test_seed_population_shell_wrapper_auto_starts_multiple_local_ollama_servers
     )
 
     assert completed.returncode == 0
-    assert "Starting local Ollama server for http://127.0.0.1:11434/api on gpu:0" in completed.stdout
-    assert "Starting local Ollama server for http://127.0.0.1:11435/api on gpu:1" in completed.stdout
-    assert "Pulling Ollama model gemma4:26b" in completed.stdout
-    assert "Pulling Ollama model qwen3.5:27b" in completed.stdout
+    assert "Starting local Ollama server for http://127.0.0.1:11434/api on gpu:0,1,2" in completed.stdout
+    assert "Starting local Ollama server for http://127.0.0.1:11435/api on gpu:3,4,5" in completed.stdout
+    assert completed.stdout.count("Pulling Ollama model qwen3.5:122b") == 2
     assert "local model store:" in completed.stdout
     assert "verifying sha256 digest" in completed.stdout
     module_calls = [
@@ -413,10 +415,10 @@ def test_seed_population_shell_wrapper_auto_starts_multiple_local_ollama_servers
         "-m src.evolve.seed_run --config-name config_circle_packing_shinka",
     ]
     ollama_calls = ollama_calls_path.read_text(encoding="utf-8").splitlines()
-    assert any("host=127.0.0.1:11434 gpu=0 | serve" in line for line in ollama_calls)
-    assert any("host=127.0.0.1:11435 gpu=1 | serve" in line for line in ollama_calls)
-    assert any("host=127.0.0.1:11434 gpu=0 | stopped" in line for line in ollama_calls)
-    assert any("host=127.0.0.1:11435 gpu=1 | stopped" in line for line in ollama_calls)
+    assert any("host=127.0.0.1:11434 gpu=0,1,2 | serve" in line for line in ollama_calls)
+    assert any("host=127.0.0.1:11435 gpu=3,4,5 | serve" in line for line in ollama_calls)
+    assert any("host=127.0.0.1:11434 gpu=0,1,2 | stopped" in line for line in ollama_calls)
+    assert any("host=127.0.0.1:11435 gpu=3,4,5 | stopped" in line for line in ollama_calls)
     curl_calls = curl_calls_path.read_text(encoding="utf-8").splitlines()
     assert any("http://127.0.0.1:11434/api/pull" in line for line in curl_calls)
     assert any("http://127.0.0.1:11435/api/pull" in line for line in curl_calls)
@@ -432,8 +434,8 @@ def test_seed_population_shell_wrapper_rejects_conflicting_local_ollama_gpu_assi
     _write_fake_python(
         fake_python,
         ollama_routes=[
-            ("ollama_gemma4_26b", "http://127.0.0.1:11434/api", "gemma4:26b", "0"),
-            ("ollama_qwen35_27b", "http://127.0.0.1:11434/api", "qwen3.5:27b", "1"),
+            ("ollama_qwen35_122b", "http://127.0.0.1:11434/api", "qwen3.5:122b", "0,1,2"),
+            ("ollama_qwen35_122b", "http://127.0.0.1:11434/api", "qwen3.5:122b", "3,4,5"),
         ],
     )
 

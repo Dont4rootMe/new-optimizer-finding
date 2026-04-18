@@ -116,12 +116,11 @@ python -m src.main --config-name config_circle_packing_shinka mode=run +organism
 ./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka
 ```
 
-That preset isolates the two local Ollama routes by default:
+That preset now uses one logical local Ollama route by default:
 
-- `gemma4:26b` on `http://127.0.0.1:12434/api` with `gpu_ranks=[0]`
-- `qwen3.5:27b` on `http://127.0.0.1:12435/api` with `gpu_ranks=[1]`
+- `qwen3.5:122b` rooted at `http://127.0.0.1:12434/api` with `gpu_ranks=[[0,1,2],[3,4,5]]`
 
-The `scripts/*` wrappers auto-start one local Ollama service per distinct local `base_url`, pin it to the configured route GPU when `gpu_ranks` is set, and pull missing models before `seed` or `evolve` starts.
+For grouped local Ollama routes, the `scripts/*` wrappers auto-start one local service per GPU group. Instance 0 keeps the configured `base_url`, later instances use incremented localhost ports, and each service receives its own `CUDA_VISIBLE_DEVICES` group before models are pulled and warmed.
 By default, local Ollama weights are stored in `./ollama_cache` at the project root. Override that with `paths.ollama_cache_root=/absolute/path` or `OLLAMA_MODELS=/absolute/path`.
 
 ## Concurrency knobs
@@ -131,7 +130,8 @@ By default, local Ollama weights are stored in `./ollama_cache` at the project r
 - `evolver.creation.max_attempts_to_repair_organism_after_error`: maximum number of LLM repair passes after explicit evaluator errors for one organism phase evaluation.
 - `resources.evaluation.cpu_parallel_jobs`: number of CPU-only evaluation tasks that can run at once.
 - `resources.evaluation.gpu_ranks`: GPU evaluation worker slots. The number of concurrent GPU evaluation tasks equals the number of configured ranks.
-- `api_platforms.<route>.max_concurrency`: backend request concurrency for one routed model service, such as a local Ollama instance.
+- `api_platforms.<route>.gpu_ranks`: route GPU allocation. For Ollama routes, `int` means one GPU, `list[int]` means one multi-GPU instance, and `list[list[int]]` means multiple instances of the same model.
+- `api_platforms.<route>.max_concurrency`: backend request concurrency per concrete routed model service, such as one local Ollama instance.
 
 Its organism contract is:
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 import logging
 import multiprocessing as mp
 import os
@@ -12,6 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from api_platforms._core.config import derive_ollama_instance_configs
 from api_platforms._core.ipc import read_json_line, write_json_line
 from api_platforms._core.local_worker import local_worker_main
 from api_platforms._core.providers import generate_direct
@@ -107,6 +109,40 @@ class _LocalWorkerPool:
                 process.terminate()
 
 
+class _DirectInstancePool:
+    """Dispatch direct backend requests across concrete route instances."""
+
+    def __init__(self, instance_configs: list[ApiRouteConfig]) -> None:
+        if not instance_configs:
+            raise ValueError("_DirectInstancePool requires at least one instance config")
+        self.instance_configs = list(instance_configs)
+        self._condition = threading.Condition()
+        self._available_slots: deque[int] = deque()
+        max_slots = max(1, max(int(cfg.max_concurrency) for cfg in self.instance_configs))
+        for slot_index in range(max_slots):
+            for instance_index, instance_cfg in enumerate(self.instance_configs):
+                if slot_index < max(1, int(instance_cfg.max_concurrency)):
+                    self._available_slots.append(instance_index)
+
+    def _acquire_instance_index(self) -> int:
+        with self._condition:
+            while not self._available_slots:
+                self._condition.wait()
+            return self._available_slots.popleft()
+
+    def _release_instance_index(self, instance_index: int) -> None:
+        with self._condition:
+            self._available_slots.append(instance_index)
+            self._condition.notify()
+
+    def generate(self, request: LlmRequest) -> LlmResponse:
+        instance_index = self._acquire_instance_index()
+        try:
+            return generate_direct(self.instance_configs[instance_index], request)
+        finally:
+            self._release_instance_index(instance_index)
+
+
 class RouteBroker(ApiPlatformBroker):
     """Unix-socket broker serving one route config."""
 
@@ -119,6 +155,11 @@ class RouteBroker(ApiPlatformBroker):
         self._server: socketserver.ThreadingUnixStreamServer | None = None
         self._semaphore = threading.BoundedSemaphore(max(1, int(route_cfg.max_concurrency)))
         self._local_pool = _LocalWorkerPool(route_cfg) if route_cfg.backend in {"transformers", "mock_local"} else None
+        self._direct_pool = (
+            _DirectInstancePool(derive_ollama_instance_configs(route_cfg))
+            if route_cfg.backend == "ollama"
+            else None
+        )
 
     def start(self) -> None:
         if self.socket_path.exists():
@@ -153,13 +194,14 @@ class RouteBroker(ApiPlatformBroker):
             },
         )
         LOGGER.info(
-            "Started route broker route=%s backend=%s provider=%s base_url=%s max_concurrency=%s gpu_ranks=%s socket=%s",
+            "Started route broker route=%s backend=%s provider=%s base_url=%s max_concurrency=%s gpu_ranks=%s gpu_rank_groups=%s socket=%s",
             self.route_cfg.route_id,
             self.route_cfg.backend,
             self.route_cfg.provider,
             self.route_cfg.base_url,
             self.route_cfg.max_concurrency,
             list(self.route_cfg.gpu_ranks or []),
+            [list(group) for group in self.route_cfg.gpu_rank_groups or []],
             self.socket_path,
         )
 
@@ -174,11 +216,14 @@ class RouteBroker(ApiPlatformBroker):
             raise ValueError(f"Unsupported broker message type '{message_type}'.")
 
         request = LlmRequest.from_dict(dict(payload["request"]))
-        with self._semaphore:
-            if self._local_pool is not None:
-                response = self._local_pool.generate(request)
-            else:
-                response = generate_direct(self.route_cfg, request)
+        if self._direct_pool is not None:
+            response = self._direct_pool.generate(request)
+        else:
+            with self._semaphore:
+                if self._local_pool is not None:
+                    response = self._local_pool.generate(request)
+                else:
+                    response = generate_direct(self.route_cfg, request)
         return {"ok": True, "response": response.to_dict()}
 
     def serve_forever(self) -> None:

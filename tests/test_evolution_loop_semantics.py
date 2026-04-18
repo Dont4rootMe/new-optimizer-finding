@@ -7,6 +7,7 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
 from omegaconf import OmegaConf
 
 from src.evolve.evolution_loop import EvolutionLoop
@@ -232,6 +233,25 @@ def test_orchestrator_defaults_to_run_one_and_reads_queue_sizes(tmp_path: Path) 
         assert orchestrator.cpu_parallel_jobs == 3
     finally:
         orchestrator.close()
+
+
+def test_orchestrator_rejects_grouped_route_gpu_overlap_with_evaluation_pool(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        resources={"evaluation": {"gpu_ranks": [4], "cpu_parallel_jobs": 3}},
+        api_platforms={
+            "ollama_qwen35_122b": {
+                "_target_": "api_platforms.ollama_qwen35_122b.platform.build_platform",
+                "base_url": "http://127.0.0.1:12434/api",
+                "gpu_ranks": [[0, 1, 2], [3, 4, 5]],
+                "max_concurrency": 3,
+            }
+        },
+        evolver={"llm": {"route_weights": {"ollama_qwen35_122b": 1.0}, "seed": 123}},
+    )
+
+    with pytest.raises(ValueError, match=r"overlapping ranks: \[4\]"):
+        EvolverOrchestrator(cfg)
 
 
 def test_deterministic_operator_selection_allocates_exact_counts(tmp_path: Path) -> None:

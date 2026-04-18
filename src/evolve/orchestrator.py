@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from omegaconf import DictConfig, OmegaConf
 
+from api_platforms._core.discovery import load_route_configs
 from src.evolve.allocation import build_allocation_snapshot
 from src.evolve.gpu_pool import GpuJobPool
 from src.evolve.scoring import mean_score
@@ -45,6 +46,7 @@ class EvolverOrchestrator:
         self.population_root = Path(str(cfg.paths.population_root)).expanduser().resolve()
         self.eval_config_dir = self._persist_eval_config_snapshot()
         self.experiment_requirements = self._resolve_experiment_requirements()
+        self.api_route_configs = load_route_configs(cfg)
         self.gpu_ranks, self.cpu_parallel_jobs = self._resolve_evaluation_resources()
         self.eval_entrypoint_module = self._resolve_eval_entrypoint_module()
         self.max_repair_attempts_per_organism = self._resolve_max_repair_attempts_per_organism()
@@ -119,10 +121,8 @@ class EvolverOrchestrator:
 
     def _collect_api_platform_gpu_ranks(self) -> list[int]:
         route_gpu_ranks: list[int] = []
-        for route_cfg in dict(self.cfg.get("api_platforms", {})).values():
-            if not hasattr(route_cfg, "get"):
-                continue
-            route_gpu_ranks.extend(self._normalize_gpu_ranks(route_cfg.get("gpu_ranks")))
+        for route_cfg in self.api_route_configs.values():
+            route_gpu_ranks.extend(route_cfg.gpu_ranks)
         return route_gpu_ranks
 
     def _validate_gpu_disjointness(self) -> None:
