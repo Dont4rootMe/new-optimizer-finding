@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from omegaconf import DictConfig
 
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 @dataclass(slots=True)
 class PromptBundle:
@@ -25,8 +29,6 @@ class PromptBundle:
     repair_system: str
     repair_user: str
 
-from pathlib import Path
-
 
 def _read_path(path: Path) -> str:
     if not path.exists():
@@ -41,6 +43,10 @@ def _resolve_prompt_path(cfg: DictConfig, key: str) -> Path:
     candidate = Path(str(prompts_cfg[key])).expanduser()
     if candidate.exists():
         return candidate.resolve()
+    if not candidate.is_absolute():
+        repo_relative = (REPO_ROOT / candidate).resolve()
+        if repo_relative.exists():
+            return repo_relative
     raise FileNotFoundError(f"Configured prompt file for '{key}' was not found: {candidate}")
 
 
