@@ -66,7 +66,17 @@ def test_parse_genetic_code_text_accepts_markdown_payload() -> None:
 
 def test_manual_pipeline_requires_explicit_experiment_for_multi_experiment_config() -> None:
     with pytest.raises(ValueError, match="multiple experiments"):
-        load_manual_pipeline_context(config_name="config_optimization_survey")
+        load_manual_pipeline_context(config_name="optimization_survey")
+
+
+def test_manual_pipeline_accepts_short_config_name_alias() -> None:
+    context = load_manual_pipeline_context(
+        config_name="circle_packing_shinka",
+        experiment_name="unit_square_26",
+    )
+
+    assert context.config_name == "config_circle_packing_shinka"
+    assert context.experiment_name == "unit_square_26"
 
 
 def test_manual_prompt_helpers_build_expected_sections() -> None:

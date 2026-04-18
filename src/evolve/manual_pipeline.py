@@ -22,6 +22,30 @@ from src.organisms.organism import build_implementation_prompt
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _resolve_root_config_name(config_name: str) -> str:
+    """Resolve a user-facing preset name to a top-level Hydra config name."""
+
+    raw = str(config_name).strip()
+    if not raw:
+        raise ValueError("config_name must not be empty.")
+
+    normalized = raw[:-5] if raw.endswith(".yaml") else raw
+    conf_dir = ROOT / "conf"
+
+    direct = conf_dir / f"{normalized}.yaml"
+    if direct.exists():
+        return normalized
+
+    prefixed = conf_dir / f"config_{normalized}.yaml"
+    if prefixed.exists():
+        return f"config_{normalized}"
+
+    raise FileNotFoundError(
+        f"Could not find top-level config preset '{config_name}' in {conf_dir}. "
+        f"Tried '{normalized}' and 'config_{normalized}'."
+    )
+
+
 @dataclass(slots=True)
 class ManualPipelineContext:
     """Resolved config and prompt bundle for notebook-driven manual runs."""
@@ -47,8 +71,9 @@ def load_manual_pipeline_context(
     """Load one repo config preset and resolve the selected experiment."""
 
     conf_dir = ROOT / "conf"
+    resolved_config_name = _resolve_root_config_name(config_name)
     with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
-        cfg = compose(config_name=str(config_name), overrides=list(overrides or []))
+        cfg = compose(config_name=resolved_config_name, overrides=list(overrides or []))
 
     experiments = [str(name) for name in cfg.experiments.keys()]
     if not experiments:
@@ -77,7 +102,7 @@ def load_manual_pipeline_context(
     )
     return ManualPipelineContext(
         repo_root=ROOT,
-        config_name=str(config_name),
+        config_name=resolved_config_name,
         experiment_name=selected_experiment,
         cfg=cfg,
         experiment_cfg=experiment_cfg,
