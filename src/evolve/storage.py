@@ -326,17 +326,15 @@ def write_genetic_code(path: str | Path, genetic_code: dict[str, Any]) -> Path:
     return out
 
 
-def read_genetic_code(path: str | Path) -> dict[str, Any]:
-    target = Path(path)
-    if not target.exists():
-        raise FileNotFoundError(f"Canonical genetic code is missing at {target}")
+def parse_genetic_code_text(text: str) -> dict[str, Any]:
+    """Parse canonical `genetic_code.md` text into the shared dict payload."""
 
-    sections = _parse_genetic_code_sections(target.read_text(encoding="utf-8"))
+    sections = _parse_genetic_code_sections(str(text))
     required_sections = ("CORE_GENES", "INTERACTION_NOTES", "COMPUTE_NOTES")
     missing_sections = [section for section in required_sections if section not in sections]
     if missing_sections:
         missing = ", ".join(missing_sections)
-        raise ValueError(f"Canonical genetic code at {target} is malformed; missing required sections: {missing}")
+        raise ValueError(f"Canonical genetic code text is malformed; missing required sections: {missing}")
 
     core_genes_raw = sections.get("CORE_GENES", "")
     core_genes: list[str] = []
@@ -347,13 +345,24 @@ def read_genetic_code(path: str | Path) -> dict[str, Any]:
         if cleaned:
             core_genes.append(cleaned)
     if not core_genes:
-        raise ValueError(f"Canonical genetic code at {target} must contain at least one CORE_GENES bullet.")
+        raise ValueError("Canonical genetic code text must contain at least one CORE_GENES bullet.")
 
     return {
         "core_genes": core_genes,
         "interaction_notes": sections.get("INTERACTION_NOTES", ""),
         "compute_notes": sections.get("COMPUTE_NOTES", ""),
     }
+
+
+def read_genetic_code(path: str | Path) -> dict[str, Any]:
+    target = Path(path)
+    if not target.exists():
+        raise FileNotFoundError(f"Canonical genetic code is missing at {target}")
+
+    try:
+        return parse_genetic_code_text(target.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise ValueError(f"Canonical genetic code at {target} is malformed: {exc}") from exc
 
 
 def write_lineage(path: str | Path, lineage: list[dict[str, Any]]) -> Path:

@@ -65,12 +65,33 @@ def _build_mutate_prompt(
     parent_genetic_code = read_organism_genetic_code(parent)
     parent_lineage = read_organism_lineage(parent)
 
+    return build_mutation_prompt_from_artifacts(
+        inherited_genes=inherited_genes,
+        removed_genes=removed_genes,
+        parent_genetic_code=parent_genetic_code,
+        parent_lineage=parent_lineage,
+        prompts=prompts,
+        novelty_feedback=novelty_feedback,
+    )
+
+
+def build_mutation_prompt_from_artifacts(
+    *,
+    inherited_genes: list[str],
+    removed_genes: list[str],
+    parent_genetic_code: dict[str, Any],
+    parent_lineage: list[dict[str, Any]],
+    prompts: PromptBundle,
+    novelty_feedback: list[str] | None = None,
+) -> tuple[str, str]:
+    """Build mutation prompts from raw canonical artifacts."""
+
     system = compose_system_prompt(prompts.project_context, prompts.mutation_system)
     user = prompts.mutation_user.format(
         inherited_gene_pool="\n".join(f"- {gene}" for gene in inherited_genes) or "(none)",
         removed_gene_pool="\n".join(f"- {gene}" for gene in removed_genes) or "(none)",
-        parent_genetic_code=format_genetic_code(parent_genetic_code),
-        parent_lineage_summary=format_lineage_summary(parent_lineage),
+        parent_genetic_code=format_genetic_code(dict(parent_genetic_code)),
+        parent_lineage_summary=format_lineage_summary(list(parent_lineage)),
         novelty_rejection_feedback=format_novelty_rejection_feedback(list(novelty_feedback or [])),
     )
     return system, user

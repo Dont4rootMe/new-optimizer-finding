@@ -73,13 +73,36 @@ def _build_crossbreed_prompt(
     mother_lineage = read_organism_lineage(mother)
     father_lineage = read_organism_lineage(father)
 
+    return build_crossover_prompt_from_artifacts(
+        inherited_genes=inherited_genes,
+        mother_genetic_code=read_organism_genetic_code(mother),
+        mother_lineage=mother_lineage,
+        father_genetic_code=read_organism_genetic_code(father),
+        father_lineage=father_lineage,
+        prompts=prompts,
+        novelty_feedback=novelty_feedback,
+    )
+
+
+def build_crossover_prompt_from_artifacts(
+    *,
+    inherited_genes: list[str],
+    mother_genetic_code: dict[str, Any],
+    mother_lineage: list[dict[str, Any]],
+    father_genetic_code: dict[str, Any],
+    father_lineage: list[dict[str, Any]],
+    prompts: PromptBundle,
+    novelty_feedback: list[str] | None = None,
+) -> tuple[str, str]:
+    """Build crossover prompts from raw canonical artifacts."""
+
     system = compose_system_prompt(prompts.project_context, prompts.crossover_system)
     user = prompts.crossover_user.format(
         inherited_gene_pool="\n".join(f"- {gene}" for gene in inherited_genes) or "(none)",
-        mother_genetic_code=format_genetic_code(read_organism_genetic_code(mother)),
-        mother_lineage_summary=format_lineage_summary(mother_lineage),
-        father_genetic_code=format_genetic_code(read_organism_genetic_code(father)),
-        father_lineage_summary=format_lineage_summary(father_lineage),
+        mother_genetic_code=format_genetic_code(dict(mother_genetic_code)),
+        mother_lineage_summary=format_lineage_summary(list(mother_lineage)),
+        father_genetic_code=format_genetic_code(dict(father_genetic_code)),
+        father_lineage_summary=format_lineage_summary(list(father_lineage)),
         novelty_rejection_feedback=format_novelty_rejection_feedback(list(novelty_feedback or [])),
     )
     return system, user

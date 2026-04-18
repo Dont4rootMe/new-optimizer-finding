@@ -232,10 +232,29 @@ def build_implementation_prompt_from_design(
 
     genetic_code = build_genetic_code_from_design_response(parsed)
     change_description = require_response_section(parsed, "CHANGE_DESCRIPTION")
+    return build_implementation_prompt(
+        genetic_code=genetic_code,
+        change_description=change_description,
+        prompts=prompts,
+    )
+
+
+def build_implementation_prompt(
+    *,
+    genetic_code: dict[str, Any],
+    change_description: str,
+    prompts: PromptBundle,
+) -> tuple[str, str]:
+    """Build the shared implementation prompt from canonical genetic-code artifacts."""
+
+    normalized_change_description = str(change_description).strip()
+    if not normalized_change_description:
+        raise ValueError("Implementation prompt requires a non-empty CHANGE_DESCRIPTION.")
+
     system = compose_system_prompt(prompts.project_context, prompts.implementation_system)
     user = prompts.implementation_user.format(
-        organism_genetic_code=format_genetic_code(genetic_code),
-        change_description=change_description,
+        organism_genetic_code=format_genetic_code(dict(genetic_code)),
+        change_description=normalized_change_description,
         implementation_template=prompts.implementation_template,
     )
     return system, user

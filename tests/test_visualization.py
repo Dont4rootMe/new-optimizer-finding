@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from src.evolve.visualization import (
     OrganismVizRecord,
     _best_active_simple_score,
+    _evenly_sample_records,
     _format_score,
     _maternal_lineage,
     _offspring_operator_counts_by_generation,
@@ -16,6 +17,7 @@ from src.evolve.visualization import (
     _plot_best_vs_evaluations,
     _plot_best_vs_runtime,
     _plot_operator_mix_by_generation,
+    _sample_records_for_render,
 )
 
 
@@ -325,3 +327,65 @@ def test_operator_mix_plot_shows_aggregated_totals_without_lineage_overlay() -> 
         assert len(fig.axes) == 1
     finally:
         plt.close(fig)
+
+
+def test_sample_records_for_render_preserves_best_maternal_line() -> None:
+    records = [
+        _record(organism_id="seed", simple_score=0.2, active=False),
+        _record(
+            organism_id="mid",
+            simple_score=0.5,
+            active=False,
+            generation_created=1,
+            operator="mutation",
+            mother_id="seed",
+        ),
+        _record(
+            organism_id="best",
+            simple_score=0.8,
+            active=True,
+            generation_created=2,
+            operator="crossover",
+            mother_id="mid",
+            father_id="other_parent",
+        ),
+        _record(organism_id="other_parent", simple_score=0.7, active=False, generation_created=1),
+        _record(organism_id="later", simple_score=0.6, active=False, generation_created=3),
+    ]
+
+    sampled = _sample_records_for_render(records, max_evaluated_points=3)
+
+    assert {record.organism_id for record in sampled} == {"seed", "mid", "best"}
+
+
+def test_evenly_sample_records_spreads_across_history() -> None:
+    records = [
+        _record(organism_id=f"org_{idx}", simple_score=float(idx), active=False)
+        for idx in range(6)
+    ]
+
+    sampled = _evenly_sample_records(records, 3)
+
+    assert [record.organism_id for record in sampled] == ["org_1", "org_3", "org_5"]
+
+
+def test_offspring_operator_totals_can_use_full_context_for_sampled_records() -> None:
+    records = [
+        _record(organism_id="seed_a", simple_score=0.1, active=False, island_id="island_a"),
+        _record(organism_id="seed_b", simple_score=0.2, active=False, island_id="island_b"),
+        _record(
+            organism_id="cross_inter",
+            simple_score=0.5,
+            active=True,
+            island_id="island_a",
+            generation_created=2,
+            operator="crossover",
+            mother_id="seed_a",
+            father_id="seed_b",
+        ),
+    ]
+
+    sampled = [records[-1]]
+    totals = _offspring_operator_totals(sampled, context_records=records)
+
+    assert totals["inter_island_crossover"] == 1

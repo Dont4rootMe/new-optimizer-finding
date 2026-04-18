@@ -64,31 +64,58 @@ class OrganismVizRecord:
 def render_evolution_overview(population_root: str | Path) -> Path | None:
     """Render the latest static overview image into `population_root`."""
 
+    return render_evolution_overview_sampled(population_root)
+
+
+def render_evolution_overview_sampled(
+    population_root: str | Path,
+    *,
+    max_evaluated_points: int | None = None,
+    output_filename: str = OVERVIEW_FILENAME,
+) -> Path | None:
+    """Render the latest static overview image into `population_root`.
+
+    When `max_evaluated_points` is set, render a deterministic evaluation sample
+    that preserves the current best maternal line and active evaluated records.
+    """
+
     root = Path(population_root).expanduser().resolve()
-    records, current_generation, active_count = _load_records(root)
-    if not records:
+    all_records, current_generation, _ = _load_records(root)
+    if not all_records:
         return None
+
+    records = _sample_records_for_render(
+        all_records,
+        max_evaluated_points=max_evaluated_points,
+    )
+    active_count = sum(1 for record in records if record.active)
 
     fig, axes = plt.subplots(2, 3, figsize=(24, 14))
     fig.patch.set_facecolor("white")
 
     title = "Evolution Results"
-    subtitle = (
-        f"Generation {current_generation} | active organisms: {active_count} | "
-        f"tracked organisms: {len(records)} | best active score: "
-        f"{_format_score(_best_active_simple_score(records))}"
-    )
+    if max_evaluated_points is None:
+        subtitle = (
+            f"Generation {current_generation} | active organisms: {active_count} | "
+            f"tracked organisms: {len(records)} | best active score: "
+            f"{_format_score(_best_active_simple_score(records))}"
+        )
+    else:
+        subtitle = (
+            f"Generation {current_generation} | active organisms shown: {active_count} | "
+            f"best active score: {_format_score(_best_active_simple_score(records))}"
+        )
     fig.suptitle(f"{title}\n{subtitle}", fontsize=20, fontweight="bold", y=0.98)
 
     _plot_best_vs_evaluations(axes[0, 0], records)
     _plot_evaluations_per_generation(axes[0, 1], records)
-    _plot_operator_mix_by_generation(axes[0, 2], records)
+    _plot_operator_mix_by_generation(axes[0, 2], records, context_records=all_records)
     _plot_best_vs_runtime(axes[1, 0], records)
     _plot_score_by_island(axes[1, 1], records)
     _plot_score_by_model(axes[1, 2], records)
 
     fig.tight_layout(rect=(0, 0, 1, 0.94))
-    out_path = root / OVERVIEW_FILENAME
+    out_path = root / output_filename
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=170, bbox_inches="tight")
     plt.close(fig)
@@ -221,8 +248,13 @@ def _plot_evaluations_per_generation(ax: Any, records: list[OrganismVizRecord]) 
     ax.legend(loc="upper left", fontsize=9)
 
 
-def _plot_operator_mix_by_generation(ax: Any, records: list[OrganismVizRecord]) -> None:
-    operator_totals = _offspring_operator_totals(records)
+def _plot_operator_mix_by_generation(
+    ax: Any,
+    records: list[OrganismVizRecord],
+    *,
+    context_records: list[OrganismVizRecord] | None = None,
+) -> None:
+    operator_totals = _offspring_operator_totals(records, context_records=context_records)
     categories = [
         category
         for category in _OPERATOR_PLOT_ORDER
@@ -479,9 +511,12 @@ def _maternal_lineage_points_by_runtime(
 
 def _offspring_operator_counts_by_generation(
     records: list[OrganismVizRecord],
+    *,
+    context_records: list[OrganismVizRecord] | None = None,
 ) -> dict[str, dict[int, int]]:
     counts = {category: defaultdict(int) for category in _OPERATOR_PLOT_ORDER}
-    records_by_id = {record.organism_id: record for record in records}
+    lookup_source = context_records or records
+    records_by_id = {record.organism_id: record for record in lookup_source}
 
     for record in records:
         category = _offspring_operator_category(record, records_by_id)
@@ -494,8 +529,13 @@ def _offspring_operator_counts_by_generation(
 
 def _offspring_operator_totals(
     records: list[OrganismVizRecord],
+    *,
+    context_records: list[OrganismVizRecord] | None = None,
 ) -> dict[str, int]:
-    counts_by_generation = _offspring_operator_counts_by_generation(records)
+    counts_by_generation = _offspring_operator_counts_by_generation(
+        records,
+        context_records=context_records,
+    )
     return {
         category: sum(per_generation.values())
         for category, per_generation in counts_by_generation.items()
@@ -525,6 +565,76 @@ def _cumulative_best(values: list[float]) -> list[float]:
         running_best = max(running_best, value)
         best_values.append(running_best)
     return best_values
+
+
+def _sample_records_for_render(
+    records: list[OrganismVizRecord],
+    *,
+    max_evaluated_points: int | None,
+) -> list[OrganismVizRecord]:
+    if max_evaluated_points is None:
+        return list(records)
+
+    evaluated = _evaluated_records(records)
+    if len(evaluated) <= max_evaluated_points:
+        return evaluated
+
+    priority_ids: list[str] = []
+    _extend_unique_ids(priority_ids, [evaluated[0].organism_id, evaluated[-1].organism_id])
+    _extend_unique_ids(
+        priority_ids,
+        [
+            record.organism_id
+            for record in _maternal_lineage(records)
+            if record.simple_score is not None
+        ],
+    )
+    _extend_unique_ids(
+        priority_ids,
+        [record.organism_id for record in evaluated if record.active],
+    )
+
+    selected_ids = priority_ids[:max_evaluated_points]
+    selected_lookup = set(selected_ids)
+    remaining_slots = max_evaluated_points - len(selected_ids)
+    if remaining_slots > 0:
+        remaining_records = [
+            record for record in evaluated if record.organism_id not in selected_lookup
+        ]
+        sampled_records = _evenly_sample_records(remaining_records, remaining_slots)
+        _extend_unique_ids(selected_ids, [record.organism_id for record in sampled_records])
+        selected_lookup = set(selected_ids)
+
+    return [
+        record
+        for record in evaluated
+        if record.organism_id in selected_lookup
+    ]
+
+
+def _extend_unique_ids(target: list[str], organism_ids: list[str]) -> None:
+    seen = set(target)
+    for organism_id in organism_ids:
+        if organism_id in seen:
+            continue
+        target.append(organism_id)
+        seen.add(organism_id)
+
+
+def _evenly_sample_records(
+    records: list[OrganismVizRecord],
+    sample_size: int,
+) -> list[OrganismVizRecord]:
+    if sample_size <= 0 or not records:
+        return []
+    if sample_size >= len(records):
+        return list(records)
+
+    indices = [
+        ((2 * slot + 1) * len(records)) // (2 * sample_size)
+        for slot in range(sample_size)
+    ]
+    return [records[index] for index in indices]
 
 
 def _stable_jitter(identifier: str) -> float:
