@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 import sys
 import time
@@ -90,6 +91,16 @@ class CandidateGenerator(BaseLlmGenerator):
         self._owns_llm_registry = llm_registry is None
         super().__init__(cfg, registry)
         self.prompt_bundle = load_prompt_bundle(cfg)
+        self.hypothesis_schema_provider = self._load_hypothesis_schema_provider()
+
+    def _load_hypothesis_schema_provider(self):
+        artifact_cfg = self.evolver_cfg.get("hypothesis_artifact", None)
+        if artifact_cfg is None:
+            return None
+        provider_path = str(artifact_cfg.get("schema_provider", "")).strip()
+        if not provider_path:
+            return None
+        return importlib.import_module(provider_path)
 
     def close(self) -> None:
         if self._owns_llm_registry:
@@ -1037,6 +1048,7 @@ class CandidateGenerator(BaseLlmGenerator):
             phase=phase,
             experiment_name=experiment_name,
             errors=[dict(entry) for entry in errors],
+            schema_provider=self.hypothesis_schema_provider,
         )
 
         request_path, response_path, request_payload, response_payload = self._load_llm_exchange_payloads(org_dir)
@@ -1218,4 +1230,5 @@ class CandidateGenerator(BaseLlmGenerator):
             seed=self.seed,
             timestamp=utc_now_iso(),
             parent_lineage=[],
+            schema_provider=self.hypothesis_schema_provider,
         )

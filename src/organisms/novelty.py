@@ -12,7 +12,7 @@ from src.organisms.organism import (
     build_genetic_code_from_design_response,
     format_genetic_code,
     require_response_section,
-    read_organism_genetic_code,
+    read_organism_hypothesis_for_prompt,
 )
 
 _NOVELTY_ACCEPTED = "NOVELTY_ACCEPTED"
@@ -75,6 +75,7 @@ def build_mutation_novelty_prompt(
     parent: OrganismMeta,
     candidate_design: dict[str, str],
     prompts: PromptBundle,
+    schema_provider=None,
 ) -> tuple[str, str]:
     """Build mutation novelty-check prompts for one candidate child design."""
 
@@ -84,7 +85,9 @@ def build_mutation_novelty_prompt(
     user = prompts.mutation_novelty_user.format(
         inherited_gene_pool=_render_gene_pool(inherited_genes),
         removed_gene_pool=_render_gene_pool(removed_genes),
-        parent_genetic_code=format_genetic_code(read_organism_genetic_code(parent)),
+        parent_genetic_code=format_genetic_code(
+            read_organism_hypothesis_for_prompt(parent, schema_provider=schema_provider)
+        ),
         candidate_genetic_code=format_genetic_code(candidate_genetic_code),
         candidate_change_description=candidate_change_description,
     )
@@ -98,6 +101,7 @@ def build_crossover_novelty_prompt(
     father: OrganismMeta,
     candidate_design: dict[str, str],
     prompts: PromptBundle,
+    schema_provider=None,
 ) -> tuple[str, str]:
     """Build crossover novelty-check prompts for one candidate child design."""
 
@@ -106,8 +110,12 @@ def build_crossover_novelty_prompt(
     system = compose_system_prompt(prompts.project_context, prompts.crossover_novelty_system)
     user = prompts.crossover_novelty_user.format(
         inherited_gene_pool=_render_gene_pool(inherited_genes),
-        mother_genetic_code=format_genetic_code(read_organism_genetic_code(mother)),
-        father_genetic_code=format_genetic_code(read_organism_genetic_code(father)),
+        mother_genetic_code=format_genetic_code(
+            read_organism_hypothesis_for_prompt(mother, schema_provider=schema_provider)
+        ),
+        father_genetic_code=format_genetic_code(
+            read_organism_hypothesis_for_prompt(father, schema_provider=schema_provider)
+        ),
         candidate_genetic_code=format_genetic_code(candidate_genetic_code),
         candidate_change_description=candidate_change_description,
     )

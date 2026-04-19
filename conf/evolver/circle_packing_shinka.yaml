@@ -8,6 +8,9 @@ creation:
   max_attempts_to_regenerate_organism_after_novelty_rejection: 2
   max_parallel_organisms: 20
 
+hypothesis_artifact:
+  schema_provider: experiments.circle_packing_shinka._runtime.genome_schema_v1
+
 islands:
   dir: conf/experiments/circle_packing_shinka/prompts/islands
   seed_organisms_per_island: 8

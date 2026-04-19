@@ -51,6 +51,7 @@ from src.evolve.types import (
 )
 from src.evolve.visualization import render_evolution_overview
 from src.organisms.crossbreeding import CrossbreedingOperator
+from src.organisms.hypothesis_artifacts import read_canonical_genome
 from src.organisms.mutation import MutationOperator
 from src.organisms.organism import update_latest_lineage_entry
 
@@ -100,6 +101,7 @@ class EvolutionLoop:
         self.llm_registry = llm_registry or ApiPlatformRegistry(cfg)
         self._owns_llm_registry = llm_registry is None
         self.generator = CandidateGenerator(cfg, llm_registry=self.llm_registry)
+        self.hypothesis_schema_provider = self.generator.hypothesis_schema_provider
         self.orchestrator = EvolverOrchestrator(cfg, repair_callback=self._repair_organism_after_eval_error)
         self.rng = random.Random(int(cfg.seed))
         self.max_parallel_organisms = self._max_parallel_organisms()
@@ -368,9 +370,21 @@ class EvolutionLoop:
                     f"population_state.json points to missing organism dir: {organism_dir_path}"
                 )
             organism = read_organism_meta(organism_dir_path)
+            self._validate_canonical_hypothesis_on_resume(organism)
             organism.current_generation_active = int(entry.get("current_generation_active", self.generation))
             organisms.append(organism)
         return organisms
+
+    def _validate_canonical_hypothesis_on_resume(self, organism: OrganismMeta) -> None:
+        if self.hypothesis_schema_provider is None:
+            return
+        try:
+            read_canonical_genome(Path(organism.organism_dir), self.hypothesis_schema_provider)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"Canonical resume requires genome.json for organism {organism.organism_id}; "
+                "legacy circle-packing organisms without genome.json are not supported by this path."
+            ) from exc
 
     async def _seed_initial_population(self) -> list[OrganismMeta]:
         """Compatibility helper that uses the shared queued seed pipeline."""

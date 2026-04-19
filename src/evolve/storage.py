@@ -13,7 +13,7 @@ from src.evolve.types import ManifestEntry, OrganismMeta
 
 _GENERATION_RE = re.compile(r"^gen_(\d+)$")
 _SECTION_RE = re.compile(
-    r"^##\s+(CORE_GENES|INTERACTION_NOTES|COMPUTE_NOTES)\s*$",
+    r"^##\s+(CORE_GENES|INTERACTION_NOTES|COMPUTE_NOTES|CHANGE_DESCRIPTION)\s*$",
     re.MULTILINE,
 )
 
@@ -351,6 +351,7 @@ def parse_genetic_code_text(text: str) -> dict[str, Any]:
         "core_genes": core_genes,
         "interaction_notes": sections.get("INTERACTION_NOTES", ""),
         "compute_notes": sections.get("COMPUTE_NOTES", ""),
+        "change_description": sections.get("CHANGE_DESCRIPTION", ""),
     }
 
 

@@ -294,5 +294,12 @@ def test_circle_packing_seed_and_evolve_with_mock_route(tmp_path: Path) -> None:
     assert population_state["inflight_generation"] is None
 
     for entry in population_state["active_organisms"]:
-        implementation = (Path(entry["organism_dir"]) / "implementation.py").read_text(encoding="utf-8")
+        organism_dir = Path(entry["organism_dir"])
+        implementation = (organism_dir / "implementation.py").read_text(encoding="utf-8")
         assert "def run_packing():" in implementation
+        genome = read_json(organism_dir / "genome.json")
+        assert genome["schema_name"] == "typed_segmented_genome"
+        assert genome["representation"] == "typed_segmented_hypothesis"
+        assert (organism_dir / "genetic_code.md").read_text(encoding="utf-8").startswith(
+            "## CORE_GENES\n- [layout]"
+        )

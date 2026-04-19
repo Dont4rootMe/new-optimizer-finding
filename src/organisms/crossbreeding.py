@@ -18,7 +18,7 @@ from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
     format_lineage_summary,
-    read_organism_genetic_code,
+    read_organism_hypothesis_for_prompt,
     read_organism_lineage,
 )
 
@@ -67,6 +67,7 @@ def _build_crossbreed_prompt(
     father: OrganismMeta,
     prompts: PromptBundle,
     novelty_feedback: list[str] | None = None,
+    schema_provider: Any | None = None,
 ) -> tuple[str, str]:
     """Build `(system_prompt, user_prompt)` for crossover LLM call."""
 
@@ -75,9 +76,15 @@ def _build_crossbreed_prompt(
 
     return build_crossover_prompt_from_artifacts(
         inherited_genes=inherited_genes,
-        mother_genetic_code=read_organism_genetic_code(mother),
+        mother_genetic_code=read_organism_hypothesis_for_prompt(
+            mother,
+            schema_provider=schema_provider,
+        ),
         mother_lineage=mother_lineage,
-        father_genetic_code=read_organism_genetic_code(father),
+        father_genetic_code=read_organism_hypothesis_for_prompt(
+            father,
+            schema_provider=schema_provider,
+        ),
         father_lineage=father_lineage,
         prompts=prompts,
         novelty_feedback=novelty_feedback,
@@ -126,8 +133,15 @@ class CrossbreedingOperator:
     ) -> OrganismMeta:
         """Create a child organism via crossbreeding."""
 
-        mother_genes = read_organism_genetic_code(mother).get("core_genes", [])
-        father_genes = read_organism_genetic_code(father).get("core_genes", [])
+        schema_provider = getattr(generator, "hypothesis_schema_provider", None)
+        mother_genes = read_organism_hypothesis_for_prompt(
+            mother,
+            schema_provider=schema_provider,
+        ).get("core_genes", [])
+        father_genes = read_organism_hypothesis_for_prompt(
+            father,
+            schema_provider=schema_provider,
+        ).get("core_genes", [])
         child_dna = merge_gene_pools(
             mother_genes,
             father_genes,
@@ -146,6 +160,7 @@ class CrossbreedingOperator:
             mother,
             father,
             generator.prompt_bundle,
+            schema_provider=schema_provider,
         )
         novelty_context = NoveltyCheckContext(
             operator="crossover",
@@ -155,6 +170,7 @@ class CrossbreedingOperator:
                 father,
                 generator.prompt_bundle,
                 novelty_feedback=feedback,
+                schema_provider=schema_provider,
             ),
             build_novelty_prompts=lambda candidate_design: build_crossover_novelty_prompt(
                 inherited_genes=child_dna,
@@ -162,6 +178,7 @@ class CrossbreedingOperator:
                 father=father,
                 candidate_design=candidate_design,
                 prompts=generator.prompt_bundle,
+                schema_provider=schema_provider,
             ),
         )
         run_creation = getattr(generator, "run_creation_stages_with_retries", generator.run_creation_stages)
@@ -198,4 +215,5 @@ class CrossbreedingOperator:
             ancestor_ids=ancestor_ids,
             cross_island=mother.island_id != father.island_id,
             father_island_id=father.island_id,
+            schema_provider=schema_provider,
         )

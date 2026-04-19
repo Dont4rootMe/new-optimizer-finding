@@ -19,6 +19,11 @@ from src.evolve.storage import (
     write_lineage,
 )
 from src.evolve.types import LineageEntry, OrganismMeta
+from src.organisms.hypothesis_artifacts import (
+    read_canonical_genome,
+    validate_canonical_genome,
+    write_canonical_genome,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +53,53 @@ def read_organism_genetic_code(org: OrganismMeta) -> dict[str, Any]:
     """Return canonical genetic code for one organism."""
 
     return read_genetic_code(org.genetic_code_path)
+
+
+def genetic_code_from_canonical_genome(genome: dict[str, Any], schema_provider: Any) -> dict[str, Any]:
+    """Project a canonical typed genome into the legacy prompt-facing gene dict."""
+
+    validate_canonical_genome(genome, schema_provider)
+    slot_order = list(getattr(schema_provider, "SLOT_ORDER"))
+    slots = genome["slots"]
+    render_fields = genome["render_fields"]
+
+    core_genes = [f"[{slot}] {slots[slot]['hypothesis']}" for slot in slot_order]
+
+    interaction_values: list[str] = []
+    interaction_values.extend(render_fields["interaction_notes"])
+    for slot in slot_order:
+        interaction_values.extend(slots[slot]["assumptions"])
+    for slot in slot_order:
+        interaction_values.extend(slots[slot]["failure_modes"])
+
+    deduped_interaction: list[str] = []
+    seen_interaction: set[str] = set()
+    for value in interaction_values:
+        if value in seen_interaction:
+            continue
+        seen_interaction.add(value)
+        deduped_interaction.append(value)
+
+    return {
+        "core_genes": core_genes,
+        "interaction_notes": "\n".join(f"- {value}" for value in deduped_interaction),
+        "compute_notes": "\n".join(f"- {value}" for value in render_fields["compute_notes"]),
+        "change_description": render_fields["change_description"],
+    }
+
+
+def read_organism_hypothesis_for_prompt(
+    org: OrganismMeta,
+    *,
+    schema_provider: Any | None = None,
+) -> dict[str, Any]:
+    """Read the authoritative hypothesis artifact for prompt construction."""
+
+    if schema_provider is None:
+        return read_organism_genetic_code(org)
+
+    genome = read_canonical_genome(Path(org.organism_dir), schema_provider)
+    return genetic_code_from_canonical_genome(genome, schema_provider)
 
 
 def read_organism_lineage(org: OrganismMeta) -> list[dict[str, Any]]:
@@ -141,6 +193,20 @@ def save_organism_artifacts(
     write_json(organism_meta_path(org.organism_dir), org.to_dict())
     write_genetic_code(genetic_code_path(org.organism_dir), genetic_code)
     write_lineage(lineage_path(org.organism_dir), lineage)
+
+
+def _build_genome_from_schema_provider(
+    parsed: dict[str, str],
+    *,
+    organism_id: str,
+    schema_provider: Any,
+) -> dict[str, Any]:
+    builder = getattr(schema_provider, "build_genome_from_design_response", None)
+    if not callable(builder):
+        raise ValueError(
+            "Schema provider must expose build_genome_from_design_response for canonical hypothesis writes."
+        )
+    return builder(parsed, organism_id=organism_id)
 
 
 def update_latest_lineage_entry(
@@ -267,10 +333,14 @@ def build_repair_prompt(
     phase: str,
     experiment_name: str,
     errors: list[dict[str, Any]],
+    schema_provider: Any | None = None,
 ) -> tuple[str, str]:
     """Build the repair-stage prompt from organism artifacts and evaluator errors."""
 
-    genetic_code = read_organism_genetic_code(organism)
+    genetic_code = read_organism_hypothesis_for_prompt(
+        organism,
+        schema_provider=schema_provider,
+    )
     lineage = read_organism_lineage(organism)
     current_implementation = read_organism_implementation(organism)
     change_description = "No recorded novelty summary."
@@ -312,6 +382,7 @@ def build_organism_from_response(
     ancestor_ids: list[str] | None = None,
     cross_island: bool = False,
     father_island_id: str | None = None,
+    schema_provider: Any | None = None,
 ) -> OrganismMeta:
     """Build `OrganismMeta` from a canonical design response and raw implementation text."""
 
@@ -367,5 +438,15 @@ def build_organism_from_response(
         seed=seed,
     )
 
-    save_organism_artifacts(org, genetic_code=genetic_code, lineage=lineage)
+    if schema_provider is None:
+        save_organism_artifacts(org, genetic_code=genetic_code, lineage=lineage)
+    else:
+        genome = _build_genome_from_schema_provider(
+            parsed,
+            organism_id=organism_id,
+            schema_provider=schema_provider,
+        )
+        write_json(organism_meta_path(org.organism_dir), org.to_dict())
+        write_canonical_genome(org_dir, genome, schema_provider)
+        write_lineage(lineage_path(org.organism_dir), lineage)
     return org

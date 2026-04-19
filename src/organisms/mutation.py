@@ -18,7 +18,7 @@ from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
     format_lineage_summary,
-    read_organism_genetic_code,
+    read_organism_hypothesis_for_prompt,
     read_organism_lineage,
 )
 
@@ -59,10 +59,14 @@ def _build_mutate_prompt(
     parent: OrganismMeta,
     prompts: PromptBundle,
     novelty_feedback: list[str] | None = None,
+    schema_provider: Any | None = None,
 ) -> tuple[str, str]:
     """Build `(system_prompt, user_prompt)` for mutation LLM call."""
 
-    parent_genetic_code = read_organism_genetic_code(parent)
+    parent_genetic_code = read_organism_hypothesis_for_prompt(
+        parent,
+        schema_provider=schema_provider,
+    )
     parent_lineage = read_organism_lineage(parent)
 
     return build_mutation_prompt_from_artifacts(
@@ -114,7 +118,11 @@ class MutationOperator:
     ) -> OrganismMeta:
         """Create a child organism via mutation."""
 
-        parent_genetic_code = read_organism_genetic_code(parent)
+        schema_provider = getattr(generator, "hypothesis_schema_provider", None)
+        parent_genetic_code = read_organism_hypothesis_for_prompt(
+            parent,
+            schema_provider=schema_provider,
+        )
         parent_genes = list(parent_genetic_code.get("core_genes", []))
         inherited_genes, removed_genes = prune_gene_pool(parent_genes, self.q, self.rng)
         LOGGER.info(
@@ -130,6 +138,7 @@ class MutationOperator:
             removed_genes,
             parent,
             generator.prompt_bundle,
+            schema_provider=schema_provider,
         )
         novelty_context = NoveltyCheckContext(
             operator="mutation",
@@ -139,6 +148,7 @@ class MutationOperator:
                 parent,
                 generator.prompt_bundle,
                 novelty_feedback=feedback,
+                schema_provider=schema_provider,
             ),
             build_novelty_prompts=lambda candidate_design: build_mutation_novelty_prompt(
                 inherited_genes=inherited_genes,
@@ -146,6 +156,7 @@ class MutationOperator:
                 parent=parent,
                 candidate_design=candidate_design,
                 prompts=generator.prompt_bundle,
+                schema_provider=schema_provider,
             ),
         )
         run_creation = getattr(generator, "run_creation_stages_with_retries", generator.run_creation_stages)
@@ -178,4 +189,5 @@ class MutationOperator:
             ancestor_ids=parent.ancestor_ids,
             cross_island=False,
             father_island_id=None,
+            schema_provider=schema_provider,
         )
