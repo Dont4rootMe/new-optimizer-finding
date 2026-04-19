@@ -6,6 +6,7 @@ import logging
 import sys
 import time
 from pathlib import Path
+from dataclasses import dataclass
 
 from omegaconf import DictConfig
 
@@ -40,6 +41,12 @@ from src.organisms.compatibility import (
     format_compatibility_rejection_feedback,
     parse_compatibility_judgment,
 )
+from src.organisms.implementation_patch import (
+    ImplementationCompilationPlan,
+    assemble_implementation_from_patch,
+    compute_changed_genome_sections,
+    parse_implementation_patch_response,
+)
 from src.organisms.novelty import (
     NoveltyCheckContext,
     NoveltyRejectionExhaustedError,
@@ -49,9 +56,19 @@ from src.organisms.organism import (
     build_repair_prompt,
     build_genetic_code_from_design_response,
     build_implementation_prompt_from_design,
+    build_implementation_prompt,
     build_organism_from_response,
+    format_genetic_code,
     load_expected_core_gene_sections_from_config,
 )
+
+
+@dataclass(frozen=True)
+class _PreparedImplementationStage:
+    system_prompt: str
+    user_prompt: str
+    compilation_plan: ImplementationCompilationPlan | None
+    base_source_text: str | None
 
 
 def _single_line(value: object, *, limit: int = 160) -> str:
@@ -90,6 +107,18 @@ def _response_summary(*, text: str, raw_response: object, usage: object | None =
         if value is not None:
             parts.append(f"{key}={value}")
     return ", ".join(parts)
+
+
+def _format_changed_sections_for_prompt(changed_sections: tuple[str, ...]) -> str:
+    return "\n".join(changed_sections) if changed_sections else "NONE"
+
+
+def _format_parsed_design_as_genetic_code_markdown(parsed_design: dict[str, str]) -> str:
+    section_names = ("CORE_GENES", "INTERACTION_NOTES", "COMPUTE_NOTES", "CHANGE_DESCRIPTION")
+    missing = [name for name in section_names if not str(parsed_design.get(name, "")).strip()]
+    if missing:
+        raise ValueError(f"Design response is missing required section(s): {', '.join(missing)}")
+    return "\n\n".join(f"## {name}\n{str(parsed_design[name]).strip()}" for name in section_names) + "\n"
 
 
 class CandidateGenerator(BaseLlmGenerator):
@@ -205,6 +234,123 @@ class CandidateGenerator(BaseLlmGenerator):
             )
         return value
 
+    def uses_section_patch_compilation(self) -> bool:
+        """Return true when this prompt bundle uses the section-aligned scaffold contract."""
+
+        return bool(
+            self.expected_core_gene_sections
+            and "# === REGION: INIT_GEOMETRY ===" in self.prompt_bundle.implementation_template
+            and "## COMPILATION_MODE" in self.prompt_bundle.implementation_system
+        )
+
+    def _prepare_implementation_stage(
+        self,
+        parsed_design: dict[str, str],
+        *,
+        implementation_base_parent: OrganismMeta | None = None,
+    ) -> _PreparedImplementationStage:
+        if not self.uses_section_patch_compilation():
+            system_prompt, user_prompt = build_implementation_prompt_from_design(
+                parsed_design,
+                self.prompt_bundle,
+                expected_core_gene_sections=self.expected_core_gene_sections,
+            )
+            return _PreparedImplementationStage(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                compilation_plan=None,
+                base_source_text=None,
+            )
+
+        expected_sections = self.expected_core_gene_sections
+        if expected_sections is None:
+            raise ValueError("Section patch compilation requires expected CORE_GENES sections.")
+
+        child_genetic_code = build_genetic_code_from_design_response(
+            parsed_design,
+            expected_core_gene_sections=expected_sections,
+        )
+        child_genetic_code_text = _format_parsed_design_as_genetic_code_markdown(parsed_design)
+        change_description = parsed_design.get("CHANGE_DESCRIPTION", "").strip()
+        if not change_description:
+            raise ValueError("Implementation patch compilation requires CHANGE_DESCRIPTION.")
+
+        if implementation_base_parent is None:
+            compilation_mode = "FULL"
+            changed_sections = expected_sections
+            base_parent_genetic_code = "NONE"
+            base_parent_implementation = "NONE"
+            base_source_text = None
+            maternal_base_required = False
+        else:
+            compilation_mode = "PATCH"
+            base_genetic_code_path = Path(implementation_base_parent.genetic_code_path)
+            base_implementation_path = Path(implementation_base_parent.implementation_path)
+            if not base_genetic_code_path.exists():
+                raise FileNotFoundError(f"Maternal base genetic code was not found: {base_genetic_code_path}")
+            if not base_implementation_path.exists():
+                raise FileNotFoundError(f"Maternal base implementation was not found: {base_implementation_path}")
+            base_parent_genetic_code = base_genetic_code_path.read_text(encoding="utf-8")
+            base_source_text = base_implementation_path.read_text(encoding="utf-8")
+            base_parent_implementation = base_source_text
+            changed_sections = compute_changed_genome_sections(
+                base_parent_genetic_code,
+                child_genetic_code_text,
+                expected_section_names=expected_sections,
+            )
+            maternal_base_required = True
+
+        system_prompt, user_prompt = build_implementation_prompt(
+            genetic_code=child_genetic_code,
+            change_description=change_description,
+            prompts=self.prompt_bundle,
+            compilation_mode=compilation_mode,
+            changed_sections=_format_changed_sections_for_prompt(changed_sections),
+            base_parent_genetic_code=base_parent_genetic_code,
+            base_parent_implementation=base_parent_implementation,
+        )
+        return _PreparedImplementationStage(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            compilation_plan=ImplementationCompilationPlan(
+                compilation_mode=compilation_mode,  # type: ignore[arg-type]
+                changed_sections=tuple(changed_sections),
+                maternal_base_required=maternal_base_required,
+            ),
+            base_source_text=base_source_text,
+        )
+
+    def _extract_implementation_stage_code(
+        self,
+        response_text: str,
+        *,
+        prepared: _PreparedImplementationStage,
+    ) -> str:
+        if prepared.compilation_plan is None:
+            return self._extract_python(response_text)
+
+        expected_sections = self.expected_core_gene_sections
+        if expected_sections is None:
+            raise ValueError("Section patch compilation requires expected CORE_GENES sections.")
+        plan = prepared.compilation_plan
+        expected_patch_regions = (
+            expected_sections
+            if plan.compilation_mode == "FULL"
+            else plan.changed_sections
+        )
+        patch = parse_implementation_patch_response(
+            response_text,
+            expected_mode=plan.compilation_mode,
+            expected_region_names=expected_patch_regions,
+        )
+        assembled = assemble_implementation_from_patch(
+            scaffold_text=self.prompt_bundle.implementation_template,
+            patch=patch,
+            expected_region_names=expected_sections,
+            base_source_text=prepared.base_source_text,
+        )
+        return self._extract_python(assembled)
+
     def _run_standard_creation_stages(
         self,
         *,
@@ -213,6 +359,7 @@ class CandidateGenerator(BaseLlmGenerator):
         org_dir: Path,
         organism_id: str,
         generation: int,
+        implementation_base_parent: OrganismMeta | None = None,
     ) -> CreationStageResult:
         """Run the canonical two-stage design -> implementation exchange."""
 
@@ -325,11 +472,12 @@ class CandidateGenerator(BaseLlmGenerator):
                 error_msg,
             )
             raise
-        implementation_system_prompt, implementation_user_prompt = build_implementation_prompt_from_design(
+        prepared_implementation = self._prepare_implementation_stage(
             parsed_design,
-            self.prompt_bundle,
-            expected_core_gene_sections=self.expected_core_gene_sections,
+            implementation_base_parent=implementation_base_parent,
         )
+        implementation_system_prompt = prepared_implementation.system_prompt
+        implementation_user_prompt = prepared_implementation.user_prompt
         llm_request_payload["implementation"] = {
             "route_id": route_id,
             "system_prompt": implementation_system_prompt,
@@ -337,6 +485,16 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": None,
             "status": "in_flight",
             "error_msg": None,
+            "compilation_mode": (
+                prepared_implementation.compilation_plan.compilation_mode
+                if prepared_implementation.compilation_plan is not None
+                else "legacy_full_source"
+            ),
+            "changed_sections": (
+                list(prepared_implementation.compilation_plan.changed_sections)
+                if prepared_implementation.compilation_plan is not None
+                else None
+            ),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -387,6 +545,16 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": implementation_response.raw_request,
             "status": "completed",
             "error_msg": None,
+            "compilation_mode": (
+                prepared_implementation.compilation_plan.compilation_mode
+                if prepared_implementation.compilation_plan is not None
+                else "legacy_full_source"
+            ),
+            "changed_sections": (
+                list(prepared_implementation.compilation_plan.changed_sections)
+                if prepared_implementation.compilation_plan is not None
+                else None
+            ),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -408,7 +576,10 @@ class CandidateGenerator(BaseLlmGenerator):
         write_json(llm_response_path, llm_response_payload)
 
         try:
-            implementation_code = self._extract_python(implementation_response.text)
+            implementation_code = self._extract_implementation_stage_code(
+                implementation_response.text,
+                prepared=prepared_implementation,
+            )
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
             llm_request_payload["implementation"]["status"] = "failed"
@@ -467,6 +638,7 @@ class CandidateGenerator(BaseLlmGenerator):
         org_dir: Path,
         organism_id: str,
         generation: int,
+        implementation_base_parent: OrganismMeta | None = None,
     ) -> CreationStageResult:
         """Run design -> novelty-check loop -> implementation for non-seed operators."""
 
@@ -816,11 +988,12 @@ class CandidateGenerator(BaseLlmGenerator):
                 f"Novelty validation rejected organism after {max_design_attempts} design attempts: {detail}"
             )
 
-        implementation_system_prompt, implementation_user_prompt = build_implementation_prompt_from_design(
+        prepared_implementation = self._prepare_implementation_stage(
             accepted_parsed_design,
-            self.prompt_bundle,
-            expected_core_gene_sections=self.expected_core_gene_sections,
+            implementation_base_parent=implementation_base_parent,
         )
+        implementation_system_prompt = prepared_implementation.system_prompt
+        implementation_user_prompt = prepared_implementation.user_prompt
         prompt_hash_parts.extend((implementation_system_prompt, implementation_user_prompt))
         llm_request_payload["implementation"] = {
             "route_id": route_id,
@@ -829,6 +1002,16 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": None,
             "status": "in_flight",
             "error_msg": None,
+            "compilation_mode": (
+                prepared_implementation.compilation_plan.compilation_mode
+                if prepared_implementation.compilation_plan is not None
+                else "legacy_full_source"
+            ),
+            "changed_sections": (
+                list(prepared_implementation.compilation_plan.changed_sections)
+                if prepared_implementation.compilation_plan is not None
+                else None
+            ),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -880,6 +1063,16 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": implementation_response.raw_request,
             "status": "completed",
             "error_msg": None,
+            "compilation_mode": (
+                prepared_implementation.compilation_plan.compilation_mode
+                if prepared_implementation.compilation_plan is not None
+                else "legacy_full_source"
+            ),
+            "changed_sections": (
+                list(prepared_implementation.compilation_plan.changed_sections)
+                if prepared_implementation.compilation_plan is not None
+                else None
+            ),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -901,7 +1094,10 @@ class CandidateGenerator(BaseLlmGenerator):
         write_json(llm_response_path, llm_response_payload)
 
         try:
-            implementation_code = self._extract_python(implementation_response.text)
+            implementation_code = self._extract_implementation_stage_code(
+                implementation_response.text,
+                prepared=prepared_implementation,
+            )
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
             llm_request_payload["implementation"]["status"] = "failed"
@@ -952,6 +1148,7 @@ class CandidateGenerator(BaseLlmGenerator):
         org_dir: Path,
         organism_id: str,
         generation: int,
+        implementation_base_parent: OrganismMeta | None = None,
     ) -> CreationStageResult:
         """Run design -> optional novelty -> compatibility -> implementation."""
 
@@ -1473,11 +1670,12 @@ class CandidateGenerator(BaseLlmGenerator):
                 f"Novelty validation rejected organism after {attempt} design attempts: {detail}"
             )
 
-        implementation_system_prompt, implementation_user_prompt = build_implementation_prompt_from_design(
+        prepared_implementation = self._prepare_implementation_stage(
             accepted_parsed_design,
-            self.prompt_bundle,
-            expected_core_gene_sections=self.expected_core_gene_sections,
+            implementation_base_parent=implementation_base_parent,
         )
+        implementation_system_prompt = prepared_implementation.system_prompt
+        implementation_user_prompt = prepared_implementation.user_prompt
         prompt_hash_parts.extend((implementation_system_prompt, implementation_user_prompt))
         llm_request_payload["implementation"] = {
             "route_id": route_id,
@@ -1486,6 +1684,16 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": None,
             "status": "in_flight",
             "error_msg": None,
+            "compilation_mode": (
+                prepared_implementation.compilation_plan.compilation_mode
+                if prepared_implementation.compilation_plan is not None
+                else "legacy_full_source"
+            ),
+            "changed_sections": (
+                list(prepared_implementation.compilation_plan.changed_sections)
+                if prepared_implementation.compilation_plan is not None
+                else None
+            ),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -1531,6 +1739,16 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": implementation_response.raw_request,
             "status": "completed",
             "error_msg": None,
+            "compilation_mode": (
+                prepared_implementation.compilation_plan.compilation_mode
+                if prepared_implementation.compilation_plan is not None
+                else "legacy_full_source"
+            ),
+            "changed_sections": (
+                list(prepared_implementation.compilation_plan.changed_sections)
+                if prepared_implementation.compilation_plan is not None
+                else None
+            ),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -1552,7 +1770,10 @@ class CandidateGenerator(BaseLlmGenerator):
         write_json(llm_response_path, llm_response_payload)
 
         try:
-            implementation_code = self._extract_python(implementation_response.text)
+            implementation_code = self._extract_implementation_stage_code(
+                implementation_response.text,
+                prepared=prepared_implementation,
+            )
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
             llm_request_payload["implementation"]["status"] = "failed"
@@ -1602,6 +1823,7 @@ class CandidateGenerator(BaseLlmGenerator):
         generation: int,
         novelty_context: NoveltyCheckContext | None = None,
         compatibility_context: CompatibilityValidationContext | None = None,
+        implementation_base_parent: OrganismMeta | None = None,
     ) -> CreationStageResult:
         """Run creation stages, optionally inserting design-validation loops."""
 
@@ -1612,6 +1834,7 @@ class CandidateGenerator(BaseLlmGenerator):
                 org_dir=org_dir,
                 organism_id=organism_id,
                 generation=generation,
+                implementation_base_parent=implementation_base_parent,
             )
         if compatibility_context is not None:
             return self._run_creation_stages_with_validation(
@@ -1622,6 +1845,7 @@ class CandidateGenerator(BaseLlmGenerator):
                 org_dir=org_dir,
                 organism_id=organism_id,
                 generation=generation,
+                implementation_base_parent=implementation_base_parent,
             )
         return self._run_creation_stages_with_novelty(
             design_system_prompt=design_system_prompt,
@@ -1630,6 +1854,7 @@ class CandidateGenerator(BaseLlmGenerator):
             org_dir=org_dir,
             organism_id=organism_id,
             generation=generation,
+            implementation_base_parent=implementation_base_parent,
         )
 
     @staticmethod
@@ -1652,6 +1877,7 @@ class CandidateGenerator(BaseLlmGenerator):
         generation: int,
         novelty_context: NoveltyCheckContext | None = None,
         compatibility_context: CompatibilityValidationContext | None = None,
+        implementation_base_parent: OrganismMeta | None = None,
     ) -> CreationStageResult:
         """Retry a full organism-creation exchange on provider or parse failure."""
 
@@ -1667,6 +1893,7 @@ class CandidateGenerator(BaseLlmGenerator):
                     generation=generation,
                     novelty_context=novelty_context,
                     compatibility_context=compatibility_context,
+                    implementation_base_parent=implementation_base_parent,
                 )
             except (NoveltyRejectionExhaustedError, CompatibilityRejectionExhaustedError):
                 raise

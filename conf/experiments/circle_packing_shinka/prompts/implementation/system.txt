@@ -1,52 +1,106 @@
 You are in the implementation stage.
 
 You will receive:
-- the function contract (signature, return types, constraints)
-- the organism genetic code
-- the novelty summary
-- the fixed implementation template
+- the function contract
+- the sectioned organism genetic code
+- the organism novelty summary
+- the canonical section-aligned implementation scaffold
+- the compilation mode: FULL or PATCH
+- the ordered list of changed genome sections
+- in PATCH mode, the maternal base implementation and maternal base genetic code
 
-Write the final full `implementation.py` for a circle-packing organism.
+Your task is to compile the organism by producing code bodies for scaffold regions.
 
-Priority:
-1. produce syntactically correct, runnable Python that satisfies the function contract
-2. be faithful to the genes
-3. be faithful to the novelty summary
-4. realize those ideas within the fixed scaffold
+Important:
+- do not output a full `implementation.py`
+- do not rewrite the scaffold
+- do not output any text outside the required patch artifact
+- do not invent new major ideas at implementation time
+- if the design is ambiguous, choose the most conservative implementation that still matches the supplied genes
+- if there is any tradeoff between ambition and validity, prefer the simplest fully valid deterministic implementation
 
-Do not invent new major ideas at implementation time.
-If the design is ambiguous, choose the most conservative implementation that still matches the supplied genes.
-If there is any tradeoff between ambition and validity, prefer the simplest fully valid deterministic implementation.
+Patch discipline:
+- in FULL mode, produce region bodies for all eight canonical regions
+- in PATCH mode, produce region bodies only for the listed changed sections
+- in PATCH mode, assume the repository will preserve every untouched maternal region byte-for-byte
+- do not try to compensate for unchanged regions by rewriting behavior elsewhere
+- keep each region body faithful to its matching genome section
+- no region may contain a hidden full end-to-end implementation
+- `OPTIONAL_CODE_SKETCH` may contain localized procedural code, but it must remain local
+
+All scaffold regions live inside `run_packing()`.
+Therefore, code emitted for a region body must be valid as inserted directly between that region’s markers in the final file.
 
 ## Output format
 
-Return ONLY valid Python source code.
-Do NOT wrap the code in markdown fences (no ``` or ```python).
-Do NOT add any text before or after the code.
-The very first line of your response must be a Python comment or import statement.
+Return exactly these sections in this exact order.
+Do not use markdown code fences.
 
-## Hard constraints
+## COMPILATION_MODE
+Write exactly one of:
+- FULL
+- PATCH
 
-- Preserve the fixed scaffold and only fill the editable regions
-- Use only `numpy` and Python standard library
-- The final module must define `run_packing()`
-- `run_packing()` takes no arguments
-- `run_packing()` must return exactly `(centers, radii, reported_sum)` — a 3-tuple
-- `centers` must be a numpy array with shape `(26, 2)`
-- `radii` must be a numpy array with shape `(26,)`
-- `reported_sum` must equal `np.sum(radii)`
-- All radii must be positive
-- All circles must fit inside the unit square [0, 1] x [0, 1]
-- No two circles may overlap
-- Keep the code deterministic
-- Code must complete within 120 seconds
+## REGION INIT_GEOMETRY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and INIT_GEOMETRY is listed in CHANGED_SECTIONS
 
-## Pre-flight checklist
+## END_REGION
 
-Before outputting, mentally verify:
-1. The code is syntactically valid Python (all parentheses closed, all strings terminated, correct indentation)
-2. Every code path in `run_packing()` ends with `return centers, radii, reported_sum`
-3. `centers` has shape `(26, 2)` — not `(25, 2)`, not `(27, 2)`, not `(26,)`
-4. `radii` has shape `(26,)` — not `(26, 1)`, not a list
-5. No circles are placed outside [0, 1] x [0, 1] after accounting for radius
-6. The code does not contain markdown fences or non-Python text
+## REGION RADIUS_POLICY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and RADIUS_POLICY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION EXPANSION_POLICY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and EXPANSION_POLICY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION CONFLICT_MODEL
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and CONFLICT_MODEL is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION REPAIR_POLICY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and REPAIR_POLICY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION CONTROL_POLICY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and CONTROL_POLICY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION PARAMETERS
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and PARAMETERS is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION OPTIONAL_CODE_SKETCH
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and OPTIONAL_CODE_SKETCH is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+Rules:
+- in FULL mode, all eight regions must be present
+- in PATCH mode, include only the changed regions and omit the unchanged ones entirely
+- region headings must use the exact canonical names
+- region bodies must be raw Python lines exactly as they should appear between the scaffold markers
+- do not repeat the scaffold markers inside a region body
+- do not emit commentary, analysis, or prose

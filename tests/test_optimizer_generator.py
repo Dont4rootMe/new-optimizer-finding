@@ -18,8 +18,25 @@ from src.organisms.compatibility import (
     CompatibilityValidationContext,
     format_compatibility_rejection_feedback,
 )
+from src.organisms.implementation_patch import (
+    ParsedImplementationPatch,
+    assemble_implementation_from_patch,
+    extract_region_bodies_from_source,
+)
 from src.organisms.novelty import NoveltyCheckContext, NoveltyRejectionExhaustedError
 from src.organisms.organism import save_organism_artifacts
+
+CIRCLE_REGIONS = (
+    "INIT_GEOMETRY",
+    "RADIUS_POLICY",
+    "EXPANSION_POLICY",
+    "CONFLICT_MODEL",
+    "REPAIR_POLICY",
+    "CONTROL_POLICY",
+    "PARAMETERS",
+    "OPTIONAL_CODE_SKETCH",
+)
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _cfg():
@@ -57,6 +74,167 @@ def _cfg():
             "paths": {"api_platform_runtime_root": ".tmp_api_platform_runtime"},
         }
     )
+
+
+def _circle_cfg():
+    return OmegaConf.create(
+        {
+            "seed": 123,
+            "evolver": {
+                "creation": {
+                    "max_attempts_to_create_organism": 1,
+                    "max_attempts_to_repair_organism_after_error": 1,
+                    "max_attempts_to_regenerate_organism_after_novelty_rejection": 1,
+                    "max_attempts_to_regenerate_organism_after_compatibility_rejection": 1,
+                },
+                "prompts": {
+                    "project_context": "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt",
+                    "genome_schema": "conf/experiments/circle_packing_shinka/prompts/shared/genome_schema.txt",
+                    "seed_system": "conf/experiments/circle_packing_shinka/prompts/seed/system.txt",
+                    "seed_user": "conf/experiments/circle_packing_shinka/prompts/seed/user.txt",
+                    "mutation_system": "conf/experiments/circle_packing_shinka/prompts/mutation/system.txt",
+                    "mutation_user": "conf/experiments/circle_packing_shinka/prompts/mutation/user.txt",
+                    "mutation_novelty_system": "conf/experiments/circle_packing_shinka/prompts/novelty/mutation/system.txt",
+                    "mutation_novelty_user": "conf/experiments/circle_packing_shinka/prompts/novelty/mutation/user.txt",
+                    "crossover_system": "conf/experiments/circle_packing_shinka/prompts/crossover/system.txt",
+                    "crossover_user": "conf/experiments/circle_packing_shinka/prompts/crossover/user.txt",
+                    "crossover_novelty_system": "conf/experiments/circle_packing_shinka/prompts/novelty/crossover/system.txt",
+                    "crossover_novelty_user": "conf/experiments/circle_packing_shinka/prompts/novelty/crossover/user.txt",
+                    "implementation_system": "conf/experiments/circle_packing_shinka/prompts/implementation/system.txt",
+                    "implementation_user": "conf/experiments/circle_packing_shinka/prompts/implementation/user.txt",
+                    "implementation_template": "conf/experiments/circle_packing_shinka/prompts/shared/template.txt",
+                    "repair_system": "conf/experiments/circle_packing_shinka/prompts/repair/system.txt",
+                    "repair_user": "conf/experiments/circle_packing_shinka/prompts/repair/user.txt",
+                },
+                "llm": {"route_weights": {"mock": 1.0}, "seed": 123},
+            },
+            "api_platforms": {"mock": {"_target_": "api_platforms.mock.platform.build_platform"}},
+            "paths": {"api_platform_runtime_root": ".tmp_api_platform_runtime"},
+        }
+    )
+
+
+def _circle_genetic_code(*, radius_policy: str = "Use uniform radii.") -> dict[str, object]:
+    entries = {
+        "INIT_GEOMETRY": "Start from a centered scaffold.",
+        "RADIUS_POLICY": radius_policy,
+        "EXPANSION_POLICY": "Do not expand after initialization.",
+        "CONFLICT_MODEL": "Track boundary and pairwise violations.",
+        "REPAIR_POLICY": "Use deterministic local shifts.",
+        "CONTROL_POLICY": "Run construction once.",
+        "PARAMETERS": "Use radius 0.04.",
+        "OPTIONAL_CODE_SKETCH": "None.",
+    }
+    return {
+        "core_gene_sections": [
+            {"name": name, "entries": [entries[name]]}
+            for name in CIRCLE_REGIONS
+        ],
+        "interaction_notes": "Sections are coherent.",
+        "compute_notes": "Deterministic constructive code.",
+        "change_description": "A sectioned test design.",
+    }
+
+
+def _circle_design_text(*, radius_policy: str = "Use uniform radii.") -> str:
+    genes = _circle_genetic_code(radius_policy=radius_policy)
+    core = "\n\n".join(
+        f"### {section['name']}\n- {section['entries'][0]}"
+        for section in genes["core_gene_sections"]  # type: ignore[index]
+    )
+    return (
+        "## CORE_GENES\n"
+        f"{core}\n\n"
+        "## INTERACTION_NOTES\n"
+        "Sections are coherent.\n\n"
+        "## COMPUTE_NOTES\n"
+        "Deterministic constructive code.\n\n"
+        "## CHANGE_DESCRIPTION\n"
+        "A sectioned test design.\n"
+    )
+
+
+def _circle_region_body(region: str, *, patched: bool = False) -> str:
+    if region == "INIT_GEOMETRY":
+        return (
+            "    centers = np.asarray([[0.10 + 0.06 * (i % 13), "
+            "0.20 + 0.20 * (i // 13)] for i in range(26)], dtype=float)\n"
+        )
+    if region == "RADIUS_POLICY":
+        radius = "0.05" if patched else "0.04"
+        return f"    radii = np.full(26, {radius}, dtype=float)\n"
+    return f"    # {'patched' if patched else 'base'} {region}\n"
+
+
+def _circle_patch_response(mode: str, regions: tuple[str, ...], *, patched: bool = False) -> str:
+    pieces = ["## COMPILATION_MODE", mode]
+    for region in regions:
+        pieces.extend(("", f"## REGION {region}", _circle_region_body(region, patched=patched).rstrip("\n"), "## END_REGION"))
+    return "\n".join(pieces) + "\n"
+
+
+def _circle_scaffold_template() -> str:
+    return (
+        ROOT / "conf" / "experiments" / "circle_packing_shinka" / "prompts" / "shared" / "template.txt"
+    ).read_text(encoding="utf-8").strip()
+
+
+def _circle_base_source() -> str:
+    return assemble_implementation_from_patch(
+        scaffold_text=_circle_scaffold_template(),
+        patch=ParsedImplementationPatch(
+            compilation_mode="FULL",
+            region_bodies=tuple((region, _circle_region_body(region)) for region in CIRCLE_REGIONS),
+        ),
+        expected_region_names=CIRCLE_REGIONS,
+    )
+
+
+def _make_circle_parent(tmp_path: Path, *, implementation_source: str | None = None) -> OrganismMeta:
+    organism_dir = tmp_path / "circle_parent"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    implementation_path = organism_dir / "implementation.py"
+    implementation_path.write_text(implementation_source or _circle_base_source(), encoding="utf-8")
+    organism = OrganismMeta(
+        organism_id="circle_parent",
+        island_id="symmetric_constructions",
+        generation_created=0,
+        current_generation_active=0,
+        timestamp="2026-01-01T00:00:00Z",
+        mother_id=None,
+        father_id=None,
+        operator="seed",
+        genetic_code_path=str(organism_dir / "genetic_code.md"),
+        implementation_path=str(implementation_path),
+        lineage_path=str(organism_dir / "lineage.json"),
+        organism_dir=str(organism_dir),
+        llm_route_id="mock",
+        llm_provider="mock",
+        provider_model_id="mock-model",
+        prompt_hash="abc",
+        seed=123,
+    )
+    save_organism_artifacts(
+        organism,
+        genetic_code=_circle_genetic_code(),
+        lineage=[
+            {
+                "generation": 0,
+                "operator": "seed",
+                "mother_id": None,
+                "father_id": None,
+                "change_description": "Initial sectioned circle organism.",
+                "selected_simple_experiments": ["unit_square_26"],
+                "selected_hard_experiments": [],
+                "simple_score": 1.0,
+                "hard_score": None,
+                "cross_island": False,
+                "father_island_id": None,
+            }
+        ],
+    )
+    implementation_path.write_text(implementation_source or _circle_base_source(), encoding="utf-8")
+    return organism
 
 
 def _make_repairable_organism(tmp_path: Path) -> OrganismMeta:
@@ -198,6 +376,20 @@ def _compatibility_rejected_text(reason: str, sections: str = "NONE") -> str:
         f"{reason}\n\n"
         "## SECTIONS_AT_ISSUE\n"
         f"{sections}\n"
+    )
+
+
+def _llm_response(stage: str, text: str) -> LlmResponse:
+    return LlmResponse(
+        text=text,
+        route_id="mock",
+        provider="mock",
+        provider_model_id="mock-model",
+        raw_request={"stage": stage},
+        raw_response={"stage": stage},
+        usage={},
+        started_at="2026-01-01T00:00:00Z",
+        finished_at="2026-01-01T00:00:01Z",
     )
 
 
@@ -409,6 +601,142 @@ def test_run_creation_stages_persists_raw_implementation_exchange_before_extract
     assert llm_response["implementation"]["text"] == "def broken(\n"
     assert llm_response["implementation"]["status"] == "failed"
     assert "syntactically invalid Python" in llm_response["implementation"]["error_msg"]
+
+
+def test_circle_seed_implementation_stage_uses_full_patch_compilation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_circle_cfg())
+    organism_dir = tmp_path / "circle_seed_full"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    stages: list[str] = []
+
+    def fake_generate(request):
+        stages.append(request.stage)
+        if request.stage == "design":
+            return _llm_response(request.stage, _circle_design_text())
+        assert request.stage == "implementation"
+        assert "=== COMPILATION MODE ===\nFULL" in request.user_prompt
+        assert "=== CHANGED_SECTIONS ===\n" + "\n".join(CIRCLE_REGIONS) in request.user_prompt
+        assert "=== MATERNAL BASE GENETIC CODE ===\nNONE" in request.user_prompt
+        return _llm_response(request.stage, _circle_patch_response("FULL", CIRCLE_REGIONS))
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    try:
+        result = generator.run_creation_stages(
+            design_system_prompt="design system",
+            design_user_prompt="design user",
+            org_dir=organism_dir,
+            organism_id="circle_seed_full",
+            generation=0,
+        )
+    finally:
+        generator.close()
+
+    assert stages == ["design", "implementation"]
+    assert "## COMPILATION_MODE" not in result.implementation_code
+    assert "# === REGION: INIT_GEOMETRY ===" in result.implementation_code
+    assert "radii = np.full(26, 0.04, dtype=float)" in result.implementation_code
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
+    assert llm_request["implementation"]["compilation_mode"] == "FULL"
+    assert llm_request["implementation"]["changed_sections"] == list(CIRCLE_REGIONS)
+    assert llm_response["implementation"]["text"] == result.implementation_code
+
+
+def test_circle_mutation_implementation_stage_uses_patch_and_preserves_maternal_regions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_circle_cfg())
+    organism_dir = tmp_path / "circle_mutation_patch"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    parent = _make_circle_parent(tmp_path)
+    base_source = Path(parent.implementation_path).read_text(encoding="utf-8")
+
+    def fake_generate(request):
+        if request.stage == "design":
+            return _llm_response(
+                request.stage,
+                _circle_design_text(radius_policy="Use role-dependent non-uniform radii."),
+            )
+        assert request.stage == "implementation"
+        assert "=== COMPILATION MODE ===\nPATCH" in request.user_prompt
+        assert "=== CHANGED_SECTIONS ===\nRADIUS_POLICY" in request.user_prompt
+        assert "=== MATERNAL BASE IMPLEMENTATION ===\n" + base_source in request.user_prompt
+        return _llm_response(request.stage, _circle_patch_response("PATCH", ("RADIUS_POLICY",), patched=True))
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    try:
+        result = generator.run_creation_stages(
+            design_system_prompt="design system",
+            design_user_prompt="design user",
+            org_dir=organism_dir,
+            organism_id="circle_mutation_patch",
+            generation=1,
+            implementation_base_parent=parent,
+        )
+    finally:
+        generator.close()
+
+    base_bodies = dict(extract_region_bodies_from_source(base_source, expected_region_names=CIRCLE_REGIONS))
+    final_bodies = dict(
+        extract_region_bodies_from_source(result.implementation_code, expected_region_names=CIRCLE_REGIONS)
+    )
+    assert final_bodies["RADIUS_POLICY"] == _circle_region_body("RADIUS_POLICY", patched=True)
+    for region in CIRCLE_REGIONS:
+        if region != "RADIUS_POLICY":
+            assert final_bodies[region] == base_bodies[region]
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
+    assert llm_request["implementation"]["compilation_mode"] == "PATCH"
+    assert llm_request["implementation"]["changed_sections"] == ["RADIUS_POLICY"]
+    assert llm_response["implementation"]["text"] == result.implementation_code
+
+
+def test_circle_patch_compilation_fails_instead_of_full_fallback_for_non_scaffold_base(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_circle_cfg())
+    organism_dir = tmp_path / "circle_patch_bad_base"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    parent = _make_circle_parent(
+        tmp_path,
+        implementation_source="import numpy as np\n\ndef run_packing():\n    return None\n",
+    )
+    stages: list[str] = []
+
+    def fake_generate(request):
+        stages.append(request.stage)
+        if request.stage == "design":
+            return _llm_response(
+                request.stage,
+                _circle_design_text(radius_policy="Use role-dependent non-uniform radii."),
+            )
+        assert request.stage == "implementation"
+        assert "=== COMPILATION MODE ===\nPATCH" in request.user_prompt
+        return _llm_response(request.stage, _circle_patch_response("PATCH", ("RADIUS_POLICY",), patched=True))
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    try:
+        with pytest.raises(ValueError, match="expected"):
+            generator.run_creation_stages(
+                design_system_prompt="design system",
+                design_user_prompt="design user",
+                org_dir=organism_dir,
+                organism_id="circle_patch_bad_base",
+                generation=1,
+                implementation_base_parent=parent,
+            )
+    finally:
+        generator.close()
+
+    assert stages == ["design", "implementation"]
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    assert llm_request["implementation"]["compilation_mode"] == "PATCH"
+    assert llm_request["implementation"]["status"] == "failed"
 
 
 def test_run_creation_stages_persists_pending_design_exchange_before_transport_failure(

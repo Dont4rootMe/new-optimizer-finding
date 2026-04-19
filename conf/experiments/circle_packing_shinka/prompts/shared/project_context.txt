@@ -63,7 +63,7 @@ Score:
 - No file I/O, subprocesses, network calls, or external solvers
 - Keep the program deterministic
 - Return only the required tuple from `run_packing()`
-- In implementation stage, return only final Python code
+- In implementation stage, return only the implementation artifact required by that prompt
 
 ## Genetic code rule
 

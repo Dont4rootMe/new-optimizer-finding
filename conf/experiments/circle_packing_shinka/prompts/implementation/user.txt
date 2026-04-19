@@ -1,4 +1,4 @@
-Convert this circle-packing design into the final `implementation.py`.
+Compile this circle-packing organism into scaffold region bodies.
 
 === FUNCTION CONTRACT ===
 You must implement exactly this function:
@@ -20,16 +20,38 @@ Constraints enforced by the evaluator:
 
 Score = sum of radii. Higher is better.
 
+=== COMPILATION MODE ===
+{compilation_mode}
+
+=== CHANGED_SECTIONS ===
+{changed_sections}
+
 === ORGANISM GENETIC CODE ===
 {organism_genetic_code}
 
-=== ORGANISM NOVELTY SUMMARY ===
+=== ORGANISM CHANGE_DESCRIPTION ===
 {change_description}
 
-=== FIXED IMPLEMENTATION TEMPLATE ===
+=== MATERNAL BASE GENETIC CODE ===
+{base_parent_genetic_code}
+
+=== MATERNAL BASE IMPLEMENTATION ===
+{base_parent_implementation}
+
+=== CANONICAL IMPLEMENTATION SCAFFOLD ===
 {implementation_template}
 
-Implement the supplied ideas faithfully.
-Do not add a new major idea that is absent from the genes and novelty summary.
+=== TASK ===
+Produce scaffold region bodies for this organism.
 
-Return ONLY the final Python code. No markdown fences, no commentary before or after.
+If COMPILATION_MODE is FULL:
+- compile all eight canonical regions from the scaffold
+
+If COMPILATION_MODE is PATCH:
+- compile only the listed CHANGED_SECTIONS
+- do not compile any unchanged section
+- the repository will preserve unchanged maternal regions byte-for-byte
+
+Be faithful to the supplied sectioned genes and the change description.
+Do not output a full `implementation.py`.
+Return only the patch artifact in the required format.

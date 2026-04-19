@@ -35,7 +35,7 @@ prompts:
   compatibility_crossover_user: conf/experiments/circle_packing_shinka/prompts/compatibility/crossover/user.txt
   implementation_system: conf/experiments/circle_packing_shinka/prompts/implementation/system.txt
   implementation_user: conf/experiments/circle_packing_shinka/prompts/implementation/user.txt
-  implementation_template: conf/experiments/circle_packing_shinka/prompts/implementation/template.txt
+  implementation_template: conf/experiments/circle_packing_shinka/prompts/shared/template.txt
   repair_system: conf/experiments/circle_packing_shinka/prompts/repair/system.txt
   repair_user: conf/experiments/circle_packing_shinka/prompts/repair/user.txt
 

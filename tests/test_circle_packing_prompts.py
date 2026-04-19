@@ -114,7 +114,7 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
 
     assert "primary object is the organism's genetic code" in bundle.project_context
     assert "# INIT_GEOMETRY" in bundle.genome_schema
-    assert "Do not invent new major ideas at implementation time." in bundle.implementation_system
+    assert "do not invent new major ideas at implementation time" in bundle.implementation_system
     assert "child genetic code draft" in bundle.mutation_system.lower()
     assert "child draft" in bundle.crossover_system.lower()
     assert "keep it essentially intact" in bundle.mutation_system
@@ -326,6 +326,26 @@ def test_circle_packing_implementation_and_repair_prompts_do_not_require_genome_
         bundle.repair_user,
     )
     assert all("{genome_schema}" not in prompt for prompt in non_generation_prompts)
+
+
+def test_circle_packing_implementation_prompt_uses_patch_artifact_contract() -> None:
+    bundle = load_prompt_bundle(_compose_cfg())
+    combined_prompt = "\n".join((bundle.implementation_system, bundle.implementation_user))
+
+    assert "do not output a full `implementation.py`" in bundle.implementation_system
+    assert "## COMPILATION_MODE" in bundle.implementation_system
+    assert "do not invent new major ideas at implementation time" in combined_prompt
+    assert "Return ONLY valid Python source code" not in combined_prompt
+    assert "=== COMPILATION MODE ===" in bundle.implementation_user
+    assert "=== CHANGED_SECTIONS ===" in bundle.implementation_user
+    assert "=== MATERNAL BASE GENETIC CODE ===" in bundle.implementation_user
+    assert "=== MATERNAL BASE IMPLEMENTATION ===" in bundle.implementation_user
+    assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.implementation_user
+    assert "RUN_PACKING_BODY" not in bundle.implementation_template
+    for region in tuple(heading[4:] for heading in SECTION_HEADINGS):
+        assert f"## REGION {region}" in bundle.implementation_system
+        assert f"# === REGION: {region} ===" in bundle.implementation_template
+        assert f"# === END_REGION: {region} ===" in bundle.implementation_template
 
 
 def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> None:

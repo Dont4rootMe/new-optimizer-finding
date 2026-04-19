@@ -296,6 +296,10 @@ def build_implementation_prompt(
     genetic_code: dict[str, Any],
     change_description: str,
     prompts: PromptBundle,
+    compilation_mode: str = "FULL",
+    changed_sections: str = "NONE",
+    base_parent_genetic_code: str = "NONE",
+    base_parent_implementation: str = "NONE",
 ) -> tuple[str, str]:
     """Build the shared implementation prompt from canonical genetic-code artifacts."""
 
@@ -308,6 +312,10 @@ def build_implementation_prompt(
         organism_genetic_code=format_genetic_code(dict(genetic_code)),
         change_description=normalized_change_description,
         implementation_template=prompts.implementation_template,
+        compilation_mode=compilation_mode,
+        changed_sections=changed_sections,
+        base_parent_genetic_code=base_parent_genetic_code,
+        base_parent_implementation=base_parent_implementation,
     )
     return system, user
 

@@ -90,8 +90,11 @@ def test_circle_packing_prompt_bundle_loads() -> None:
     bundle = load_prompt_bundle(cfg)
 
     assert "26 circles in the unit square" in bundle.project_context
-    assert "run_packing()" in bundle.implementation_system
-    assert "RUN_PACKING_BODY" in bundle.implementation_template
+    assert "patch artifact" in bundle.implementation_system
+    assert "## COMPILATION_MODE" in bundle.implementation_system
+    assert "# === REGION: INIT_GEOMETRY ===" in bundle.implementation_template
+    assert "# === REGION: OPTIONAL_CODE_SKETCH ===" in bundle.implementation_template
+    assert "RUN_PACKING_BODY" not in bundle.implementation_template
 
 
 def test_circle_packing_evaluator_accepts_valid_candidate(tmp_path: Path) -> None:

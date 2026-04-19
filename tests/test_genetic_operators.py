@@ -138,6 +138,7 @@ class _FakeCanonicalGenerator:
         self.implementation_response_text = implementation_response_text
         self.novelty_response_texts = novelty_response_texts or ["## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n"]
         self.calls: list[tuple[str, str, str, Path]] = []
+        self.implementation_base_parent: OrganismMeta | None = None
 
     def run_creation_stages(
         self,
@@ -149,7 +150,10 @@ class _FakeCanonicalGenerator:
         generation: int,
         island_id: str | None = None,
         novelty_context=None,
+        compatibility_context=None,
+        implementation_base_parent: OrganismMeta | None = None,
     ) -> CreationStageResult:
+        self.implementation_base_parent = implementation_base_parent
         design_prompts: list[tuple[str, str]] = []
         novelty_exchanges: list[tuple[str, str, str]] = []
         rejection_feedback: list[str] = []
@@ -273,6 +277,11 @@ class _FakeCanonicalGenerator:
             llm_provider="test",
             provider_model_id="test-model",
         )
+
+
+class _FakePatchCompilationGenerator(_FakeCanonicalGenerator):
+    def uses_section_patch_compilation(self) -> bool:
+        return True
 
 
 def test_mutation_operator_produce_persists_artifacts_and_lineage(tmp_path: Path) -> None:
@@ -444,3 +453,83 @@ def test_mutation_operator_passes_novelty_feedback_into_regeneration_prompt(tmp_
     retry_design_prompt = generator.calls[2][2]
     assert generator.calls[2][0] == "design"
     assert "This only paraphrases the parent momentum idea." in retry_design_prompt
+
+
+def test_mutation_operator_passes_parent_as_patch_compilation_base(tmp_path: Path) -> None:
+    parent = _make_parent(
+        tmp_path,
+        org_id="patch_parent",
+        island_id="gradient_methods",
+        genes=["adaptive momentum", "warmup schedule", "gradient clipping"],
+    )
+    generator = _FakePatchCompilationGenerator(
+        design_response_text=(
+            "## CORE_GENES\n"
+            "- adaptive momentum\n"
+            "- warmup schedule\n"
+            "- trust ratio scaling\n\n"
+            "## INTERACTION_NOTES\n"
+            "Retain stable momentum and warmup while adding trust-ratio scaling.\n\n"
+            "## COMPUTE_NOTES\n"
+            "Keep step_fn unused and update compute light.\n\n"
+            "## CHANGE_DESCRIPTION\n"
+            "Dropped clipping and replaced it with trust-ratio scaling.\n"
+        ),
+        implementation_response_text=_implementation_code("PatchMutationChild"),
+    )
+    org_dir = tmp_path / "child_patch_mutation"
+    org_dir.mkdir(parents=True, exist_ok=True)
+
+    MutationOperator(q=0.6, seed=1).produce(
+        parent=parent,
+        organism_id="patch_child01",
+        generation=1,
+        org_dir=org_dir,
+        generator=generator,
+    )
+
+    assert generator.implementation_base_parent is parent
+
+
+def test_crossover_operator_passes_mother_as_patch_compilation_base(tmp_path: Path) -> None:
+    mother = _make_parent(
+        tmp_path / "patch_mother",
+        org_id="patch_mother",
+        island_id="gradient_methods",
+        genes=["adaptive momentum", "warmup schedule", "gradient clipping"],
+    )
+    father = _make_parent(
+        tmp_path / "patch_father",
+        org_id="patch_father",
+        island_id="second_order",
+        genes=["diagonal preconditioning", "curvature damping", "gradient clipping"],
+    )
+    generator = _FakePatchCompilationGenerator(
+        design_response_text=(
+            "## CORE_GENES\n"
+            "- adaptive momentum\n"
+            "- warmup schedule\n"
+            "- diagonal preconditioning\n\n"
+            "## INTERACTION_NOTES\n"
+            "Preserve maternal schedule while injecting diagonal preconditioning.\n\n"
+            "## COMPUTE_NOTES\n"
+            "No extra closures; keep the controller cheap.\n\n"
+            "## CHANGE_DESCRIPTION\n"
+            "Kept the maternal schedule and introduced paternal diagonal preconditioning.\n"
+        ),
+        implementation_response_text=_implementation_code("PatchCrossoverChild"),
+    )
+    org_dir = tmp_path / "child_patch_crossover"
+    org_dir.mkdir(parents=True, exist_ok=True)
+
+    CrossbreedingOperator(p=1.0, seed=3).produce(
+        mother=mother,
+        father=father,
+        organism_id="patch_child02",
+        generation=1,
+        org_dir=org_dir,
+        generator=generator,
+    )
+
+    assert generator.implementation_base_parent is mother
+    assert generator.implementation_base_parent is not father

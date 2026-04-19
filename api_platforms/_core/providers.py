@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -98,6 +99,53 @@ def _render_mock_implementation(template: str, organism_id: str, generation: int
     )
 
 
+def _mock_circle_region_body(region_name: str) -> str:
+    if region_name == "INIT_GEOMETRY":
+        return (
+            "    centers = np.asarray([\n"
+            "        [0.10, 0.15], [0.24, 0.15], [0.38, 0.15], [0.52, 0.15], [0.66, 0.15], [0.80, 0.15], [0.94, 0.15],\n"
+            "        [0.17, 0.33], [0.31, 0.33], [0.45, 0.33], [0.59, 0.33], [0.73, 0.33], [0.87, 0.33],\n"
+            "        [0.10, 0.51], [0.24, 0.51], [0.38, 0.51], [0.52, 0.51], [0.66, 0.51], [0.80, 0.51], [0.94, 0.51],\n"
+            "        [0.17, 0.69], [0.31, 0.69], [0.45, 0.69], [0.59, 0.69], [0.73, 0.69], [0.87, 0.69],\n"
+            "    ], dtype=float)\n"
+        )
+    if region_name == "RADIUS_POLICY":
+        return "    radii = np.full(26, 0.04, dtype=float)\n"
+    return f"    # {region_name} is already satisfied by the deterministic constructive baseline.\n"
+
+
+def _render_mock_circle_patch(user_prompt: str) -> str:
+    section_names = (
+        "INIT_GEOMETRY",
+        "RADIUS_POLICY",
+        "EXPANSION_POLICY",
+        "CONFLICT_MODEL",
+        "REPAIR_POLICY",
+        "CONTROL_POLICY",
+        "PARAMETERS",
+        "OPTIONAL_CODE_SKETCH",
+    )
+    mode_match = re.search(r"=== COMPILATION MODE ===\n(.+?)(?:\n\n|$)", user_prompt, flags=re.DOTALL)
+    mode = mode_match.group(1).strip() if mode_match else "FULL"
+    changed_match = re.search(r"=== CHANGED_SECTIONS ===\n(.+?)(?:\n\n=== |$)", user_prompt, flags=re.DOTALL)
+    changed_text = changed_match.group(1).strip() if changed_match else ""
+    if mode == "PATCH":
+        regions = tuple(line.strip() for line in changed_text.splitlines() if line.strip() and line.strip() != "NONE")
+    else:
+        regions = section_names
+    pieces = ["## COMPILATION_MODE", mode]
+    for region_name in regions:
+        pieces.extend(
+            (
+                "",
+                f"## REGION {region_name}",
+                _mock_circle_region_body(region_name).rstrip("\n"),
+                "## END_REGION",
+            )
+        )
+    return "\n".join(pieces).rstrip() + "\n"
+
+
 def build_mock_text(request: LlmRequest) -> str:
     organism_id = str(request.metadata.get("organism_id", "mock"))
     generation = int(request.metadata.get("generation", 0))
@@ -121,9 +169,22 @@ def build_mock_text(request: LlmRequest) -> str:
         if request.stage == "design":
             return (
                 "## CORE_GENES\n"
-                "- Deterministic staggered-row layout with alternating long and short rows inside the unit square\n"
-                "- Uniform radius assignment chosen conservatively so border constraints and pairwise distances remain valid\n"
-                "- Geometry-first construction that computes centers from explicit row templates instead of random search\n\n"
+                "### INIT_GEOMETRY\n"
+                "- Deterministic staggered-row layout with alternating long and short rows inside the unit square.\n\n"
+                "### RADIUS_POLICY\n"
+                "- Uniform radius assignment chosen conservatively so border constraints and pairwise distances remain valid.\n\n"
+                "### EXPANSION_POLICY\n"
+                "- Do not expand after initialization in the baseline organism.\n\n"
+                "### CONFLICT_MODEL\n"
+                "- Treat pairwise overlap and boundary overflow as invalid.\n\n"
+                "### REPAIR_POLICY\n"
+                "- Use a conservative geometry template that should not require repair.\n\n"
+                "### CONTROL_POLICY\n"
+                "- Construct centers and radii once, then return the deterministic result.\n\n"
+                "### PARAMETERS\n"
+                "- Use radius 0.04 for all circles.\n\n"
+                "### OPTIONAL_CODE_SKETCH\n"
+                "- None.\n\n"
                 "## INTERACTION_NOTES\n"
                 "This design favors stable valid packings with simple geometry and should work well as a seed for later refinements.\n\n"
                 "## COMPUTE_NOTES\n"
@@ -131,6 +192,8 @@ def build_mock_text(request: LlmRequest) -> str:
                 "## CHANGE_DESCRIPTION\n"
                 "A deterministic staggered packing program that starts from a valid geometric template for 26 circles.\n"
             )
+        if request.stage == "implementation" and "compilation mode" in joined_prompt:
+            return _render_mock_circle_patch(request.user_prompt)
         if template:
             return _render_mock_implementation(template, organism_id, generation, request.seed)
     if (

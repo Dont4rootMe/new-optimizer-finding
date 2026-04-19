@@ -216,6 +216,8 @@ class CrossbreedingOperator:
         }
         if compatibility_context is not None:
             creation_kwargs["compatibility_context"] = compatibility_context
+        if getattr(generator, "uses_section_patch_compilation", lambda: False)():
+            creation_kwargs["implementation_base_parent"] = mother
         creation = run_creation(**creation_kwargs)
         mother_lineage = read_organism_lineage(mother)
         ancestor_ids = list(mother.ancestor_ids)
