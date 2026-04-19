@@ -15,6 +15,7 @@ islands:
 
 prompts:
   project_context: conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt
+  genome_schema: conf/experiments/circle_packing_shinka/prompts/shared/genome_schema.txt
   seed_system: conf/experiments/circle_packing_shinka/prompts/seed/system.txt
   seed_user: conf/experiments/circle_packing_shinka/prompts/seed/user.txt
   mutation_system: conf/experiments/circle_packing_shinka/prompts/mutation/system.txt
