@@ -22,7 +22,9 @@ from src.evolve.types import LineageEntry, OrganismMeta
 from src.organisms.hypothesis_artifacts import (
     read_canonical_genome,
     validate_canonical_genome,
+    write_compatibility_report,
     write_canonical_genome,
+    write_functional_checks_report,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -210,6 +212,44 @@ def _build_genome_from_schema_provider(
             "Schema provider must expose build_genome_from_design_response for canonical hypothesis writes."
         )
     return builder(parsed, organism_id=organism_id)
+
+
+def _write_hypothesis_validation_reports(
+    org_dir: Path,
+    genome: dict[str, Any],
+    schema_provider: Any,
+) -> None:
+    compatibility_builder = getattr(schema_provider, "build_compatibility_report", None)
+    functional_checks_builder = getattr(schema_provider, "build_functional_checks_report", None)
+    if compatibility_builder is None and functional_checks_builder is None:
+        return
+    if not callable(compatibility_builder) or not callable(functional_checks_builder):
+        raise ValueError(
+            "Schema provider must expose both build_compatibility_report and "
+            "build_functional_checks_report when hypothesis validation artifacts are enabled."
+        )
+
+    compatibility_report = compatibility_builder(genome)
+    functional_checks = functional_checks_builder(genome)
+    write_compatibility_report(org_dir, compatibility_report)
+    write_functional_checks_report(org_dir, functional_checks)
+
+    hard = compatibility_report.get("hard_compatibility", {})
+    if not hard.get("is_compatible", False):
+        violations = hard.get("violations", [])
+        reasons = "; ".join(
+            f"{violation.get('rule_id', 'unknown')}: {violation.get('message', 'no message')}"
+            for violation in violations
+        )
+        raise ValueError(f"Canonical hypothesis failed hard compatibility: {reasons}")
+
+    if not functional_checks.get("checks_passed", False):
+        failed = [
+            f"{check.get('check_id', 'unknown')}: {check.get('message', 'no message')}"
+            for check in functional_checks.get("checks", [])
+            if check.get("status") == "failed"
+        ]
+        raise ValueError(f"Canonical hypothesis failed functional checks: {'; '.join(failed)}")
 
 
 def update_latest_lineage_entry(
@@ -451,5 +491,6 @@ def build_organism_from_response(
         )
         write_json(organism_meta_path(org.organism_dir), org.to_dict())
         write_canonical_genome(org_dir, genome, schema_provider)
+        _write_hypothesis_validation_reports(org_dir, genome, schema_provider)
         write_lineage(lineage_path(org.organism_dir), lineage)
     return org

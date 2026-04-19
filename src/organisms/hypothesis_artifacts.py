@@ -11,6 +11,8 @@ from src.organisms.hypothesis_render import render_genetic_code_markdown
 
 GENOME_FILENAME = "genome.json"
 GENETIC_CODE_FILENAME = "genetic_code.md"
+COMPATIBILITY_REPORT_FILENAME = "compatibility_report.json"
+FUNCTIONAL_CHECKS_REPORT_FILENAME = "functional_checks.json"
 
 _TOP_LEVEL_KEYS = {
     "schema_name",
@@ -156,4 +158,64 @@ def write_canonical_genome(organism_dir: Path, genome: dict, schema_provider) ->
     markdown_path.write_text(
         render_genetic_code_markdown(genome, schema_provider),
         encoding="utf-8",
+    )
+
+
+def _read_json_object(path: Path, label: str) -> dict:
+    if not path.exists():
+        raise FileNotFoundError(f"{label} is missing at {path}.")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{label} at {path} is not valid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{label} at {path} must be a JSON object.")
+    return payload
+
+
+def _write_json_object(path: Path, payload: dict, label: str) -> None:
+    if not isinstance(payload, dict):
+        raise ValueError(f"{label} must be a JSON object.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_compatibility_report(organism_dir: Path, report: dict) -> None:
+    """Write a task-specific compatibility report with deterministic JSON formatting."""
+
+    _write_json_object(
+        Path(organism_dir) / COMPATIBILITY_REPORT_FILENAME,
+        report,
+        "Compatibility report",
+    )
+
+
+def read_compatibility_report(organism_dir: Path) -> dict:
+    """Read a task-specific compatibility report JSON object."""
+
+    return _read_json_object(
+        Path(organism_dir) / COMPATIBILITY_REPORT_FILENAME,
+        "Compatibility report",
+    )
+
+
+def write_functional_checks_report(organism_dir: Path, report: dict) -> None:
+    """Write a task-specific functional checks report with deterministic JSON formatting."""
+
+    _write_json_object(
+        Path(organism_dir) / FUNCTIONAL_CHECKS_REPORT_FILENAME,
+        report,
+        "Functional checks report",
+    )
+
+
+def read_functional_checks_report(organism_dir: Path) -> dict:
+    """Read a task-specific functional checks report JSON object."""
+
+    return _read_json_object(
+        Path(organism_dir) / FUNCTIONAL_CHECKS_REPORT_FILENAME,
+        "Functional checks report",
     )

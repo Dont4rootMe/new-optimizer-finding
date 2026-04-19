@@ -280,7 +280,7 @@ def _validate_module(value: Any, slot: str, seen_module_ids: set[str]) -> None:
     if declared_slot != slot:
         _fail(f"{path}.slot", f"must match enclosing slot {slot!r}")
 
-    reads_state = _ensure_string_list(module["reads_state"], f"{path}.reads_state")
+    reads_state = _ensure_string_list(module["reads_state"], f"{path}.reads_state", allow_empty=True)
     writes_state = _ensure_string_list(module["writes_state"], f"{path}.writes_state")
     _validate_state_list(reads_state, f"{path}.reads_state")
     _validate_state_list(writes_state, f"{path}.writes_state")
@@ -456,6 +456,26 @@ def validate_materialized_slot_modules_against_library(genome: dict) -> None:
         if slot not in slots:
             _fail("slots", f"missing slot {slot!r}")
         module_library.validate_module_instance(slots[slot])
+
+
+def build_compatibility_report(genome: dict) -> dict:
+    """Build the canonical stage 3 compatibility artifact for this task family."""
+
+    from experiments.circle_packing_shinka._runtime.compatibility_contract_v1 import (
+        build_circle_packing_compatibility_report,
+    )
+
+    return build_circle_packing_compatibility_report(genome)
+
+
+def build_functional_checks_report(genome: dict) -> dict:
+    """Build the canonical stage 3 cheap functional check artifact for this task family."""
+
+    from experiments.circle_packing_shinka._runtime.compatibility_contract_v1 import (
+        build_circle_packing_functional_checks,
+    )
+
+    return build_circle_packing_functional_checks(genome)
 
 
 def _section_lines(parsed: dict[str, str], key: str, fallback: str) -> list[str]:

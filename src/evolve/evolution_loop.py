@@ -51,7 +51,11 @@ from src.evolve.types import (
 )
 from src.evolve.visualization import render_evolution_overview
 from src.organisms.crossbreeding import CrossbreedingOperator
-from src.organisms.hypothesis_artifacts import read_canonical_genome
+from src.organisms.hypothesis_artifacts import (
+    read_canonical_genome,
+    read_compatibility_report,
+    read_functional_checks_report,
+)
 from src.organisms.mutation import MutationOperator
 from src.organisms.organism import update_latest_lineage_entry
 
@@ -379,12 +383,49 @@ class EvolutionLoop:
         if self.hypothesis_schema_provider is None:
             return
         try:
-            read_canonical_genome(Path(organism.organism_dir), self.hypothesis_schema_provider)
+            genome = read_canonical_genome(Path(organism.organism_dir), self.hypothesis_schema_provider)
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"Canonical resume requires genome.json for organism {organism.organism_id}; "
                 "legacy circle-packing organisms without genome.json are not supported by this path."
             ) from exc
+
+        compatibility_builder = getattr(self.hypothesis_schema_provider, "build_compatibility_report", None)
+        functional_checks_builder = getattr(self.hypothesis_schema_provider, "build_functional_checks_report", None)
+        if compatibility_builder is None and functional_checks_builder is None:
+            return
+        if not callable(compatibility_builder) or not callable(functional_checks_builder):
+            raise ValueError(
+                "Hypothesis schema provider must expose both compatibility and functional check builders."
+            )
+
+        org_dir = Path(organism.organism_dir)
+        try:
+            compatibility_report = read_compatibility_report(org_dir)
+            functional_checks = read_functional_checks_report(org_dir)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"Canonical resume requires compatibility_report.json and functional_checks.json "
+                f"for organism {organism.organism_id}; legacy circle-packing organisms without "
+                "stage 3 artifacts are not supported by this path."
+            ) from exc
+
+        expected_compatibility = compatibility_builder(genome)
+        expected_checks = functional_checks_builder(genome)
+        if compatibility_report != expected_compatibility:
+            raise ValueError(
+                f"Canonical resume found compatibility_report.json that does not match genome.json "
+                f"for organism {organism.organism_id}."
+            )
+        if functional_checks != expected_checks:
+            raise ValueError(
+                f"Canonical resume found functional_checks.json that does not match genome.json "
+                f"for organism {organism.organism_id}."
+            )
+        if not compatibility_report["hard_compatibility"]["is_compatible"]:
+            raise ValueError(f"Canonical resume found hard-incompatible organism {organism.organism_id}.")
+        if not functional_checks["checks_passed"]:
+            raise ValueError(f"Canonical resume found failed functional checks for organism {organism.organism_id}.")
 
     async def _seed_initial_population(self) -> list[OrganismMeta]:
         """Compatibility helper that uses the shared queued seed pipeline."""

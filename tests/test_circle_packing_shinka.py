@@ -300,6 +300,12 @@ def test_circle_packing_seed_and_evolve_with_mock_route(tmp_path: Path) -> None:
         genome = read_json(organism_dir / "genome.json")
         assert genome["schema_name"] == "typed_segmented_genome"
         assert genome["representation"] == "typed_segmented_hypothesis"
+        compatibility_report = read_json(organism_dir / "compatibility_report.json")
+        assert compatibility_report["schema_name"] == "circle_packing_compatibility_report"
+        assert compatibility_report["hard_compatibility"]["is_compatible"] is True
+        functional_checks = read_json(organism_dir / "functional_checks.json")
+        assert functional_checks["schema_name"] == "circle_packing_functional_checks"
+        assert functional_checks["checks_passed"] is True
         assert (organism_dir / "genetic_code.md").read_text(encoding="utf-8").startswith(
             "## CORE_GENES\n- [layout | layout_triangular_lattice]"
         )

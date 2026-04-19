@@ -42,7 +42,7 @@ LINKAGE_GROUPS = {
 
 STATE_BY_SLOT = {
     "layout": {
-        "reads_state": ["packing_summary"],
+        "reads_state": [],
         "writes_state": ["candidate_centers"],
     },
     "selection": {
@@ -67,7 +67,7 @@ STATE_BY_SLOT = {
     },
     "boundary": {
         "reads_state": ["proposed_radii"],
-        "writes_state": ["boundary_report"],
+        "writes_state": ["boundary_report", "packing_summary"],
     },
     "termination": {
         "reads_state": ["packing_summary", "feasibility_status", "boundary_report"],
@@ -949,8 +949,8 @@ def _validate_library_definition(definition: Any, *, slot: str, module_key: str)
     ):
         _ensure_str(payload[key], f"{path}.{key}")
 
+    _ensure_string_list(payload["reads_state"], f"{path}.reads_state", allow_empty=True)
     for key in (
-        "reads_state",
         "writes_state",
         "required_preconditions",
         "guaranteed_postconditions",
