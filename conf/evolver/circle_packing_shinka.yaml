@@ -17,22 +17,26 @@ islands:
 prompts:
   project_context: conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt
   genome_schema: conf/experiments/circle_packing_shinka/prompts/shared/genome_schema.txt
+
   seed_system: conf/experiments/circle_packing_shinka/prompts/seed/system.txt
   seed_user: conf/experiments/circle_packing_shinka/prompts/seed/user.txt
+  compatibility_seed_system: conf/experiments/circle_packing_shinka/prompts/compatibility/seed/system.txt
+  compatibility_seed_user: conf/experiments/circle_packing_shinka/prompts/compatibility/seed/user.txt
+
   mutation_system: conf/experiments/circle_packing_shinka/prompts/mutation/system.txt
   mutation_user: conf/experiments/circle_packing_shinka/prompts/mutation/user.txt
   mutation_novelty_system: conf/experiments/circle_packing_shinka/prompts/novelty/mutation/system.txt
   mutation_novelty_user: conf/experiments/circle_packing_shinka/prompts/novelty/mutation/user.txt
   compatibility_mutation_system: conf/experiments/circle_packing_shinka/prompts/compatibility/mutation/system.txt
   compatibility_mutation_user: conf/experiments/circle_packing_shinka/prompts/compatibility/mutation/user.txt
+
   crossover_system: conf/experiments/circle_packing_shinka/prompts/crossover/system.txt
   crossover_user: conf/experiments/circle_packing_shinka/prompts/crossover/user.txt
   crossover_novelty_system: conf/experiments/circle_packing_shinka/prompts/novelty/crossover/system.txt
   crossover_novelty_user: conf/experiments/circle_packing_shinka/prompts/novelty/crossover/user.txt
-  compatibility_seed_system: conf/experiments/circle_packing_shinka/prompts/compatibility/seed/system.txt
-  compatibility_seed_user: conf/experiments/circle_packing_shinka/prompts/compatibility/seed/user.txt
   compatibility_crossover_system: conf/experiments/circle_packing_shinka/prompts/compatibility/crossover/system.txt
   compatibility_crossover_user: conf/experiments/circle_packing_shinka/prompts/compatibility/crossover/user.txt
+
   implementation_system: conf/experiments/circle_packing_shinka/prompts/implementation/system.txt
   implementation_user: conf/experiments/circle_packing_shinka/prompts/implementation/user.txt
   implementation_template: conf/experiments/circle_packing_shinka/prompts/shared/template.txt
@@ -56,6 +60,12 @@ reproduction:
     mutation_softmax_temperature: 1.0
     within_island_crossover_softmax_temperature: 1.0
     inter_island_crossover_softmax_temperature: 1.0
+  selection_score:
+    mode: weighted_sum
+    normalize_weights: true
+    weights:
+      simple_score: 1.0
+      inheritance_fitness: 0.0
 
 operators:
   mutation:
