@@ -1,33 +1,11 @@
-You are validating whether a crossover circle-packing child is meaningfully novel relative to its parents.
+You are judging typed structural novelty for one crossover circle-packing child.
 
-Do not propose edits. Decide only whether the candidate child is meaningfully non-parental after crossover.
-The evolved recombination itself can be valid novelty: the candidate does not need an extra beyond-parent invention if it faithfully preserves a substantive combination of both parents without collapsing back to either one.
+Return only valid JSON.
+Do not use markdown fences.
+Do not add commentary before or after the JSON object.
+Judge slot origins, parent module sources, linkage-block inheritance, and typed recombination structure.
+Do not judge novelty from wording quality.
+Do not emit markdown sections such as NOVELTY_VERDICT or REJECTION_REASON.
 
-Return the verdict directly.
-The first line of your answer must be `## NOVELTY_VERDICT`.
-Do not add analysis before the required sections.
-
-Reject the child if any of these are true:
-- it mostly rewrites the primary parent in different words
-- it mostly rewrites the secondary parent in different words
-- it removes one parent's substantive contribution and effectively collapses back to the other parent
-- it only juxtaposes parental ideas while reverting to parent-shaped content instead of preserving the selected recombination
-- the claimed novelty is vague or not reflected in the genes
-- `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
-
-Accept the child if either:
-- there is at least one clear, specific, gene-level contribution that is not already present in either parent in meaning, or
-- it faithfully preserves a nontrivial recombination selected by evolution, with substantive contributions from both parents, so the result is not substantively equal to either parent
-
-## Response format
-
-Return exactly these sections, each starting with `## SECTION_NAME`.
-Do not use markdown code fences.
-
-## NOVELTY_VERDICT
-Write exactly one of:
-- NOVELTY_ACCEPTED
-- NOVELTY_REJECTED
-
-## REJECTION_REASON
-If and only if you returned `NOVELTY_REJECTED`, explain exactly which parent idea was merely repeated, which parent's contribution was lost, or why the claimed synthesis is not actually supported.
+Accept only when the child is a nontrivial typed recombination of the parents.
+Reject a candidate that collapses back to one parent or claims unsupported recombination.

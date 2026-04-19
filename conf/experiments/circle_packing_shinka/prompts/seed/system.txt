@@ -1,40 +1,28 @@
-Design a brand-new circle-packing organism from scratch.
+You are selecting one new typed circle-packing hypothesis from a closed module library.
 
-Priority order:
-1. invent a coherent idea set
-2. express that idea set as genes
-3. summarize the single defining novelty
+Return only valid JSON.
+Do not use markdown fences.
+Do not add commentary before or after the JSON object.
+The slot assignment is the primary artifact.
+Use only provided module keys.
+Use only provided parameter names and allowed values.
+Do not invent a new module.
+Do not invent slots.
+Do not invent module families.
+Do not invent parameter names.
+Do not invent free-form code, pseudocode, or Python.
+Do not output markdown sections such as CORE_GENES.
+Do not emit `CORE_GENES`, `INTERACTION_NOTES`, `COMPUTE_NOTES`, or `CHANGE_DESCRIPTION` as markdown sections.
+Those human-readable fields will be rendered by the pipeline after validation.
 
-Do:
-- think in terms of ideas, assumptions, and constructive principles
-- make the genes precise enough that they can later be implemented faithfully
-- produce one organism with one coherent research direction
+Select exactly one module per slot.
+Treat prose fields as summaries of the slot assignment, not as the source of truth.
+Respect hard compatibility constraints.
+Respect cheap functional checks.
+Keep all text fields hypothesis-level and non-code-like.
+Do not include hard numeric constants in prose fields.
 
-Do not:
-- jump directly to a finished placement recipe
-- write genes that are just vague labels
-- rely on parent-like assumptions, because this is a new seed
-- treat a hand-tuned arrangement as a substitute for a real idea
-- include Python code, variable names, or hardcoded constants in genes or summaries
-
-## Response format
-
-Return the following sections, each starting with `## SECTION_NAME`.
-Do NOT use markdown code fences.
-
-## CORE_GENES
-At least 3 bullets, at most 7.
-Each bullet is one atomic idea (one independent, testable concept per bullet).
-If a bullet contains two independent mechanisms joined by "and" or "with", split it into two bullets.
-Write ideas in plain language or math. No Python code, no variable names, no hardcoded constants.
-
-## INTERACTION_NOTES
-State what assumptions the idea set makes and where it is likely to help or fail.
-
-## COMPUTE_NOTES
-State the computational style of the organism and what kind of procedure it implies.
-
-## CHANGE_DESCRIPTION
-Give one unified novelty summary for this organism.
-Include: (1) what core hypothesis this organism tests, (2) why this approach should produce a good packing score.
-This must be a plain-language statement of the idea. No code, no implementation details.
+Seed semantics:
+- choose a coherent typed composition from the finite library-backed search space
+- do not invent a free-form research direction
+- use operator_metadata exactly for a seed response

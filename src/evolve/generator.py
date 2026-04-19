@@ -7,6 +7,7 @@ import logging
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from omegaconf import DictConfig
 
@@ -192,6 +193,39 @@ class CandidateGenerator(BaseLlmGenerator):
             )
         return value
 
+    def _parse_design_response(
+        self,
+        raw_text: str,
+        *,
+        operation: str,
+        organism_id: str,
+        parser: Any | None = None,
+    ) -> dict[str, Any]:
+        if callable(parser):
+            return parser(raw_text, organism_id)
+
+        if self.hypothesis_schema_provider is not None:
+            provider_parser = getattr(
+                self.hypothesis_schema_provider,
+                f"parse_{operation}_design_response",
+                None,
+            )
+            if callable(provider_parser):
+                return provider_parser(raw_text, organism_id=organism_id)
+
+        return parse_llm_response(raw_text)
+
+    def _parse_novelty_response(
+        self,
+        raw_text: str,
+        *,
+        candidate_design: dict[str, Any],
+        novelty_context: NoveltyCheckContext,
+    ):
+        if novelty_context.parse_novelty_response is not None:
+            return novelty_context.parse_novelty_response(raw_text, candidate_design)
+        return parse_novelty_judgment(raw_text)
+
     def _run_standard_creation_stages(
         self,
         *,
@@ -290,7 +324,11 @@ class CandidateGenerator(BaseLlmGenerator):
         write_json(llm_response_path, llm_response_payload)
 
         try:
-            parsed_design = parse_llm_response(design_response.text)
+            parsed_design = self._parse_design_response(
+                design_response.text,
+                operation="seed",
+                organism_id=organism_id,
+            )
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
             llm_request_payload["design"]["status"] = "failed"
@@ -315,6 +353,8 @@ class CandidateGenerator(BaseLlmGenerator):
         implementation_system_prompt, implementation_user_prompt = build_implementation_prompt_from_design(
             parsed_design,
             self.prompt_bundle,
+            schema_provider=self.hypothesis_schema_provider,
+            organism_id=organism_id,
         )
         llm_request_payload["implementation"] = {
             "route_id": route_id,
@@ -629,7 +669,12 @@ class CandidateGenerator(BaseLlmGenerator):
             write_json(llm_response_path, llm_response_payload)
 
             try:
-                parsed_design = parse_llm_response(design_response.text)
+                parsed_design = self._parse_design_response(
+                    design_response.text,
+                    operation=novelty_context.operator,
+                    organism_id=organism_id,
+                    parser=novelty_context.parse_design_response,
+                )
             except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
                 request_entry["status"] = "failed"
@@ -747,7 +792,11 @@ class CandidateGenerator(BaseLlmGenerator):
             write_json(llm_response_path, llm_response_payload)
 
             try:
-                judgment = parse_novelty_judgment(novelty_response.text)
+                judgment = self._parse_novelty_response(
+                    novelty_response.text,
+                    candidate_design=parsed_design,
+                    novelty_context=novelty_context,
+                )
             except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
                 novelty_request_entry["status"] = "failed"
@@ -805,6 +854,8 @@ class CandidateGenerator(BaseLlmGenerator):
         implementation_system_prompt, implementation_user_prompt = build_implementation_prompt_from_design(
             accepted_parsed_design,
             self.prompt_bundle,
+            schema_provider=self.hypothesis_schema_provider,
+            organism_id=organism_id,
         )
         prompt_hash_parts.extend((implementation_system_prompt, implementation_user_prompt))
         llm_request_payload["implementation"] = {
@@ -1205,7 +1256,10 @@ class CandidateGenerator(BaseLlmGenerator):
 
         seed_operator = SeedOperator(island)
 
-        system_prompt, user_prompt = seed_operator.build_prompts(self.prompt_bundle)
+        system_prompt, user_prompt = seed_operator.build_prompts(
+            self.prompt_bundle,
+            schema_provider=self.hypothesis_schema_provider,
+        )
         creation = self.run_creation_stages_with_retries(
             design_system_prompt=system_prompt,
             design_user_prompt=user_prompt,

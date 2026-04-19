@@ -1,4 +1,5 @@
-Design a new circle-packing organism for this research island.
+=== TASK ===
+Design one new typed circle-packing organism for this research island.
 
 Island id: {island_id}
 Island name: {island_name}
@@ -6,8 +7,7 @@ Island name: {island_name}
 Island research style:
 {island_description}
 
-Your task is to generate an idea set first.
-Do not optimize the wording toward a ready-made solution.
-Produce genes that define how the organism thinks about constructing a packing.
+Choose one complete slot assignment, one global hypothesis block, one render_fields block, and the exact seed operator_metadata block.
+Return JSON only.
 
-The final organism will later be implemented as code that must return a valid packing of 26 circles in the unit square.
+{typed_prompt_context}

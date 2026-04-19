@@ -5,12 +5,15 @@ from __future__ import annotations
 import logging
 import random
 from pathlib import Path
+from typing import Any
 
 from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
 from src.evolve.storage import utc_now_iso
 from src.evolve.types import OrganismMeta
+from src.organisms.hypothesis_artifacts import read_canonical_genome
 from src.organisms.novelty import (
     NoveltyCheckContext,
+    NoveltyJudgment,
     build_crossover_novelty_prompt,
     format_novelty_rejection_feedback,
 )
@@ -73,6 +76,20 @@ def _build_crossbreed_prompt(
 
     mother_lineage = read_organism_lineage(mother)
     father_lineage = read_organism_lineage(father)
+    if schema_provider is not None and callable(getattr(schema_provider, "build_crossover_prompt_context", None)):
+        mother_genome = read_canonical_genome(Path(mother.organism_dir), schema_provider)
+        father_genome = read_canonical_genome(Path(father.organism_dir), schema_provider)
+        system = compose_system_prompt(prompts.project_context, prompts.crossover_system)
+        user = prompts.crossover_user.format(
+            child_slot_draft=schema_provider.format_slot_assignments_for_prompt(mother_genome),
+            primary_parent_slot_assignments=schema_provider.format_slot_assignments_for_prompt(mother_genome),
+            secondary_parent_slot_assignments=schema_provider.format_slot_assignments_for_prompt(father_genome),
+            primary_parent_hypothesis_summary=schema_provider.format_genome_summary_for_prompt(mother_genome),
+            secondary_parent_hypothesis_summary=schema_provider.format_genome_summary_for_prompt(father_genome),
+            typed_prompt_context=schema_provider.build_crossover_prompt_context(),
+            novelty_rejection_feedback=format_novelty_rejection_feedback(list(novelty_feedback or [])),
+        )
+        return system, user
 
     return build_crossover_prompt_from_artifacts(
         inherited_genes=inherited_genes,
@@ -104,12 +121,21 @@ def build_crossover_prompt_from_artifacts(
     """Build crossover prompts from raw canonical artifacts."""
 
     system = compose_system_prompt(prompts.project_context, prompts.crossover_system)
+    inherited_text = "\n".join(f"- {gene}" for gene in inherited_genes) or "(none)"
+    mother_text = format_genetic_code(dict(mother_genetic_code))
+    father_text = format_genetic_code(dict(father_genetic_code))
     user = prompts.crossover_user.format(
-        inherited_gene_pool="\n".join(f"- {gene}" for gene in inherited_genes) or "(none)",
-        mother_genetic_code=format_genetic_code(dict(mother_genetic_code)),
+        inherited_gene_pool=inherited_text,
+        mother_genetic_code=mother_text,
         mother_lineage_summary=format_lineage_summary(list(mother_lineage)),
-        father_genetic_code=format_genetic_code(dict(father_genetic_code)),
+        father_genetic_code=father_text,
         father_lineage_summary=format_lineage_summary(list(father_lineage)),
+        child_slot_draft=inherited_text,
+        primary_parent_slot_assignments=mother_text,
+        secondary_parent_slot_assignments=father_text,
+        primary_parent_hypothesis_summary=mother_text,
+        secondary_parent_hypothesis_summary=father_text,
+        typed_prompt_context="",
         novelty_rejection_feedback=format_novelty_rejection_feedback(list(novelty_feedback or [])),
     )
     return system, user
@@ -134,6 +160,11 @@ class CrossbreedingOperator:
         """Create a child organism via crossbreeding."""
 
         schema_provider = getattr(generator, "hypothesis_schema_provider", None)
+        mother_genome = None
+        father_genome = None
+        if schema_provider is not None:
+            mother_genome = read_canonical_genome(Path(mother.organism_dir), schema_provider)
+            father_genome = read_canonical_genome(Path(father.organism_dir), schema_provider)
         mother_genes = read_organism_hypothesis_for_prompt(
             mother,
             schema_provider=schema_provider,
@@ -180,6 +211,27 @@ class CrossbreedingOperator:
                 prompts=generator.prompt_bundle,
                 schema_provider=schema_provider,
             ),
+            parse_design_response=(
+                None
+                if schema_provider is None or mother_genome is None or father_genome is None
+                else lambda raw_text, child_id: schema_provider.parse_crossover_design_response(
+                    raw_text,
+                    primary_parent_genome=mother_genome,
+                    secondary_parent_genome=father_genome,
+                    organism_id=child_id,
+                )
+            ),
+            parse_novelty_response=(
+                None
+                if schema_provider is None or mother_genome is None or father_genome is None
+                else lambda raw_text, candidate_design: _parse_typed_crossover_novelty(
+                    raw_text,
+                    candidate_design=candidate_design,
+                    primary_parent_genome=mother_genome,
+                    secondary_parent_genome=father_genome,
+                    schema_provider=schema_provider,
+                )
+            ),
         )
         run_creation = getattr(generator, "run_creation_stages_with_retries", generator.run_creation_stages)
         creation = run_creation(
@@ -217,3 +269,23 @@ class CrossbreedingOperator:
             father_island_id=father.island_id,
             schema_provider=schema_provider,
         )
+
+
+def _parse_typed_crossover_novelty(
+    raw_text: str,
+    *,
+    candidate_design: dict[str, Any],
+    primary_parent_genome: dict[str, Any],
+    secondary_parent_genome: dict[str, Any],
+    schema_provider: Any,
+) -> NoveltyJudgment:
+    verdict = schema_provider.parse_crossover_novelty_response(
+        raw_text,
+        primary_parent_genome=primary_parent_genome,
+        secondary_parent_genome=secondary_parent_genome,
+        candidate_response=candidate_design,
+    )
+    if verdict["verdict"] == "NOVELTY_ACCEPTED":
+        return NoveltyJudgment(verdict="NOVELTY_ACCEPTED", rejection_reason=None)
+    reason = "; ".join(item["message"] for item in verdict["rejection_reasons"])
+    return NoveltyJudgment(verdict="NOVELTY_REJECTED", rejection_reason=reason)

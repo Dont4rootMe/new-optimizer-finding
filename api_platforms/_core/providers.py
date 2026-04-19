@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -98,6 +99,129 @@ def _render_mock_implementation(template: str, organism_id: str, generation: int
     )
 
 
+def _circle_param(name: str, value_kind: str, value: str | bool) -> dict[str, object]:
+    return {"name": name, "value_kind": value_kind, "value": value}
+
+
+def _render_mock_circle_design_response(request: LlmRequest) -> str:
+    organism_id = str(request.metadata.get("organism_id", "mock"))
+    operation = str(request.metadata.get("operator", "seed") or "seed")
+    growth_module = "growth_density_scaled_additive"
+    growth_params = [_circle_param("density_response", "categorical_token", "density_scaled")]
+    if operation == "mutation":
+        growth_module = "growth_uniform_multiplicative"
+        growth_params = [_circle_param("growth_temper", "ordinal_token", "low")]
+        operator_metadata: dict[str, object] = {
+            "mutation_scope": "slot",
+            "changed_slots": ["growth"],
+            "preserved_slots": [
+                "layout",
+                "selection",
+                "radius_init",
+                "conflict",
+                "repair",
+                "boundary",
+                "termination",
+            ],
+            "parent_reference": "parent",
+            "change_rationale": "The child tests proportional growth while preserving the parent structure.",
+        }
+    elif operation == "crossover":
+        operator_metadata = {
+            "inheritance_mode": "slotwise",
+            "slot_origins": {
+                "layout": "primary",
+                "selection": "primary",
+                "radius_init": "primary",
+                "growth": "secondary",
+                "conflict": "secondary",
+                "repair": "secondary",
+                "boundary": "secondary",
+                "termination": "primary",
+            },
+            "primary_slots": ["layout", "selection", "radius_init", "termination"],
+            "secondary_slots": ["growth", "conflict", "repair", "boundary"],
+            "change_rationale": "The child preserves primary placement while inheriting secondary dynamics.",
+        }
+    else:
+        operation = "seed"
+        operator_metadata = {
+            "seed_family": "new_seed",
+            "design_mode": "typed_library_selection",
+        }
+
+    return json.dumps(
+        {
+            "schema_name": "circle_packing_typed_design_response",
+            "schema_version": "1.0",
+            "task_family": "circle_packing_shinka",
+            "task_name": "unit_square_26",
+            "operation": operation,
+            "global_hypothesis": {
+                "title": "Library backed circle packing hypothesis",
+                "core_claim": "A typed geometric scaffold can coordinate placement and feasibility handling.",
+                "expected_advantage": "The selected modules keep construction deterministic while exposing repair signals.",
+                "novelty_statement": "The organism selects a closed library composition before implementation.",
+            },
+            "slot_assignments": {
+                "layout": {
+                    "module_key": "layout_triangular_lattice",
+                    "module_id": f"{organism_id}_layout",
+                    "parameterization": [_circle_param("orientation_bias", "categorical_token", "balanced")],
+                },
+                "selection": {
+                    "module_key": "selection_center_outward",
+                    "module_id": f"{organism_id}_selection",
+                    "parameterization": [_circle_param("priority_bias", "categorical_token", "center_first")],
+                },
+                "radius_init": {
+                    "module_key": "radius_init_lattice_derived",
+                    "module_id": f"{organism_id}_radius_init",
+                    "parameterization": [_circle_param("derivation_bias", "categorical_token", "spacing_limited")],
+                },
+                "growth": {
+                    "module_key": growth_module,
+                    "module_id": f"{organism_id}_growth",
+                    "parameterization": growth_params,
+                },
+                "conflict": {
+                    "module_key": "conflict_overlap_plus_boundary_penetration",
+                    "module_id": f"{organism_id}_conflict",
+                    "parameterization": [_circle_param("violation_balance", "relation_token", "boundary_stronger")],
+                },
+                "repair": {
+                    "module_key": "repair_pairwise_repulsion",
+                    "module_id": f"{organism_id}_repair",
+                    "parameterization": [_circle_param("repair_strength", "ordinal_token", "low")],
+                },
+                "boundary": {
+                    "module_key": "boundary_repulsive_margin",
+                    "module_id": f"{organism_id}_boundary",
+                    "parameterization": [_circle_param("margin_strength", "ordinal_token", "low")],
+                },
+                "termination": {
+                    "module_key": "termination_no_violation_and_no_gain",
+                    "module_id": f"{organism_id}_termination",
+                    "parameterization": [_circle_param("gain_policy", "categorical_token", "feasibility_first")],
+                },
+            },
+            "render_fields": {
+                "interaction_notes": [
+                    "Placement and dynamics exchange only declared typed state.",
+                    "Repair keeps feasibility signals aligned with boundary handling.",
+                ],
+                "compute_notes": [
+                    "The implementation should remain deterministic and lightweight.",
+                    "The realization should avoid unnecessary search loops.",
+                ],
+                "change_description": "The organism selects a closed library composition before implementation.",
+            },
+            "operator_metadata": operator_metadata,
+        },
+        indent=2,
+    )
+
+
 def build_mock_text(request: LlmRequest) -> str:
     organism_id = str(request.metadata.get("organism_id", "mock"))
     generation = int(request.metadata.get("generation", 0))
@@ -107,21 +231,31 @@ def build_mock_text(request: LlmRequest) -> str:
     joined_prompt = f"{request.system_prompt}\n{request.user_prompt}".lower()
     template = str(request.metadata.get("implementation_template", "")).strip()
     if request.stage == "novelty_check":
+        if "circle-packing" in joined_prompt or "circle packing" in joined_prompt:
+            operation = "crossover" if "crossover" in joined_prompt else "mutation"
+            return json.dumps(
+                {
+                    "schema_name": "circle_packing_typed_novelty_verdict",
+                    "schema_version": "1.0",
+                    "task_family": "circle_packing_shinka",
+                    "task_name": "unit_square_26",
+                    "operation": operation,
+                    "verdict": "NOVELTY_ACCEPTED",
+                    "supported_differences": [
+                        {
+                            "kind": "recombination_structure" if operation == "crossover" else "slot_change",
+                            "slot": "" if operation == "crossover" else "growth",
+                            "message": "The typed slot structure contains the declared structural difference.",
+                        }
+                    ],
+                    "rejection_reasons": [],
+                },
+                indent=2,
+            )
         return "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n"
     if "circle-packing" in joined_prompt or "circle packing" in joined_prompt or "run_packing" in joined_prompt:
         if request.stage == "design":
-            return (
-                "## CORE_GENES\n"
-                "- Deterministic staggered-row layout with alternating long and short rows inside the unit square\n"
-                "- Uniform radius assignment chosen conservatively so border constraints and pairwise distances remain valid\n"
-                "- Geometry-first construction that computes centers from explicit row templates instead of random search\n\n"
-                "## INTERACTION_NOTES\n"
-                "This design favors stable valid packings with simple geometry and should work well as a seed for later refinements.\n\n"
-                "## COMPUTE_NOTES\n"
-                "The method is purely constructive, uses O(n) memory, and performs no iterative repair loops.\n\n"
-                "## CHANGE_DESCRIPTION\n"
-                "A deterministic staggered packing program that starts from a valid geometric template for 26 circles.\n"
-            )
+            return _render_mock_circle_design_response(request)
         if template:
             return _render_mock_implementation(template, organism_id, generation, request.seed)
     if (

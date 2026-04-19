@@ -1,34 +1,20 @@
-Create one crossover child from these two parents.
+=== CHILD SLOT DRAFT ===
+This typed draft is the main typed recombination object.
+{child_slot_draft}
 
-=== CHILD GENETIC CODE DRAFT ===
-This merged draft was already selected by evolution.
-This is the main object you must refine.
-{inherited_gene_pool}
-
-=== NOVELTY REJECTION FEEDBACK ===
-If a previous child draft was rejected for lacking novelty, address these issues explicitly.
-If there was no prior rejection, this section will say so.
+Prior rejected attempts to address inside this typed JSON response:
 {novelty_rejection_feedback}
 
-=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ===
-Use this to understand continuity and provenance of ideas.
-{mother_genetic_code}
+=== PRIMARY PARENT SLOT ASSIGNMENTS ===
+{primary_parent_slot_assignments}
 
-=== PRIMARY PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
-Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
-{mother_lineage_summary}
+=== SECONDARY PARENT SLOT ASSIGNMENTS ===
+{secondary_parent_slot_assignments}
 
-=== SECONDARY PARENT GENETIC CODE (REFERENCE ONLY) ===
-Use this to understand complementary idea sources.
-{father_genetic_code}
+=== PRIMARY PARENT HYPOTHESIS SUMMARY ===
+{primary_parent_hypothesis_summary}
 
-=== SECONDARY PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
-Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
-{father_lineage_summary}
+=== SECONDARY PARENT HYPOTHESIS SUMMARY ===
+{secondary_parent_hypothesis_summary}
 
-=== TASK ===
-Refine the child genetic code draft into one coherent organism.
-The result should be gene-centric, internally consistent, and summarized by one unified novelty statement for lineage.
-If novelty rejection feedback is present, resolve it explicitly instead of rephrasing one parent.
-If the selected recombination is already coherent, keep it mostly intact instead of rebuilding one parent.
-Return the structured design directly. Do not add preface text before `## CORE_GENES`.
+{typed_prompt_context}

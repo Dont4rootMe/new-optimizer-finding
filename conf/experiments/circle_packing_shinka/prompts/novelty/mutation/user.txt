@@ -1,23 +1,16 @@
-Evaluate whether this mutation child is meaningfully novel relative to its parent.
+=== SELECTED CHILD SLOT DRAFT ===
+{selected_child_slot_draft}
 
-=== CHILD GENETIC CODE DRAFT SELECTED BY EVOLUTION ===
-{inherited_gene_pool}
+=== EXCLUDED MODULES ===
+{excluded_modules}
 
-=== EXCLUDED IDEAS ===
-These ideas were explicitly removed during mutation sampling.
-{removed_gene_pool}
+=== PARENT SLOT ASSIGNMENTS ===
+{parent_slot_assignments}
 
-=== PARENT GENETIC CODE ===
-{parent_genetic_code}
+=== CANDIDATE CHILD SLOT ASSIGNMENTS ===
+{candidate_child_slot_assignments}
 
-=== CANDIDATE CHILD GENETIC CODE ===
-{candidate_genetic_code}
-
-=== CANDIDATE CHILD CHANGE_DESCRIPTION ===
+=== CANDIDATE CHANGE_DESCRIPTION ===
 {candidate_change_description}
 
-=== TASK ===
-The evolved child draft itself is a valid source of novelty.
-Accept a candidate that stays faithful to that selected child draft, even if it does not add one more post-sampling idea, as long as it does not collapse back to the parent in substance.
-Reject a candidate that mainly restores excluded ideas, reconstructs the parent, or only rephrases parent ideas.
-If `CHANGE_DESCRIPTION` overclaims novelty that the genes do not support, reject it.
+{typed_prompt_context}

@@ -5,12 +5,15 @@ from __future__ import annotations
 import logging
 import random
 from pathlib import Path
+from typing import Any
 
 from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
 from src.evolve.storage import utc_now_iso
 from src.evolve.types import OrganismMeta
+from src.organisms.hypothesis_artifacts import read_canonical_genome
 from src.organisms.novelty import (
     NoveltyCheckContext,
+    NoveltyJudgment,
     build_mutation_novelty_prompt,
     format_novelty_rejection_feedback,
 )
@@ -68,6 +71,18 @@ def _build_mutate_prompt(
         schema_provider=schema_provider,
     )
     parent_lineage = read_organism_lineage(parent)
+    if schema_provider is not None and callable(getattr(schema_provider, "build_mutation_prompt_context", None)):
+        parent_genome = read_canonical_genome(Path(parent.organism_dir), schema_provider)
+        system = compose_system_prompt(prompts.project_context, prompts.mutation_system)
+        user = prompts.mutation_user.format(
+            child_slot_draft=schema_provider.format_slot_assignments_for_prompt(parent_genome),
+            excluded_modules=schema_provider.format_excluded_modules_for_prompt(removed_genes, parent_genome),
+            parent_genome_summary=schema_provider.format_genome_summary_for_prompt(parent_genome),
+            parent_slot_assignments=schema_provider.format_slot_assignments_for_prompt(parent_genome),
+            typed_prompt_context=schema_provider.build_mutation_prompt_context(),
+            novelty_rejection_feedback=format_novelty_rejection_feedback(list(novelty_feedback or [])),
+        )
+        return system, user
 
     return build_mutation_prompt_from_artifacts(
         inherited_genes=inherited_genes,
@@ -91,11 +106,19 @@ def build_mutation_prompt_from_artifacts(
     """Build mutation prompts from raw canonical artifacts."""
 
     system = compose_system_prompt(prompts.project_context, prompts.mutation_system)
+    inherited_text = "\n".join(f"- {gene}" for gene in inherited_genes) or "(none)"
+    removed_text = "\n".join(f"- {gene}" for gene in removed_genes) or "(none)"
+    parent_text = format_genetic_code(dict(parent_genetic_code))
     user = prompts.mutation_user.format(
-        inherited_gene_pool="\n".join(f"- {gene}" for gene in inherited_genes) or "(none)",
-        removed_gene_pool="\n".join(f"- {gene}" for gene in removed_genes) or "(none)",
-        parent_genetic_code=format_genetic_code(dict(parent_genetic_code)),
+        inherited_gene_pool=inherited_text,
+        removed_gene_pool=removed_text,
+        parent_genetic_code=parent_text,
         parent_lineage_summary=format_lineage_summary(list(parent_lineage)),
+        child_slot_draft=inherited_text,
+        excluded_modules=removed_text,
+        parent_genome_summary=parent_text,
+        parent_slot_assignments=parent_text,
+        typed_prompt_context="",
         novelty_rejection_feedback=format_novelty_rejection_feedback(list(novelty_feedback or [])),
     )
     return system, user
@@ -119,6 +142,9 @@ class MutationOperator:
         """Create a child organism via mutation."""
 
         schema_provider = getattr(generator, "hypothesis_schema_provider", None)
+        parent_genome = None
+        if schema_provider is not None:
+            parent_genome = read_canonical_genome(Path(parent.organism_dir), schema_provider)
         parent_genetic_code = read_organism_hypothesis_for_prompt(
             parent,
             schema_provider=schema_provider,
@@ -158,6 +184,25 @@ class MutationOperator:
                 prompts=generator.prompt_bundle,
                 schema_provider=schema_provider,
             ),
+            parse_design_response=(
+                None
+                if schema_provider is None or parent_genome is None
+                else lambda raw_text, child_id: schema_provider.parse_mutation_design_response(
+                    raw_text,
+                    parent_genome=parent_genome,
+                    organism_id=child_id,
+                )
+            ),
+            parse_novelty_response=(
+                None
+                if schema_provider is None or parent_genome is None
+                else lambda raw_text, candidate_design: _parse_typed_mutation_novelty(
+                    raw_text,
+                    candidate_design=candidate_design,
+                    parent_genome=parent_genome,
+                    schema_provider=schema_provider,
+                )
+            ),
         )
         run_creation = getattr(generator, "run_creation_stages_with_retries", generator.run_creation_stages)
         creation = run_creation(
@@ -191,3 +236,21 @@ class MutationOperator:
             father_island_id=None,
             schema_provider=schema_provider,
         )
+
+
+def _parse_typed_mutation_novelty(
+    raw_text: str,
+    *,
+    candidate_design: dict[str, Any],
+    parent_genome: dict[str, Any],
+    schema_provider: Any,
+) -> NoveltyJudgment:
+    verdict = schema_provider.parse_mutation_novelty_response(
+        raw_text,
+        parent_genome=parent_genome,
+        candidate_response=candidate_design,
+    )
+    if verdict["verdict"] == "NOVELTY_ACCEPTED":
+        return NoveltyJudgment(verdict="NOVELTY_ACCEPTED", rejection_reason=None)
+    reason = "; ".join(item["message"] for item in verdict["rejection_reasons"])
+    return NoveltyJudgment(verdict="NOVELTY_REJECTED", rejection_reason=reason)

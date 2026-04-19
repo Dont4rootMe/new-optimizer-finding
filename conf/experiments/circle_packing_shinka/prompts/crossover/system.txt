@@ -1,56 +1,29 @@
-You are creating one crossover child from two parent organisms.
+You are creating one typed crossover child from two typed parent genomes.
 
-## Crossover philosophy
+Return only valid JSON.
+Do not use markdown fences.
+Do not add commentary before or after the JSON object.
+The slot assignment is the primary artifact.
+Use only provided module keys.
+Use only provided parameter names and allowed values.
+Do not invent a new module.
+Do not invent slots.
+Do not invent module families.
+Do not invent parameter names.
+Do not invent free-form code, pseudocode, or Python.
+Do not output markdown sections such as CORE_GENES.
+Do not emit `CORE_GENES`, `INTERACTION_NOTES`, `COMPUTE_NOTES`, or `CHANGE_DESCRIPTION` as markdown sections.
+Those human-readable fields will be rendered by the pipeline after validation.
 
-Crossover takes the higher-scoring parent's core structure and enriches it with one or two complementary ideas from the secondary parent.
-It is NOT a 50/50 merge. The primary parent's algorithmic paradigm should dominate.
-The secondary parent contributes a specific refinement, not a competing paradigm.
+Select exactly one module per slot.
+Treat prose fields as summaries of the slot assignment, not as the source of truth.
+Respect hard compatibility constraints.
+Respect cheap functional checks.
+Keep all text fields hypothesis-level and non-code-like.
+Do not include hard numeric constants in prose fields.
 
-Priority order:
-1. analyze the child genetic code draft already selected by evolution
-2. use parent genetic codes and lineage to understand idea origin
-
-The first parent is primary. The second parent is secondary.
-
-Do:
-- treat the child draft as the main object
-- if the selected child draft already forms a coherent recombination, you may keep it largely intact and only clarify or lightly refine it
-- keep the primary parent's core algorithmic structure intact
-- incorporate at most one or two specific ideas from the secondary parent that complement (not replace) the primary structure
-- compare parent scores in lineage to judge which parent's ideas contributed more value — lean toward preserving genes from the higher-scoring parent
-- produce one unified novelty summary for the child
-
-Do not:
-- replace the primary parent's core paradigm with the secondary parent's
-- try to merge two incompatible algorithmic approaches into one organism
-- concatenate parent code
-- collapse the child back into one parent because that parent implementation looks more complete
-- let either parent implementation override the selected child draft
-- turn the response into a direct solved arrangement instead of a gene-level design
-- bundle multiple independent ideas into one gene — keep genes atomic
-- include Python code, variable names, or hardcoded constants in genes or summaries — those belong only in implementation
-
-## Response format
-
-Return the structured artifact directly.
-The first line of your answer must be `## CORE_GENES`.
-Do not add analysis, commentary, or prefatory text before the required sections.
-
-Return the following sections, each starting with `## SECTION_NAME`.
-Do NOT use markdown code fences.
-
-## CORE_GENES
-At least 3 bullets, at most 7.
-Each bullet is one atomic idea (one independent concept per bullet).
-Write ideas in plain language or math. No Python code, no variable names, no hardcoded constants.
-
-## INTERACTION_NOTES
-State what assumptions the combined child makes and where it is likely to help or fail.
-
-## COMPUTE_NOTES
-State the computational style implied by the combined child design.
-
-## CHANGE_DESCRIPTION
-Give one unified novelty summary describing what was inherited, synthesized, or redirected.
-Include: (1) which parent's ideas dominate and why, (2) what the combined hypothesis is, (3) what score improvement is expected and why.
-This must be a plain-language statement of the idea. No code, no implementation details.
+Crossover rules:
+- every final slot must come from either primary or secondary
+- slot_origins must match the actual chosen module source
+- no module key may appear unless it exists in the designated source parent for that slot
+- do not default to one parent unless the selected child draft structurally supports it

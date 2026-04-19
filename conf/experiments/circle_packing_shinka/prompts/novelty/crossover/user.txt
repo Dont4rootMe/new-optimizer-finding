@@ -1,22 +1,16 @@
-Evaluate whether this crossover child is meaningfully novel relative to its parents.
+=== SELECTED CHILD SLOT DRAFT ===
+{selected_child_slot_draft}
 
-=== CHILD GENETIC CODE DRAFT SELECTED BY EVOLUTION ===
-{inherited_gene_pool}
+=== PRIMARY PARENT SLOT ASSIGNMENTS ===
+{primary_parent_slot_assignments}
 
-=== PRIMARY PARENT GENETIC CODE ===
-{mother_genetic_code}
+=== SECONDARY PARENT SLOT ASSIGNMENTS ===
+{secondary_parent_slot_assignments}
 
-=== SECONDARY PARENT GENETIC CODE ===
-{father_genetic_code}
+=== CANDIDATE CHILD SLOT ASSIGNMENTS ===
+{candidate_child_slot_assignments}
 
-=== CANDIDATE CHILD GENETIC CODE ===
-{candidate_genetic_code}
-
-=== CANDIDATE CHILD CHANGE_DESCRIPTION ===
+=== CANDIDATE CHANGE_DESCRIPTION ===
 {candidate_change_description}
 
-=== TASK ===
-The evolved child draft itself can be valid novelty.
-Accept a coherent recombination that preserves substantial material from both parents, even if it does not add an extra beyond-parent invention.
-Reject a candidate that collapses back to one parent, drops the selected contribution from one side, or only rephrases parent ideas without preserving the selected recombination.
-If `CHANGE_DESCRIPTION` overclaims novelty that the genes do not support, reject it.
+{typed_prompt_context}

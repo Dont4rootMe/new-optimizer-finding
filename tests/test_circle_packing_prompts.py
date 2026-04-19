@@ -79,17 +79,18 @@ def _make_parent(tmp_path: Path, name: str, island_id: str) -> OrganismMeta:
     return organism
 
 
-def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
+def test_circle_packing_prompt_bundle_uses_typed_json_language() -> None:
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
 
-    assert "primary object is the organism's genetic code" in bundle.project_context
+    assert "The canonical hypothesis is `genome.json`." in bundle.project_context
+    assert "The design-stage output is a typed JSON design artifact." in bundle.project_context
     assert "Do not invent new major ideas at implementation time." in bundle.implementation_system
-    assert "child genetic code draft" in bundle.mutation_system.lower()
-    assert "child draft" in bundle.crossover_system.lower()
-    assert "keep it essentially intact" in bundle.mutation_system
-    assert "valid source of novelty" in bundle.mutation_novelty_user
-    assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
+    assert "Return only valid JSON." in bundle.mutation_system
+    assert "The slot assignment is the primary artifact." in bundle.crossover_system
+    assert "Do not emit `CORE_GENES`, `INTERACTION_NOTES`, `COMPUTE_NOTES`, or `CHANGE_DESCRIPTION`" in bundle.seed_system
+    assert "=== CANDIDATE CHILD SLOT ASSIGNMENTS ===" in bundle.mutation_novelty_user
+    assert "=== PRIMARY PARENT SLOT ASSIGNMENTS ===" in bundle.crossover_novelty_user
 
 
 def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> None:
@@ -108,14 +109,14 @@ def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) 
         prompts=bundle,
     )
 
-    assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
-    assert "=== EXCLUDED IDEAS ===" in user_prompt
-    assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
-    assert "REFERENCE ONLY" in user_prompt
-    assert "keep it mostly intact rather than rebuilding the parent" in user_prompt
+    assert "=== CHILD SLOT DRAFT ===" in user_prompt
+    assert "=== EXCLUDED MODULES ===" in user_prompt
+    assert "Prior rejected attempts to address inside this typed JSON response:" in user_prompt
+    assert "=== PARENT GENOME SUMMARY ===" in user_prompt
+    assert "Preserve every slot that is not declared in changed_slots." in user_prompt
     assert "IMPLEMENTATION CODE" not in user_prompt
-    assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
-        "=== PARENT GENETIC CODE (REFERENCE ONLY) ==="
+    assert user_prompt.index("=== CHILD SLOT DRAFT ===") < user_prompt.index(
+        "=== PARENT SLOT ASSIGNMENTS ==="
     )
 
 
@@ -136,13 +137,14 @@ def test_circle_packing_crossover_prompt_prioritizes_child_draft(tmp_path: Path)
         prompts=bundle,
     )
 
-    assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
-    assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
-    assert "REFERENCE ONLY" in user_prompt
-    assert "keep it mostly intact instead of rebuilding one parent" in user_prompt
+    assert "=== CHILD SLOT DRAFT ===" in user_prompt
+    assert "Prior rejected attempts to address inside this typed JSON response:" in user_prompt
+    assert "=== PRIMARY PARENT SLOT ASSIGNMENTS ===" in user_prompt
+    assert "=== SECONDARY PARENT SLOT ASSIGNMENTS ===" in user_prompt
+    assert "typed recombination" in user_prompt
     assert "IMPLEMENTATION CODE" not in user_prompt
-    assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
-        "=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ==="
+    assert user_prompt.index("=== CHILD SLOT DRAFT ===") < user_prompt.index(
+        "=== PRIMARY PARENT SLOT ASSIGNMENTS ==="
     )
 
 

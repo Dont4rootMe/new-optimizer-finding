@@ -201,7 +201,7 @@ def save_organism_artifacts(
 
 
 def _build_genome_from_schema_provider(
-    parsed: dict[str, str],
+    parsed: dict[str, Any],
     *,
     organism_id: str,
     schema_provider: Any,
@@ -334,13 +334,27 @@ def build_genetic_code_from_design_response(parsed: dict[str, str]) -> dict[str,
 
 
 def build_implementation_prompt_from_design(
-    parsed: dict[str, str],
+    parsed: dict[str, Any],
     prompts: PromptBundle,
+    *,
+    schema_provider: Any | None = None,
+    organism_id: str | None = None,
 ) -> tuple[str, str]:
     """Build the shared implementation-stage prompt from a design-stage response."""
 
-    genetic_code = build_genetic_code_from_design_response(parsed)
-    change_description = require_response_section(parsed, "CHANGE_DESCRIPTION")
+    if schema_provider is not None:
+        if not organism_id:
+            raise ValueError("Canonical typed implementation prompt requires organism_id.")
+        genome = _build_genome_from_schema_provider(
+            parsed,
+            organism_id=organism_id,
+            schema_provider=schema_provider,
+        )
+        genetic_code = genetic_code_from_canonical_genome(genome, schema_provider)
+        change_description = genome["render_fields"]["change_description"]
+    else:
+        genetic_code = build_genetic_code_from_design_response(parsed)
+        change_description = require_response_section(parsed, "CHANGE_DESCRIPTION")
     return build_implementation_prompt(
         genetic_code=genetic_code,
         change_description=change_description,
@@ -406,7 +420,7 @@ def build_repair_prompt(
 
 
 def build_organism_from_response(
-    parsed: dict[str, str],
+    parsed: dict[str, Any],
     implementation_code: str,
     organism_id: str,
     island_id: str,
@@ -429,12 +443,21 @@ def build_organism_from_response(
 ) -> OrganismMeta:
     """Build `OrganismMeta` from a canonical design response and raw implementation text."""
 
-    for key in _REQUIRED_RESPONSE_SECTIONS:
-        if key not in parsed:
-            raise ValueError(f"Canonical organism response is missing required section {key}.")
-
-    genetic_code = build_genetic_code_from_design_response(parsed)
-    change_description = require_response_section(parsed, "CHANGE_DESCRIPTION")
+    if schema_provider is None:
+        for key in _REQUIRED_RESPONSE_SECTIONS:
+            if key not in parsed:
+                raise ValueError(f"Canonical organism response is missing required section {key}.")
+        genetic_code = build_genetic_code_from_design_response(parsed)
+        change_description = require_response_section(parsed, "CHANGE_DESCRIPTION")
+        genome = None
+    else:
+        genome = _build_genome_from_schema_provider(
+            parsed,
+            organism_id=organism_id,
+            schema_provider=schema_provider,
+        )
+        genetic_code = genetic_code_from_canonical_genome(genome, schema_provider)
+        change_description = genome["render_fields"]["change_description"]
     if not str(implementation_code).strip():
         raise ValueError("Implementation stage must return non-empty implementation.py text.")
 
@@ -484,11 +507,8 @@ def build_organism_from_response(
     if schema_provider is None:
         save_organism_artifacts(org, genetic_code=genetic_code, lineage=lineage)
     else:
-        genome = _build_genome_from_schema_provider(
-            parsed,
-            organism_id=organism_id,
-            schema_provider=schema_provider,
-        )
+        if genome is None:
+            raise ValueError("Canonical typed organism build requires a materialized genome.")
         write_json(organism_meta_path(org.organism_dir), org.to_dict())
         write_canonical_genome(org_dir, genome, schema_provider)
         _write_hypothesis_validation_reports(org_dir, genome, schema_provider)

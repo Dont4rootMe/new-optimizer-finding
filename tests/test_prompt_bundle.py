@@ -80,15 +80,16 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
     bundle = load_prompt_bundle(cfg)
 
     for prompt in (bundle.mutation_system, bundle.crossover_system):
-        assert "## Response format" in prompt
-        assert "## CORE_GENES" in prompt
-        assert "## CHANGE_DESCRIPTION" in prompt
-    assert "## NOVELTY_VERDICT" in bundle.crossover_novelty_system
+        assert "Return only valid JSON." in prompt
+        assert "The slot assignment is the primary artifact." in prompt
+        assert "Use only provided module keys." in prompt
+        assert "Do not emit `CORE_GENES`, `INTERACTION_NOTES`, `COMPUTE_NOTES`, or `CHANGE_DESCRIPTION`" in prompt
+    assert "Return only valid JSON." in bundle.crossover_novelty_system
     assert "CURRENT IMPLEMENTATION.PY" in bundle.repair_user
-    assert "keep it essentially intact" in bundle.mutation_system
-    assert "keep it mostly intact" in bundle.crossover_user
-    assert "valid source of novelty" in bundle.mutation_novelty_user
-    assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
+    assert "=== CHILD SLOT DRAFT ===" in bundle.mutation_user
+    assert "=== PRIMARY PARENT SLOT ASSIGNMENTS ===" in bundle.crossover_user
+    assert "=== CANDIDATE CHILD SLOT ASSIGNMENTS ===" in bundle.mutation_novelty_user
+    assert "=== SECONDARY PARENT SLOT ASSIGNMENTS ===" in bundle.crossover_novelty_user
 
 
 def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:

@@ -154,7 +154,7 @@ class EvalTask:
 class CreationStageResult:
     """Output of one two-stage organism creation request."""
 
-    parsed_design: dict[str, str]
+    parsed_design: dict[str, Any]
     implementation_code: str
     prompt_hash: str
     llm_route_id: str

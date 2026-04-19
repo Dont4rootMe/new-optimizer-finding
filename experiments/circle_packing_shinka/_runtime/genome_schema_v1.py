@@ -478,6 +478,130 @@ def build_functional_checks_report(genome: dict) -> dict:
     return build_circle_packing_functional_checks(genome)
 
 
+def build_seed_prompt_context() -> str:
+    from experiments.circle_packing_shinka._runtime.prompt_context_v1 import build_seed_prompt_context as build
+
+    return build()
+
+
+def build_mutation_prompt_context() -> str:
+    from experiments.circle_packing_shinka._runtime.prompt_context_v1 import build_mutation_prompt_context as build
+
+    return build()
+
+
+def build_crossover_prompt_context() -> str:
+    from experiments.circle_packing_shinka._runtime.prompt_context_v1 import build_crossover_prompt_context as build
+
+    return build()
+
+
+def build_novelty_prompt_context() -> str:
+    from experiments.circle_packing_shinka._runtime.prompt_context_v1 import build_novelty_prompt_context as build
+
+    return build()
+
+
+def build_mutation_novelty_prompt_context() -> str:
+    from experiments.circle_packing_shinka._runtime.prompt_context_v1 import (
+        build_mutation_novelty_prompt_context as build,
+    )
+
+    return build()
+
+
+def build_crossover_novelty_prompt_context() -> str:
+    from experiments.circle_packing_shinka._runtime.prompt_context_v1 import (
+        build_crossover_novelty_prompt_context as build,
+    )
+
+    return build()
+
+
+def format_slot_assignments_for_prompt(genome: dict) -> str:
+    from experiments.circle_packing_shinka._runtime.prompt_context_v1 import format_slot_assignments_for_prompt
+
+    return format_slot_assignments_for_prompt(genome)
+
+
+def format_genome_summary_for_prompt(genome: dict) -> str:
+    from experiments.circle_packing_shinka._runtime.prompt_context_v1 import format_genome_summary_for_prompt
+
+    return format_genome_summary_for_prompt(genome)
+
+
+def format_excluded_modules_for_prompt(removed_gene_pool: list[str], genome: dict) -> str:
+    from experiments.circle_packing_shinka._runtime.prompt_context_v1 import format_excluded_modules_for_prompt
+
+    return format_excluded_modules_for_prompt(removed_gene_pool, genome)
+
+
+def parse_seed_design_response(raw_text: str, *, organism_id: str = "__design_validation__") -> dict:
+    from experiments.circle_packing_shinka._runtime.design_prompt_contract_v1 import parse_seed_design_response
+
+    return parse_seed_design_response(raw_text, organism_id=organism_id)
+
+
+def parse_mutation_design_response(
+    raw_text: str,
+    *,
+    parent_genome: dict | None = None,
+    organism_id: str = "__design_validation__",
+) -> dict:
+    from experiments.circle_packing_shinka._runtime.design_prompt_contract_v1 import parse_mutation_design_response
+
+    return parse_mutation_design_response(raw_text, parent_genome=parent_genome, organism_id=organism_id)
+
+
+def parse_crossover_design_response(
+    raw_text: str,
+    *,
+    primary_parent_genome: dict | None = None,
+    secondary_parent_genome: dict | None = None,
+    organism_id: str = "__design_validation__",
+) -> dict:
+    from experiments.circle_packing_shinka._runtime.design_prompt_contract_v1 import parse_crossover_design_response
+
+    return parse_crossover_design_response(
+        raw_text,
+        primary_parent_genome=primary_parent_genome,
+        secondary_parent_genome=secondary_parent_genome,
+        organism_id=organism_id,
+    )
+
+
+def parse_mutation_novelty_response(
+    raw_text: str,
+    *,
+    parent_genome: dict | None = None,
+    candidate_response: dict | None = None,
+) -> dict:
+    from experiments.circle_packing_shinka._runtime.design_prompt_contract_v1 import parse_mutation_novelty_response
+
+    return parse_mutation_novelty_response(
+        raw_text,
+        parent_genome=parent_genome,
+        candidate_response=candidate_response,
+    )
+
+
+def parse_crossover_novelty_response(
+    raw_text: str,
+    *,
+    primary_parent_genome: dict | None = None,
+    secondary_parent_genome: dict | None = None,
+    candidate_response: dict | None = None,
+) -> dict:
+    from experiments.circle_packing_shinka._runtime.design_prompt_contract_v1 import parse_crossover_novelty_response
+
+    return parse_crossover_novelty_response(
+        raw_text,
+        primary_parent_genome=primary_parent_genome,
+        secondary_parent_genome=secondary_parent_genome,
+        candidate_response=candidate_response,
+    )
+
+
 def _section_lines(parsed: dict[str, str], key: str, fallback: str) -> list[str]:
     raw = str(parsed.get(key, "")).strip()
     if not raw:
@@ -500,92 +624,18 @@ def _pick(values: list[str], index: int) -> str:
 
 
 def build_genome_from_design_response(
-    parsed: dict[str, str],
+    parsed: dict[str, Any],
     *,
     organism_id: str,
     task_name: str = TASK_NAME,
 ) -> dict[str, Any]:
-    """Adapt the existing structured design sections into the v1 typed genome."""
+    """Materialize a strict typed design response into the v1 typed genome."""
 
     if task_name != TASK_NAME:
         raise ValueError(f"Circle-packing genome v1 only supports task_name={TASK_NAME!r}.")
 
-    core_genes = _section_lines(
-        parsed,
-        "CORE_GENES",
-        "Use a coherent geometric construction for circle packing.",
+    from experiments.circle_packing_shinka._runtime.design_prompt_contract_v1 import (
+        materialize_genome_from_design_response,
     )
-    interaction_notes = _section_lines(
-        parsed,
-        "INTERACTION_NOTES",
-        "The segmented policies should remain mutually consistent.",
-    )
-    compute_notes = _section_lines(
-        parsed,
-        "COMPUTE_NOTES",
-        "The realization should keep the construction deterministic and lightweight.",
-    )
-    change_description = str(parsed.get("CHANGE_DESCRIPTION", "")).strip()
-    if not change_description:
-        raise ValueError("Circle-packing genome adapter requires CHANGE_DESCRIPTION.")
 
-    placement_hypothesis = _pick(core_genes, 0)
-    dynamics_hypothesis = _pick(core_genes, 1)
-    control_hypothesis = _pick(core_genes, 2)
-    slot_assignments = {
-        "layout": {
-            "module_key": "layout_triangular_lattice",
-            "module_id": f"{organism_id}_layout",
-            "parameterization": _default_parameterization("layout_triangular_lattice"),
-        },
-        "selection": {
-            "module_key": "selection_center_outward",
-            "module_id": f"{organism_id}_selection",
-            "parameterization": _default_parameterization("selection_center_outward"),
-        },
-        "radius_init": {
-            "module_key": "radius_init_lattice_derived",
-            "module_id": f"{organism_id}_radius_init",
-            "parameterization": _default_parameterization("radius_init_lattice_derived"),
-        },
-        "growth": {
-            "module_key": "growth_density_scaled_additive",
-            "module_id": f"{organism_id}_growth",
-            "parameterization": _default_parameterization("growth_density_scaled_additive"),
-        },
-        "conflict": {
-            "module_key": "conflict_overlap_plus_boundary_penetration",
-            "module_id": f"{organism_id}_conflict",
-            "parameterization": _default_parameterization("conflict_overlap_plus_boundary_penetration"),
-        },
-        "repair": {
-            "module_key": "repair_pairwise_repulsion",
-            "module_id": f"{organism_id}_repair",
-            "parameterization": _default_parameterization("repair_pairwise_repulsion"),
-        },
-        "boundary": {
-            "module_key": "boundary_repulsive_margin",
-            "module_id": f"{organism_id}_boundary",
-            "parameterization": _default_parameterization("boundary_repulsive_margin"),
-        },
-        "termination": {
-            "module_key": "termination_no_violation_and_no_gain",
-            "module_id": f"{organism_id}_termination",
-            "parameterization": _default_parameterization("termination_no_violation_and_no_gain"),
-        },
-    }
-    return materialize_circle_packing_genome_v1(
-        organism_id=organism_id,
-        global_hypothesis={
-            "title": "Segmented circle packing hypothesis",
-            "core_claim": placement_hypothesis,
-            "expected_advantage": dynamics_hypothesis,
-            "novelty_statement": change_description,
-        },
-        slot_assignments=slot_assignments,
-        render_fields={
-            "interaction_notes": interaction_notes,
-            "compute_notes": compute_notes,
-            "change_description": change_description,
-        },
-    )
+    return materialize_genome_from_design_response(organism_id=organism_id, response=parsed)
