@@ -146,6 +146,7 @@ class MutationOperator:
                 parent=parent,
                 candidate_design=candidate_design,
                 prompts=generator.prompt_bundle,
+                expected_core_gene_sections=getattr(generator, "expected_core_gene_sections", None),
             ),
         )
         run_creation = getattr(generator, "run_creation_stages_with_retries", generator.run_creation_stages)
@@ -178,4 +179,5 @@ class MutationOperator:
             ancestor_ids=parent.ancestor_ids,
             cross_island=False,
             father_island_id=None,
+            expected_core_gene_sections=getattr(generator, "expected_core_gene_sections", None),
         )

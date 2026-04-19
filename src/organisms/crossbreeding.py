@@ -162,6 +162,7 @@ class CrossbreedingOperator:
                 father=father,
                 candidate_design=candidate_design,
                 prompts=generator.prompt_bundle,
+                expected_core_gene_sections=getattr(generator, "expected_core_gene_sections", None),
             ),
         )
         run_creation = getattr(generator, "run_creation_stages_with_retries", generator.run_creation_stages)
@@ -198,4 +199,5 @@ class CrossbreedingOperator:
             ancestor_ids=ancestor_ids,
             cross_island=mother.island_id != father.island_id,
             father_island_id=father.island_id,
+            expected_core_gene_sections=getattr(generator, "expected_core_gene_sections", None),
         )

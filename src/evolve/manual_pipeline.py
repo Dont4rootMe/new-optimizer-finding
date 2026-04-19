@@ -17,7 +17,7 @@ from src.evolve.prompt_utils import PromptBundle, load_prompt_bundle
 from src.evolve.storage import ensure_dir, parse_genetic_code_text, sha1_text
 from src.organisms.crossbreeding import build_crossover_prompt_from_artifacts, merge_gene_pools
 from src.organisms.mutation import build_mutation_prompt_from_artifacts, prune_gene_pool
-from src.organisms.organism import build_implementation_prompt
+from src.organisms.organism import build_implementation_prompt, load_expected_core_gene_sections_from_config
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -145,8 +145,15 @@ def build_manual_crossover_prompts(
 ) -> dict[str, Any]:
     """Sample a crossover child gene pool and build design prompts."""
 
-    mother_genetic_code = parse_genetic_code_text(mother_genetic_code_text)
-    father_genetic_code = parse_genetic_code_text(father_genetic_code_text)
+    expected_sections = load_expected_core_gene_sections_from_config(context.cfg)
+    mother_genetic_code = parse_genetic_code_text(
+        mother_genetic_code_text,
+        expected_section_names=expected_sections,
+    )
+    father_genetic_code = parse_genetic_code_text(
+        father_genetic_code_text,
+        expected_section_names=expected_sections,
+    )
     mother_lineage = _parse_lineage_payload(mother_lineage_json)
     father_lineage = _parse_lineage_payload(father_lineage_json)
     probability = (
@@ -189,7 +196,10 @@ def build_manual_mutation_prompts(
 ) -> dict[str, Any]:
     """Prune a parent gene pool and build mutation design prompts."""
 
-    parent_genetic_code = parse_genetic_code_text(parent_genetic_code_text)
+    parent_genetic_code = parse_genetic_code_text(
+        parent_genetic_code_text,
+        expected_section_names=load_expected_core_gene_sections_from_config(context.cfg),
+    )
     parent_lineage = _parse_lineage_payload(parent_lineage_json)
     probability = (
         float(context.cfg.evolver.operators.mutation.gene_removal_probability)
@@ -227,7 +237,10 @@ def build_manual_implementation_prompts(
 ) -> dict[str, Any]:
     """Build implementation-stage prompts from raw `genetic_code.md` text."""
 
-    genetic_code = parse_genetic_code_text(organism_genetic_code_text)
+    genetic_code = parse_genetic_code_text(
+        organism_genetic_code_text,
+        expected_section_names=load_expected_core_gene_sections_from_config(context.cfg),
+    )
     system_prompt, user_prompt = build_implementation_prompt(
         genetic_code=genetic_code,
         change_description=str(novelty_summary),

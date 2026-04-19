@@ -6,12 +6,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
+from src.evolve.prompt_utils import REPO_ROOT, PromptBundle, compose_system_prompt
 from src.evolve.storage import (
     genetic_code_path,
     implementation_path,
     lineage_path,
     organism_meta_path,
+    parse_genetic_code_text,
     read_genetic_code,
     read_lineage,
     write_genetic_code,
@@ -19,6 +20,7 @@ from src.evolve.storage import (
     write_lineage,
 )
 from src.evolve.types import LineageEntry, OrganismMeta
+from src.organisms.genetic_code_format import load_genome_schema
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,13 +61,7 @@ def read_organism_lineage(org: OrganismMeta) -> list[dict[str, Any]]:
 def format_genetic_code(genetic_code: dict[str, Any]) -> str:
     """Format canonical genetic code for inclusion in prompts."""
 
-    core_genes = genetic_code.get("core_genes", [])
-    if not isinstance(core_genes, list) or not core_genes:
-        core_gene_block = "(none)"
-    else:
-        core_gene_block = "\n".join(f"- {str(gene).strip()}" for gene in core_genes if str(gene).strip())
-        if not core_gene_block.strip():
-            core_gene_block = "(none)"
+    core_gene_block = _format_core_gene_block(genetic_code)
 
     interaction_notes = str(genetic_code.get("interaction_notes", "")).strip() or "(none)"
     compute_notes = str(genetic_code.get("compute_notes", "")).strip() or "(none)"
@@ -78,6 +74,40 @@ def format_genetic_code(genetic_code: dict[str, Any]) -> str:
         "COMPUTE_NOTES:\n"
         f"{compute_notes}"
     )
+
+
+def _format_gene_entry(text: object) -> str:
+    lines = str(text).strip().splitlines()
+    if not lines:
+        return ""
+    rendered = [f"- {lines[0].strip()}"]
+    rendered.extend(f"  {line.rstrip()}" for line in lines[1:])
+    return "\n".join(rendered)
+
+
+def _format_core_gene_block(genetic_code: dict[str, Any]) -> str:
+    sectioned = genetic_code.get("core_gene_sections")
+    if isinstance(sectioned, list) and sectioned:
+        blocks: list[str] = []
+        for section in sectioned:
+            if not isinstance(section, dict):
+                continue
+            name = str(section.get("name", "")).strip()
+            entries = section.get("entries", [])
+            if not name:
+                continue
+            blocks.append(f"### {name}")
+            if isinstance(entries, list):
+                blocks.extend(_format_gene_entry(entry) for entry in entries if str(entry).strip())
+        rendered = "\n".join(block for block in blocks if block.strip()).strip()
+        if rendered:
+            return rendered
+
+    core_genes = genetic_code.get("core_genes", [])
+    if not isinstance(core_genes, list) or not core_genes:
+        return "(none)"
+    rendered = "\n".join(_format_gene_entry(gene) for gene in core_genes if str(gene).strip())
+    return rendered.strip() or "(none)"
 
 
 def format_lineage_summary(
@@ -170,17 +200,6 @@ def update_latest_lineage_entry(
     write_lineage(org.lineage_path, lineage)
 
 
-def _normalize_gene_lines(core_genes_raw: str) -> list[str]:
-    genes: list[str] = []
-    for line in core_genes_raw.splitlines():
-        cleaned = line.strip()
-        if cleaned.startswith("- "):
-            cleaned = cleaned[2:].strip()
-        if cleaned:
-            genes.append(cleaned)
-    return genes
-
-
 def _validate_core_genes(genes: list[str]) -> None:
     if len(genes) < 3:
         raise ValueError("Canonical organism response must contain at least 3 non-empty CORE_GENES bullets.")
@@ -199,17 +218,24 @@ def _require_section(parsed: dict[str, str], key: str) -> str:
     return stripped
 
 
-def _build_genetic_code(parsed: dict[str, str]) -> dict[str, Any]:
-    genes = _normalize_gene_lines(_require_section(parsed, "CORE_GENES"))
-    _validate_core_genes(genes)
+def _design_response_genetic_code_text(parsed: dict[str, str]) -> str:
+    return "\n\n".join(f"## {key}\n{_require_section(parsed, key)}" for key in _REQUIRED_RESPONSE_SECTIONS)
 
-    interaction_notes = _require_section(parsed, "INTERACTION_NOTES")
-    compute_notes = _require_section(parsed, "COMPUTE_NOTES")
-    return {
-        "core_genes": genes,
-        "interaction_notes": interaction_notes,
-        "compute_notes": compute_notes,
-    }
+
+def _build_genetic_code(
+    parsed: dict[str, str],
+    *,
+    expected_core_gene_sections: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    genetic_code = parse_genetic_code_text(
+        _design_response_genetic_code_text(parsed),
+        expected_section_names=expected_core_gene_sections,
+    )
+    if genetic_code.get("format_kind") == "legacy_flat":
+        genes = list(genetic_code.get("core_genes", []))
+        _validate_core_genes(genes)
+
+    return genetic_code
 
 
 def require_response_section(parsed: dict[str, str], key: str) -> str:
@@ -218,19 +244,45 @@ def require_response_section(parsed: dict[str, str], key: str) -> str:
     return _require_section(parsed, key)
 
 
-def build_genetic_code_from_design_response(parsed: dict[str, str]) -> dict[str, Any]:
+def build_genetic_code_from_design_response(
+    parsed: dict[str, str],
+    *,
+    expected_core_gene_sections: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
     """Public wrapper for canonical genetic-code extraction from design responses."""
 
-    return _build_genetic_code(parsed)
+    return _build_genetic_code(parsed, expected_core_gene_sections=expected_core_gene_sections)
+
+
+def load_expected_core_gene_sections_from_config(cfg: Any) -> tuple[str, ...] | None:
+    """Return schema-derived CORE_GENES subsection names when config declares a schema."""
+
+    try:
+        schema_path_value = cfg.evolver.prompts.get("genome_schema")
+    except Exception:  # noqa: BLE001
+        return None
+    if not schema_path_value:
+        return None
+
+    candidate = Path(str(schema_path_value)).expanduser()
+    if not candidate.is_absolute():
+        candidate = (REPO_ROOT / candidate).resolve()
+    sections = load_genome_schema(str(candidate))
+    return tuple(section.name for section in sections)
 
 
 def build_implementation_prompt_from_design(
     parsed: dict[str, str],
     prompts: PromptBundle,
+    *,
+    expected_core_gene_sections: tuple[str, ...] | None = None,
 ) -> tuple[str, str]:
     """Build the shared implementation-stage prompt from a design-stage response."""
 
-    genetic_code = build_genetic_code_from_design_response(parsed)
+    genetic_code = build_genetic_code_from_design_response(
+        parsed,
+        expected_core_gene_sections=expected_core_gene_sections,
+    )
     change_description = require_response_section(parsed, "CHANGE_DESCRIPTION")
     return build_implementation_prompt(
         genetic_code=genetic_code,
@@ -312,6 +364,7 @@ def build_organism_from_response(
     ancestor_ids: list[str] | None = None,
     cross_island: bool = False,
     father_island_id: str | None = None,
+    expected_core_gene_sections: tuple[str, ...] | None = None,
 ) -> OrganismMeta:
     """Build `OrganismMeta` from a canonical design response and raw implementation text."""
 
@@ -319,7 +372,10 @@ def build_organism_from_response(
         if key not in parsed:
             raise ValueError(f"Canonical organism response is missing required section {key}.")
 
-    genetic_code = build_genetic_code_from_design_response(parsed)
+    genetic_code = build_genetic_code_from_design_response(
+        parsed,
+        expected_core_gene_sections=expected_core_gene_sections,
+    )
     change_description = require_response_section(parsed, "CHANGE_DESCRIPTION")
     if not str(implementation_code).strip():
         raise ValueError("Implementation stage must return non-empty implementation.py text.")

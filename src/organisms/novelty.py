@@ -75,10 +75,14 @@ def build_mutation_novelty_prompt(
     parent: OrganismMeta,
     candidate_design: dict[str, str],
     prompts: PromptBundle,
+    expected_core_gene_sections: tuple[str, ...] | None = None,
 ) -> tuple[str, str]:
     """Build mutation novelty-check prompts for one candidate child design."""
 
-    candidate_genetic_code = build_genetic_code_from_design_response(candidate_design)
+    candidate_genetic_code = build_genetic_code_from_design_response(
+        candidate_design,
+        expected_core_gene_sections=expected_core_gene_sections,
+    )
     candidate_change_description = require_response_section(candidate_design, "CHANGE_DESCRIPTION")
     system = compose_system_prompt(prompts.project_context, prompts.mutation_novelty_system)
     user = prompts.mutation_novelty_user.format(
@@ -98,10 +102,14 @@ def build_crossover_novelty_prompt(
     father: OrganismMeta,
     candidate_design: dict[str, str],
     prompts: PromptBundle,
+    expected_core_gene_sections: tuple[str, ...] | None = None,
 ) -> tuple[str, str]:
     """Build crossover novelty-check prompts for one candidate child design."""
 
-    candidate_genetic_code = build_genetic_code_from_design_response(candidate_design)
+    candidate_genetic_code = build_genetic_code_from_design_response(
+        candidate_design,
+        expected_core_gene_sections=expected_core_gene_sections,
+    )
     candidate_change_description = require_response_section(candidate_design, "CHANGE_DESCRIPTION")
     system = compose_system_prompt(prompts.project_context, prompts.crossover_novelty_system)
     user = prompts.crossover_novelty_user.format(

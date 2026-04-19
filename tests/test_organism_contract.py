@@ -8,10 +8,27 @@ from pathlib import Path
 import pytest
 
 from src.evolve.storage import read_genetic_code, read_lineage, read_organism_meta, write_json, write_organism_meta
+from src.organisms.genetic_code_format import load_genome_schema
 from src.organisms.organism import (
     build_organism_from_response,
     format_lineage_summary,
     update_latest_lineage_entry,
+)
+
+ROOT = Path(__file__).resolve().parents[1]
+SCHEMA_SECTION_NAMES = tuple(
+    section.name
+    for section in load_genome_schema(
+        str(
+            ROOT
+            / "conf"
+            / "experiments"
+            / "circle_packing_shinka"
+            / "prompts"
+            / "shared"
+            / "genome_schema.txt"
+        )
+    )
 )
 
 
@@ -38,6 +55,47 @@ def _base_parsed() -> dict[str, str]:
         "INTERACTION_NOTES": "Momentum and warmup are coordinated.",
         "COMPUTE_NOTES": "No extra step_fn calls.",
         "CHANGE_DESCRIPTION": "Initial organism build.",
+    }
+
+
+def _sectioned_core_genes() -> str:
+    return """### INIT_GEOMETRY
+- Start from a centered triangular scaffold trimmed to the square.
+
+### RADIUS_POLICY
+- Assign initial radii from local scaffold spacing.
+
+### EXPANSION_POLICY
+- Increase radii in small density-aware growth steps.
+
+### CONFLICT_MODEL
+- Treat pairwise overlap and boundary penetration as the two primary violations.
+
+### REPAIR_POLICY
+- Resolve the worst conflict first by local deterministic center shifts.
+
+### CONTROL_POLICY
+- Alternate growth and repair until no score-improving feasible update remains.
+
+### PARAMETERS
+- Use smaller corrective moves after repeated conflict recurrence.
+
+### OPTIONAL_CODE_SKETCH
+- None."""
+
+
+def _sectioned_parsed() -> dict[str, str]:
+    return {
+        "CORE_GENES": _sectioned_core_genes(),
+        "INTERACTION_NOTES": (
+            "This organism assumes the scaffold is already close to feasible and relies on deterministic local "
+            "correction."
+        ),
+        "COMPUTE_NOTES": "The design implies a staged constructive search with repeated local feasibility restoration.",
+        "CHANGE_DESCRIPTION": (
+            "This organism tests whether a triangular scaffold combined with density-aware expansion and "
+            "worst-conflict-first repair can improve score while preserving deterministic feasibility."
+        ),
     }
 
 
@@ -86,6 +144,96 @@ def test_build_organism_rejects_missing_sections(tmp_path: Path) -> None:
 def test_build_organism_rejects_empty_implementation(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="non-empty implementation.py"):
         _build(tmp_path, _base_parsed(), implementation_code="   \n")
+
+
+def test_build_organism_accepts_sectioned_circle_packing_genetic_code(tmp_path: Path) -> None:
+    org = _build(
+        tmp_path,
+        _sectioned_parsed(),
+        expected_core_gene_sections=SCHEMA_SECTION_NAMES,
+    )
+
+    genetic_code = read_genetic_code(org.genetic_code_path)
+    assert genetic_code["format_kind"] == "sectioned"
+    assert [section["name"] for section in genetic_code["core_gene_sections"]] == list(SCHEMA_SECTION_NAMES)
+    assert "### INIT_GEOMETRY" in Path(org.genetic_code_path).read_text(encoding="utf-8")
+
+
+def test_build_organism_accepts_legacy_flat_genetic_code_during_section_migration(tmp_path: Path) -> None:
+    org = _build(
+        tmp_path,
+        _base_parsed(),
+        expected_core_gene_sections=SCHEMA_SECTION_NAMES,
+    )
+
+    genetic_code = read_genetic_code(org.genetic_code_path)
+    assert genetic_code["format_kind"] == "legacy_flat"
+    assert genetic_code["core_genes"] == ["adaptive momentum", "warmup schedule", "gradient clipping"]
+
+
+def test_build_organism_rejects_sectioned_core_with_wrong_order(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace(
+        "### INIT_GEOMETRY\n- Start from a centered triangular scaffold trimmed to the square.\n\n"
+        "### RADIUS_POLICY\n- Assign initial radii from local scaffold spacing.",
+        "### RADIUS_POLICY\n- Assign initial radii from local scaffold spacing.\n\n"
+        "### INIT_GEOMETRY\n- Start from a centered triangular scaffold trimmed to the square.",
+    )
+
+    with pytest.raises(ValueError, match="schema exactly"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
+
+
+def test_build_organism_rejects_sectioned_core_with_missing_section(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace(
+        "\n\n### PARAMETERS\n- Use smaller corrective moves after repeated conflict recurrence.",
+        "",
+    )
+
+    with pytest.raises(ValueError, match="schema exactly"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
+
+
+def test_build_organism_rejects_sectioned_core_with_duplicate_section(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace(
+        "### OPTIONAL_CODE_SKETCH\n- None.",
+        "### INIT_GEOMETRY\n- Duplicate geometry entry.\n\n### OPTIONAL_CODE_SKETCH\n- None.",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate CORE_GENES subsection"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
+
+
+def test_build_organism_rejects_sectioned_core_with_none_outside_optional_code_sketch(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace(
+        "- Start from a centered triangular scaffold trimmed to the square.",
+        "- None.",
+    )
+
+    with pytest.raises(ValueError, match="only valid inside OPTIONAL_CODE_SKETCH"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
+
+
+def test_build_organism_rejects_sectioned_core_with_unexpected_extra_section(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace(
+        "### OPTIONAL_CODE_SKETCH\n- None.",
+        "### EXTRA_SECTION\n- This section is not in the schema.\n\n### OPTIONAL_CODE_SKETCH\n- None.",
+    )
+
+    with pytest.raises(ValueError, match="schema exactly"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
+
+
+def test_build_organism_rejects_sectioned_core_with_malformed_subsection_heading(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace("### INIT_GEOMETRY", "### Init Geometry")
+
+    with pytest.raises(ValueError, match="Malformed CORE_GENES subsection heading"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
 
 
 def test_new_lineage_write_omits_diff_summary_and_summary_mentions_cross_island(tmp_path: Path) -> None:
@@ -148,7 +296,7 @@ def test_canonical_genetic_code_read_rejects_malformed_sections(tmp_path: Path) 
     path = org_dir / "genetic_code.md"
     path.write_text("adaptive momentum; warmup schedule; gradient clipping", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="required sections"):
+    with pytest.raises(ValueError, match="required sections|first top-level section"):
         read_genetic_code(path)
 
 

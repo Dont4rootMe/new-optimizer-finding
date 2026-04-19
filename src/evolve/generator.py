@@ -41,6 +41,7 @@ from src.organisms.organism import (
     build_repair_prompt,
     build_implementation_prompt_from_design,
     build_organism_from_response,
+    load_expected_core_gene_sections_from_config,
 )
 
 
@@ -90,6 +91,7 @@ class CandidateGenerator(BaseLlmGenerator):
         self._owns_llm_registry = llm_registry is None
         super().__init__(cfg, registry)
         self.prompt_bundle = load_prompt_bundle(cfg)
+        self.expected_core_gene_sections = load_expected_core_gene_sections_from_config(cfg)
 
     def close(self) -> None:
         if self._owns_llm_registry:
@@ -304,6 +306,7 @@ class CandidateGenerator(BaseLlmGenerator):
         implementation_system_prompt, implementation_user_prompt = build_implementation_prompt_from_design(
             parsed_design,
             self.prompt_bundle,
+            expected_core_gene_sections=self.expected_core_gene_sections,
         )
         llm_request_payload["implementation"] = {
             "route_id": route_id,
@@ -794,6 +797,7 @@ class CandidateGenerator(BaseLlmGenerator):
         implementation_system_prompt, implementation_user_prompt = build_implementation_prompt_from_design(
             accepted_parsed_design,
             self.prompt_bundle,
+            expected_core_gene_sections=self.expected_core_gene_sections,
         )
         prompt_hash_parts.extend((implementation_system_prompt, implementation_user_prompt))
         llm_request_payload["implementation"] = {
@@ -1218,4 +1222,5 @@ class CandidateGenerator(BaseLlmGenerator):
             seed=self.seed,
             timestamp=utc_now_iso(),
             parent_lineage=[],
+            expected_core_gene_sections=self.expected_core_gene_sections,
         )
