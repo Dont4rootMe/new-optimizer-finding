@@ -1,0 +1,41 @@
+# === FIXED: DO NOT MODIFY ===
+from __future__ import annotations
+# === END FIXED ===
+
+# === FIXED: SOLVE_CASE_CONTRACT ===
+def solve_case(input_text: str) -> str:
+    lines = [line.strip() for line in input_text.splitlines() if line.strip()]
+    if not lines:
+        raise ValueError("input_text must not be empty.")
+    n, k = map(int, lines[0].split()[:2])
+    vertical = ["0" * max(0, n - 1) for _ in range(n)]
+    horizontal = ["0" * n for _ in range(max(0, n - 1))]
+    groups = [str(i) for i in range(k)]
+    operations: list[str] = []
+
+    # === REGION: STATE_REPRESENTATION ===
+    # === END_REGION: STATE_REPRESENTATION ===
+
+    # === REGION: MACRO_STRATEGY ===
+    # === END_REGION: MACRO_STRATEGY ===
+
+    # === REGION: CONSTRUCTION_POLICY ===
+    # === END_REGION: CONSTRUCTION_POLICY ===
+
+    # === REGION: PRIORITY_MODEL ===
+    # === END_REGION: PRIORITY_MODEL ===
+
+    # === REGION: LOCAL_REPAIR_POLICY ===
+    # === END_REGION: LOCAL_REPAIR_POLICY ===
+
+    # === REGION: CONTROL_POLICY ===
+    # === END_REGION: CONTROL_POLICY ===
+
+    # === REGION: PARAMETERS ===
+    # === END_REGION: PARAMETERS ===
+
+    # === REGION: OPTIONAL_CODE_SKETCH ===
+    # === END_REGION: OPTIONAL_CODE_SKETCH ===
+
+    return "\n".join(vertical + horizontal + groups + operations)
+# === END FIXED ===

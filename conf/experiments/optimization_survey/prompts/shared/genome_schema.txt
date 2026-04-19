@@ -1,0 +1,23 @@
+# STATE_REPRESENTATION
+This section defines what optimizer state the organism stores and how that state is conceptually represented. Put genes here that describe moment buffers, accumulators, counters, moving averages, per-parameter state, group-level state, or other persistent quantities used across optimization steps. This section is about stored state and representation, not the update law itself and not the outer schedule. Plain language, mathematical descriptions, and pseudocode-like descriptions are allowed here. Full Python code is not allowed here.
+
+# GRADIENT_PROCESSING
+This section defines how raw gradients are transformed before they drive parameter updates. Put genes here that describe filtering, normalization, clipping, averaging, variance estimation, gradient centralization, curvature proxies, or other preprocessing applied to gradients. This section is about transforming gradient signals, not about the final parameter-update law and not about global step scheduling. Plain language, mathematical descriptions, pseudocode-like descriptions, and numeric reasoning are allowed here. Full Python code is not allowed here.
+
+# UPDATE_RULE
+This section defines the core parameter-update law used by the optimizer. Put genes here that describe how processed gradients, state, learning rates, trust ratios, momentum terms, or other quantities combine to change model parameters. This section is about the actual update computation, not state allocation and not high-level schedule switching. Plain language, mathematical descriptions, pseudocode-like descriptions, and formulas are allowed here. Full Python code is not allowed here.
+
+# PARAMETER_GROUP_POLICY
+This section defines whether and how different parameter subsets or roles are treated differently. Put genes here that describe separate handling for biases, norms, embeddings, convolutional weights, matrices, sparse parameters, or other parameter groups. This section is about group-specific policy, not the shared update law itself. Plain language, mathematical descriptions, and structured rule descriptions are allowed here. Full Python code is not allowed here.
+
+# STEP_CONTROL_POLICY
+This section defines outer control over optimization steps. Put genes here that describe warmup, decay, schedules, phase logic, switching rules, budget-aware behavior, extra-gradient decisions, or other step-level control. This section is about when and how the optimizer changes modes over time, not the per-parameter update formula. Plain language, mathematical descriptions, pseudocode-like descriptions, and numeric schedules are allowed here. Full Python code is not allowed here.
+
+# STABILITY_POLICY
+This section defines safeguards that keep optimization numerically stable and robust. Put genes here that describe damping, epsilon use, clipping, trust-region-like limits, norm guards, NaN avoidance, denominator protection, or fallback behavior. This section is about stability and safety, not the primary update mechanism. Plain language, mathematical descriptions, pseudocode-like descriptions, and numeric thresholds are allowed here. Full Python code is not allowed here.
+
+# PARAMETERS
+This section stores explicit parameter choices, schedules, thresholds, relative coefficients, decay rates, epsilon values, ranges, and other quantitative settings used by the other sections. Put genes here that make the organism's quantitative choices specific. This section may contain numbers, formulas, inequalities, ranges, ratios, ordering constraints, or named parameter bundles in plain text. This section should not introduce a brand-new optimizer mechanism that belongs in another section. Full Python code is not allowed here.
+
+# OPTIONAL_CODE_SKETCH
+This section is optional in spirit but must always exist in the schema. It is reserved for local executable or near-executable sketches that help preserve heritable procedural detail for one module only. Content here may include pseudocode, local Python-like fragments, or patch-style code sketches, but only when they are narrowly scoped to a single mechanism already defined by the other sections. This section must never contain a full `implementation.py`, must never redefine the whole optimizer end to end, and must never replace the higher-level genetic descriptions in the earlier sections. Use this section only for localized inheritable procedural detail.

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Callable, Literal
 
 from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
-from src.organisms.genetic_code_format import DEFAULT_CORE_GENE_SECTION_NAMES, parse_section_issue_list
+from src.organisms.genetic_code_format import parse_section_issue_list
 from src.organisms.organism import (
     build_genetic_code_from_design_response,
     format_genetic_code,
@@ -68,7 +68,7 @@ def parse_compatibility_judgment(
 
     sections_at_issue = parse_section_issue_list(
         require_response_section(parsed, "SECTIONS_AT_ISSUE"),
-        expected_section_names=expected_section_names or DEFAULT_CORE_GENE_SECTION_NAMES,
+        expected_section_names=expected_section_names,
     )
     if verdict == _COMPATIBILITY_ACCEPTED:
         if sections_at_issue:

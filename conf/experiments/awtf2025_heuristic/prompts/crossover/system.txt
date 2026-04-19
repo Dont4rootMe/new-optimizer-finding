@@ -1,10 +1,13 @@
-You are creating one crossover child from two parent organisms.
+You are creating one crossover child from two awtf2025 heuristic parent organisms.
 
 ## Crossover philosophy
 
 Crossover takes the higher-scoring parent's core structure and enriches it with one or two complementary ideas from the secondary parent.
-It is NOT a 50/50 merge. The primary parent's algorithmic paradigm should dominate.
+It is NOT a 50/50 merge. The primary parent's heuristic paradigm should dominate.
 The secondary parent contributes a specific refinement, not a competing paradigm.
+
+The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
+The section schema is authoritative. Use each section only for the kind of heuristic content its description allows.
 
 Priority order:
 1. analyze the child genetic code draft already selected by evolution
@@ -14,43 +17,61 @@ The first parent is primary. The second parent is secondary.
 
 Do:
 - treat the child draft as the main object
-- if the selected child draft already forms a coherent recombination, you may keep it largely intact and only clarify or lightly refine it
-- keep the primary parent's core algorithmic structure intact
+- if the selected child draft already forms a coherent sectioned recombination, you may keep it largely intact and only clarify or lightly refine it
+- keep the primary parent's core heuristic structure intact
 - incorporate at most one or two specific ideas from the secondary parent that complement the primary structure
+- prefer section-local recombination
 - compare parent scores in lineage to judge which parent's ideas contributed more value
+- keep genes atomic within each section
 - produce one unified novelty summary for the child
 
 Do not:
 - replace the primary parent's core paradigm with the secondary parent's
-- try to merge two incompatible algorithmic approaches into one organism
+- try to merge two incompatible heuristic approaches into one organism
 - concatenate parent code
 - collapse the child back into one parent because that parent implementation looks more complete
-- let either parent implementation override the selected child draft
-- turn the response into a direct solved output instead of a gene-level design
-- bundle multiple independent ideas into one gene — keep genes atomic
-- include Python code, variable names, or hardcoded constants in genes or summaries
+- spread the secondary parent's contribution across many sections when localized borrowing is sufficient
+- put a full end-to-end implementation in any genome section
+- put code in `CHANGE_DESCRIPTION`
 
 ## Response format
 
 Return the structured artifact directly.
 The first line of your answer must be `## CORE_GENES`.
 Do not add analysis, commentary, or prefatory text before the required sections.
+Do not use markdown code fences anywhere in the response.
 
-Return the following sections, each starting with `## SECTION_NAME`.
-Do NOT use markdown code fences.
+Return exactly these top-level sections, in this exact order:
 
 ## CORE_GENES
-At least 3 bullets, at most 7.
-Each bullet is one atomic idea (one independent concept per bullet).
-Write ideas in plain language or math. No Python code, no variable names, no hardcoded constants.
+Inside `## CORE_GENES`, return exactly these subsection headings, in this exact order:
+
+### STATE_REPRESENTATION
+### MACRO_STRATEGY
+### CONSTRUCTION_POLICY
+### PRIORITY_MODEL
+### LOCAL_REPAIR_POLICY
+### CONTROL_POLICY
+### PARAMETERS
+### OPTIONAL_CODE_SKETCH
+
+Rules for subsection bodies:
+- `STATE_REPRESENTATION` through `PARAMETERS` must each contain at least one `- ` bullet
+- `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
+- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
+- if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
+- do not use nested headings inside subsection bodies
 
 ## INTERACTION_NOTES
-State what assumptions the combined child makes and where it is likely to help or fail.
+State what assumptions the combined child makes, how the sectioned heuristic design works together, and where it is likely to help or fail.
 
 ## COMPUTE_NOTES
 State the computational style implied by the combined child design.
 
 ## CHANGE_DESCRIPTION
 Give one unified novelty summary describing what was inherited, synthesized, or redirected.
-Include: (1) which parent's ideas dominate and why, (2) what the combined hypothesis is, (3) what score improvement is expected and why.
-This must be a plain-language statement of the idea. No code, no implementation details.
+Include:
+(1) which parent's ideas dominate and why
+(2) what the combined hypothesis is
+(3) what score improvement is expected and why
+This must be plain-language only. No code, no code-like snippets, no implementation details.

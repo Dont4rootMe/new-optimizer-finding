@@ -36,6 +36,16 @@ CIRCLE_REGIONS = (
     "PARAMETERS",
     "OPTIONAL_CODE_SKETCH",
 )
+OPTIMIZER_REGIONS = (
+    "STATE_REPRESENTATION",
+    "GRADIENT_PROCESSING",
+    "UPDATE_RULE",
+    "PARAMETER_GROUP_POLICY",
+    "STEP_CONTROL_POLICY",
+    "STABILITY_POLICY",
+    "PARAMETERS",
+    "OPTIONAL_CODE_SKETCH",
+)
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -52,19 +62,26 @@ def _cfg():
                 },
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
+                    "genome_schema": "conf/experiments/optimization_survey/prompts/shared/genome_schema.txt",
                     "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
                     "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
+                    "compatibility_seed_system": "conf/experiments/optimization_survey/prompts/compatibility/seed/system.txt",
+                    "compatibility_seed_user": "conf/experiments/optimization_survey/prompts/compatibility/seed/user.txt",
                     "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
                     "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
                     "mutation_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/mutation/system.txt",
                     "mutation_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/mutation/user.txt",
+                    "compatibility_mutation_system": "conf/experiments/optimization_survey/prompts/compatibility/mutation/system.txt",
+                    "compatibility_mutation_user": "conf/experiments/optimization_survey/prompts/compatibility/mutation/user.txt",
                     "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
                     "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
                     "crossover_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/crossover/system.txt",
                     "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
+                    "compatibility_crossover_system": "conf/experiments/optimization_survey/prompts/compatibility/crossover/system.txt",
+                    "compatibility_crossover_user": "conf/experiments/optimization_survey/prompts/compatibility/crossover/user.txt",
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
-                    "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                    "implementation_template": "conf/experiments/optimization_survey/prompts/shared/template.txt",
                     "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
                     "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
                 },
@@ -305,11 +322,16 @@ def _make_repairable_organism(tmp_path: Path) -> OrganismMeta:
 
 
 def _design_text(change_description: str = "Candidate change.") -> str:
+    core = "\n\n".join(
+        (
+            f"### {section}\n"
+            f"{'- None.' if section == OPTIMIZER_REGIONS[-1] else '- candidate optimizer idea for ' + section.lower()}"
+        )
+        for section in OPTIMIZER_REGIONS
+    )
     return (
         "## CORE_GENES\n"
-        "- candidate gene one\n"
-        "- candidate gene two\n"
-        "- candidate gene three\n\n"
+        f"{core}\n\n"
         "## INTERACTION_NOTES\n"
         "Candidate.\n\n"
         "## COMPUTE_NOTES\n"
@@ -320,19 +342,10 @@ def _design_text(change_description: str = "Candidate change.") -> str:
 
 
 def _implementation_text() -> str:
-    return (
-        "import torch.nn as nn\n\n"
-        "class Impl:\n"
-        "    def __init__(self, model: nn.Module, max_steps: int) -> None:\n"
-        "        self.model = model\n"
-        "        self.max_steps = max_steps\n\n"
-        "    def step(self, weights, grads, activations, step_fn) -> None:\n"
-        "        del weights, grads, activations, step_fn\n\n"
-        "    def zero_grad(self, set_to_none: bool = True) -> None:\n"
-        "        del set_to_none\n\n"
-        "def build_optimizer(model: nn.Module, max_steps: int):\n"
-        "    return Impl(model, max_steps)\n"
-    )
+    pieces = ["## COMPILATION_MODE", "FULL"]
+    for region in OPTIMIZER_REGIONS:
+        pieces.extend(("", f"## REGION {region}", f"        # implementation body for {region}", "## END_REGION"))
+    return "\n".join(pieces) + "\n"
 
 
 def _novelty_accepted_text() -> str:
@@ -412,19 +425,26 @@ def test_generator_loads_only_current_prompt_bundle_assets(monkeypatch) -> None:
     }
     assert observed == {
         "shared/project_context.txt",
+        "shared/genome_schema.txt",
+        "shared/template.txt",
         "seed/system.txt",
         "seed/user.txt",
+        "compatibility/seed/system.txt",
+        "compatibility/seed/user.txt",
         "mutation/system.txt",
         "mutation/user.txt",
         "novelty/mutation/system.txt",
         "novelty/mutation/user.txt",
+        "compatibility/mutation/system.txt",
+        "compatibility/mutation/user.txt",
         "crossover/system.txt",
         "crossover/user.txt",
         "novelty/crossover/system.txt",
         "novelty/crossover/user.txt",
+        "compatibility/crossover/system.txt",
+        "compatibility/crossover/user.txt",
         "implementation/system.txt",
         "implementation/user.txt",
-        "implementation/template.txt",
         "repair/system.txt",
         "repair/user.txt",
     }
@@ -474,7 +494,8 @@ def test_canonical_generator_seeds_real_island_organism(tmp_path: Path) -> None:
     assert llm_request["route_id"] == "mock"
     assert llm_request["design"]["route_id"] == "mock"
     assert llm_request["implementation"]["route_id"] == "mock"
-    assert "design_attempts" not in llm_request
+    assert len(llm_request["design_attempts"]) == 1
+    assert len(llm_request["compatibility_checks"]) == 1
     assert "novelty_checks" not in llm_request
     assert llm_response["route_id"] == "mock"
     assert llm_response["design"]["route_id"] == "mock"
@@ -565,7 +586,11 @@ def test_run_creation_stages_persists_raw_implementation_exchange_before_extract
                 "Candidate change.\n"
             )
         else:
-            text = "def broken(\n"
+            pieces = ["## COMPILATION_MODE", "FULL"]
+            for region in OPTIMIZER_REGIONS:
+                body = "        def broken(\n" if region == "STATE_REPRESENTATION" else f"        # body for {region}\n"
+                pieces.extend(("", f"## REGION {region}", body.rstrip("\n"), "## END_REGION"))
+            text = "\n".join(pieces) + "\n"
         return LlmResponse(
             text=text,
             route_id="mock",
@@ -598,7 +623,7 @@ def test_run_creation_stages_persists_raw_implementation_exchange_before_extract
     assert llm_request["implementation"]["status"] == "failed"
     assert "syntactically invalid Python" in llm_request["implementation"]["error_msg"]
     assert llm_response["implementation"]["response"] == {"stage": "implementation"}
-    assert llm_response["implementation"]["text"] == "def broken(\n"
+    assert "## REGION STATE_REPRESENTATION" in llm_response["implementation"]["text"]
     assert llm_response["implementation"]["status"] == "failed"
     assert "syntactically invalid Python" in llm_response["implementation"]["error_msg"]
 
@@ -866,8 +891,16 @@ def test_run_creation_stages_with_novelty_retries_design_before_implementation(
     )
     novelty_responses = iter(
         [
-            "## NOVELTY_VERDICT\nNOVELTY_REJECTED\n\n## REJECTION_REASON\nToo close to the parent.\n",
-            "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n",
+            (
+                "## NOVELTY_VERDICT\nNOVELTY_REJECTED\n\n"
+                "## REJECTION_REASON\nToo close to the parent.\n\n"
+                "## SECTIONS_AT_ISSUE\nNONE\n"
+            ),
+            (
+                "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n\n"
+                "## REJECTION_REASON\nN/A\n\n"
+                "## SECTIONS_AT_ISSUE\nNONE\n"
+            ),
         ]
     )
 
@@ -878,19 +911,7 @@ def test_run_creation_stages_with_novelty_retries_design_before_implementation(
         elif request.stage == "novelty_check":
             text = next(novelty_responses)
         else:
-            text = (
-                "import torch.nn as nn\n\n"
-                "class Impl:\n"
-                "    def __init__(self, model: nn.Module, max_steps: int) -> None:\n"
-                "        self.model = model\n"
-                "        self.max_steps = max_steps\n\n"
-                "    def step(self, weights, grads, activations, step_fn) -> None:\n"
-                "        del weights, grads, activations, step_fn\n\n"
-                "    def zero_grad(self, set_to_none: bool = True) -> None:\n"
-                "        del set_to_none\n\n"
-                "def build_optimizer(model: nn.Module, max_steps: int):\n"
-                "    return Impl(model, max_steps)\n"
-            )
+            text = _implementation_text()
         return LlmResponse(
             text=text,
             route_id="mock",
@@ -966,7 +987,9 @@ def test_run_creation_stages_with_novelty_rejection_exhaustion_is_terminal(
                 "## NOVELTY_VERDICT\n"
                 "NOVELTY_REJECTED\n\n"
                 "## REJECTION_REASON\n"
-                "Still paraphrases the parent.\n"
+                "Still paraphrases the parent.\n\n"
+                "## SECTIONS_AT_ISSUE\n"
+                "NONE\n"
             )
         return LlmResponse(
             text=text,
@@ -1017,7 +1040,7 @@ def test_run_creation_stages_with_novelty_parse_failure_retries_full_creation(
     novelty_texts = iter(
         [
             "## NOVELTY_VERDICT\nMAYBE\n",
-            "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n",
+            "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n\n## REJECTION_REASON\nN/A\n\n## SECTIONS_AT_ISSUE\nNONE\n",
         ]
     )
 
@@ -1039,19 +1062,7 @@ def test_run_creation_stages_with_novelty_parse_failure_retries_full_creation(
         elif request.stage == "novelty_check":
             text = next(novelty_texts)
         else:
-            text = (
-                "import torch.nn as nn\n\n"
-                "class Impl:\n"
-                "    def __init__(self, model: nn.Module, max_steps: int) -> None:\n"
-                "        self.model = model\n"
-                "        self.max_steps = max_steps\n\n"
-                "    def step(self, weights, grads, activations, step_fn) -> None:\n"
-                "        del weights, grads, activations, step_fn\n\n"
-                "    def zero_grad(self, set_to_none: bool = True) -> None:\n"
-                "        del set_to_none\n\n"
-                "def build_optimizer(model: nn.Module, max_steps: int):\n"
-                "    return Impl(model, max_steps)\n"
-            )
+            text = _implementation_text()
         return LlmResponse(
             text=text,
             route_id="mock",
@@ -1349,7 +1360,7 @@ def test_run_creation_stages_skips_implementation_when_compatibility_rejects(
         elif request.stage == "novelty_check":
             text = _novelty_accepted_text()
         else:
-            text = _compatibility_rejected_text("Repair depends on an absent conflict model.", "CONFLICT_MODEL")
+            text = _compatibility_rejected_text("Update depends on absent gradient processing.", "GRADIENT_PROCESSING")
         return LlmResponse(
             text=text,
             route_id="mock",
@@ -1407,8 +1418,8 @@ def test_run_creation_stages_compatibility_retry_uses_own_budget_and_feedback(
     compatibility_responses = iter(
         [
             _compatibility_rejected_text(
-                "Repair depends on an absent conflict ranking.",
-                "CONFLICT_MODEL, REPAIR_POLICY",
+                "Update depends on an absent gradient-processing rule.",
+                "GRADIENT_PROCESSING, UPDATE_RULE",
             ),
             _compatibility_accepted_text(),
         ]
@@ -1475,10 +1486,10 @@ def test_run_creation_stages_compatibility_retry_uses_own_budget_and_feedback(
         "compatibility_check",
         "implementation",
     ]
-    assert "Repair depends on an absent conflict ranking." in calls[3][1]
-    assert "Sections at issue: CONFLICT_MODEL, REPAIR_POLICY" in calls[3][1]
+    assert "Update depends on an absent gradient-processing rule." in calls[3][1]
+    assert "Sections at issue: GRADIENT_PROCESSING, UPDATE_RULE" in calls[3][1]
     llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
     assert len(llm_request["compatibility_checks"]) == 2
-    assert "Repair depends on an absent conflict ranking." in llm_request["design_attempts"][1][
+    assert "Update depends on an absent gradient-processing rule." in llm_request["design_attempts"][1][
         "compatibility_rejection_feedback"
     ]

@@ -88,6 +88,7 @@ def test_hydra_compose_config_and_experiments() -> None:
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
     assert cfg.evolver.creation.max_parallel_organisms == 4
     assert cfg.evolver.llm.selection_strategy == "random"
     assert cfg.evolver.llm.route_weights.mock == 1.0
@@ -102,8 +103,16 @@ def test_hydra_compose_config_and_experiments() -> None:
     )
     assert (
         cfg.evolver.prompts.implementation_template
-        == "conf/experiments/optimization_survey/prompts/implementation/template.txt"
+        == "conf/experiments/optimization_survey/prompts/shared/template.txt"
     )
+    assert cfg.evolver.prompts.genome_schema == "conf/experiments/optimization_survey/prompts/shared/genome_schema.txt"
+    assert cfg.evolver.prompts.compatibility_seed_system.endswith("/compatibility/seed/system.txt")
+    assert cfg.evolver.prompts.compatibility_mutation_user.endswith("/compatibility/mutation/user.txt")
+    assert cfg.evolver.prompts.compatibility_crossover_system.endswith("/compatibility/crossover/system.txt")
+    assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
+    assert cfg.evolver.reproduction.selection_score.normalize_weights is True
+    assert cfg.evolver.reproduction.selection_score.weights.simple_score == 1.0
+    assert cfg.evolver.reproduction.selection_score.weights.inheritance_fitness == 0.0
     assert cfg.evolver.reproduction.operator_weights.within_island_crossover == 1.0
     assert cfg.evolver.operators.mutation.gene_removal_probability == 0.2
     assert "parent_selection_softmax_temperature" not in cfg.evolver.operators.mutation
@@ -128,6 +137,7 @@ def test_optimization_survey_canonical_preset_accepts_standalone_validation_over
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
     assert cfg.evolver.creation.max_parallel_organisms == 4
 
 
@@ -180,7 +190,7 @@ def test_circle_packing_shinka_config_composes() -> None:
 
     assert set(cfg.experiments.keys()) == {"unit_square_26"}
     assert "safety" not in cfg
-    assert set(cfg.api_platforms.keys()) == {"ollama_qwen35_122b"}
+    assert "ollama_qwen35_122b" in cfg.api_platforms
     assert cfg.experiments.unit_square_26._target_ == "experiments.circle_packing_shinka.unit_square_26.UnitSquare26CirclePackingExperiment"
     assert cfg.experiments.unit_square_26.need_cuda is False
     assert cfg.evolver.prompts.project_context == "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt"
@@ -197,11 +207,16 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
     assert cfg.evolver.creation.max_parallel_organisms == 20
+    assert cfg.evolver.prompts.genome_schema == "conf/experiments/circle_packing_shinka/prompts/shared/genome_schema.txt"
     assert cfg.evolver.prompts.compatibility_seed_system.endswith("/compatibility/seed/system.txt")
     assert cfg.evolver.prompts.compatibility_mutation_user.endswith("/compatibility/mutation/user.txt")
     assert cfg.evolver.prompts.compatibility_crossover_system.endswith("/compatibility/crossover/system.txt")
-    assert cfg.evolver.islands.seed_organisms_per_island == 5
-    assert cfg.evolver.islands.max_organisms_per_island == 20
+    assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
+    assert cfg.evolver.reproduction.selection_score.normalize_weights is True
+    assert cfg.evolver.reproduction.selection_score.weights.simple_score == 1.0
+    assert cfg.evolver.reproduction.selection_score.weights.inheritance_fitness == 0.0
+    assert cfg.evolver.islands.seed_organisms_per_island == 8
+    assert cfg.evolver.islands.max_organisms_per_island == 8
     assert cfg.evolver.reproduction.species_sampling.strategy == "weighted_rule"
     assert cfg.evolver.reproduction.species_sampling.weighted_rule_lambda == 1.0
     assert cfg.evolver.reproduction.species_sampling.mutation_softmax_temperature == 1.0
@@ -212,27 +227,27 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.reproduction.offspring_per_generation == 10
     assert set(cfg.evolver.llm.route_weights.keys()) == {"ollama_qwen35_122b"}
     assert cfg.evolver.llm.route_weights.ollama_qwen35_122b == 1.0
-    assert cfg.api_platforms.ollama_qwen35_122b.max_concurrency == 3
+    assert cfg.api_platforms.ollama_qwen35_122b.max_concurrency == 4
 
     qwen_route = instantiate(cfg.api_platforms.ollama_qwen35_122b, _recursive_=False)
     assert qwen_route.route_id == "ollama_qwen35_122b"
     assert qwen_route.provider_model_id == "qwen3.5:122b"
-    assert qwen_route.base_url == "http://127.0.0.1:12434/api"
-    assert qwen_route.gpu_ranks == [0, 1, 2, 3, 4, 5]
-    assert qwen_route.gpu_rank_groups == [[0, 1, 2], [3, 4, 5]]
-    assert qwen_route.max_concurrency == 3
+    assert qwen_route.base_url == "http://127.0.0.1:11434/api"
+    assert qwen_route.gpu_ranks == []
+    assert qwen_route.gpu_rank_groups == []
+    assert qwen_route.max_concurrency == 4
     assert qwen_route.max_output_tokens == 12288
-    assert qwen_route.stage_options["design"]["think"] is False
+    assert qwen_route.stage_options["design"]["think"] == "medium"
     assert qwen_route.stage_options["design"]["temperature"] == 1.0
-    assert qwen_route.stage_options["design"]["max_output_tokens"] == 6000
-    assert qwen_route.stage_options["implementation"]["think"] is False
+    assert qwen_route.stage_options["design"]["max_output_tokens"] == 12288
+    assert qwen_route.stage_options["implementation"]["think"] == "low"
     assert qwen_route.stage_options["implementation"]["temperature"] == 0.4
-    assert qwen_route.stage_options["implementation"]["max_output_tokens"] == 6000
-    assert qwen_route.stage_options["repair"]["think"] is False
-    assert qwen_route.stage_options["repair"]["max_output_tokens"] == 6000
-    assert qwen_route.stage_options["novelty_check"]["think"] is False
+    assert qwen_route.stage_options["implementation"]["max_output_tokens"] == 12288
+    assert qwen_route.stage_options["repair"]["think"] == "low"
+    assert qwen_route.stage_options["repair"]["max_output_tokens"] == 12288
+    assert qwen_route.stage_options["novelty_check"]["think"] == "low"
     assert qwen_route.stage_options["novelty_check"]["temperature"] == 0.1
-    assert qwen_route.stage_options["novelty_check"]["max_output_tokens"] == 6000
+    assert qwen_route.stage_options["novelty_check"]["max_output_tokens"] == 12288
     assert qwen_route.request_options["num_ctx"] == 65536
 
 
@@ -282,14 +297,23 @@ def test_awtf2025_heuristic_config_composes() -> None:
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
     assert cfg.evolver.creation.max_parallel_organisms == 15
     assert cfg.evolver.islands.seed_organisms_per_island == 10
     assert cfg.evolver.islands.max_organisms_per_island == 30
+    assert cfg.evolver.prompts.genome_schema == "conf/experiments/awtf2025_heuristic/prompts/shared/genome_schema.txt"
+    assert cfg.evolver.prompts.compatibility_seed_system.endswith("/compatibility/seed/system.txt")
+    assert cfg.evolver.prompts.compatibility_mutation_user.endswith("/compatibility/mutation/user.txt")
+    assert cfg.evolver.prompts.compatibility_crossover_system.endswith("/compatibility/crossover/system.txt")
     assert cfg.evolver.reproduction.species_sampling.strategy == "weighted_rule"
     assert cfg.evolver.reproduction.species_sampling.weighted_rule_lambda == 1.0
     assert cfg.evolver.reproduction.species_sampling.mutation_softmax_temperature == 1.0
     assert cfg.evolver.reproduction.species_sampling.within_island_crossover_softmax_temperature == 1.0
     assert cfg.evolver.reproduction.species_sampling.inter_island_crossover_softmax_temperature == 1.0
+    assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
+    assert cfg.evolver.reproduction.selection_score.normalize_weights is True
+    assert cfg.evolver.reproduction.selection_score.weights.simple_score == 1.0
+    assert cfg.evolver.reproduction.selection_score.weights.inheritance_fitness == 0.0
     assert cfg.evolver.phases.simple.eval_mode == "full"
     assert "top_k_per_island" not in cfg.evolver.phases.simple
     assert cfg.evolver.phases.great_filter.eval_mode == "full"
@@ -375,4 +399,5 @@ def test_awtf2025_canonical_preset_accepts_standalone_validation_overrides() -> 
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
     assert cfg.evolver.creation.max_parallel_organisms == 15

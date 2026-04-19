@@ -14,7 +14,7 @@ from src.organisms.organism import (
     require_response_section,
     read_organism_genetic_code,
 )
-from src.organisms.genetic_code_format import DEFAULT_CORE_GENE_SECTION_NAMES, parse_section_issue_list
+from src.organisms.genetic_code_format import parse_section_issue_list
 
 _NOVELTY_ACCEPTED = "NOVELTY_ACCEPTED"
 _NOVELTY_REJECTED = "NOVELTY_REJECTED"
@@ -97,7 +97,7 @@ def parse_novelty_judgment(
     else:
         sections_at_issue = parse_section_issue_list(
             require_response_section(parsed, "SECTIONS_AT_ISSUE"),
-            expected_section_names=expected_section_names or DEFAULT_CORE_GENE_SECTION_NAMES,
+            expected_section_names=expected_section_names,
         )
     return NoveltyJudgment(
         verdict=verdict,

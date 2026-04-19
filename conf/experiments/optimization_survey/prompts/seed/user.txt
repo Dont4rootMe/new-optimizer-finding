@@ -1,4 +1,4 @@
-Design a seed optimizer for the following research island.
+Design a seed optimizer for this research island.
 
 Island id: {island_id}
 Island name: {island_name}
@@ -6,6 +6,12 @@ Island name: {island_name}
 Island research direction:
 {island_description}
 
-Your optimizer should clearly embody this island's school of thought. Be creative and original — do not just recreate Adam or SGD with minor tweaks. Think about what novel combination of ideas from this research direction could produce a genuinely competitive optimizer.
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
 
-The optimizer must work out of the box on any PyTorch model, any parameter count, and any step budget.
+Your task is to generate an idea set first.
+Do not optimize the wording toward a ready-made implementation.
+Produce a full sectioned genetic code whose content obeys the schema and whose sections all appear in the required order.
+
+The final organism will later be implemented as a PyTorch optimizer that must work across arbitrary models and step budgets.

@@ -1,0 +1,23 @@
+# STATE_REPRESENTATION
+This section defines what internal problem state, derived state, decomposition, or working representation the heuristic uses. Put genes here that describe parsed grid structures, robot-target summaries, region labels, congestion maps, wall abstractions, route state, or other state used by later planning. This section is about representation, not the global strategy itself and not local repair. Plain language, mathematical descriptions, and pseudocode-like descriptions are allowed here. Full Python code is not allowed here.
+
+# MACRO_STRATEGY
+This section defines the high-level global plan or decomposition strategy for the heuristic. Put genes here that describe board partitioning, grouping philosophy, routing phases, wall-planning strategy, global flow assumptions, or other organism-level strategy. This section is about the global hypothesis, not detailed construction steps and not local repair. Plain language, mathematical descriptions, and structured planning descriptions are allowed here. Full Python code is not allowed here.
+
+# CONSTRUCTION_POLICY
+This section defines how an initial or ongoing contest solution is built, extended, or routed. Put genes here that describe added-wall construction, group assignment construction, route construction, staged command generation, or other constructive procedures. This section is about building the candidate solution, not ranking choices and not repairing defects after detection. Plain language, mathematical descriptions, pseudocode-like descriptions, and procedural sketches are allowed here. Full Python code is not allowed here.
+
+# PRIORITY_MODEL
+This section defines the ranking or choice logic used to decide what gets processed next. Put genes here that describe robot priority, target priority, group release order, congestion ranking, route-choice ordering, or other deterministic selection criteria. This section is about priority and ranking, not the mechanics of construction or repair. Plain language, mathematical descriptions, and structured numeric reasoning are allowed here. Full Python code is not allowed here.
+
+# LOCAL_REPAIR_POLICY
+This section defines deterministic corrective logic used when local defects, conflicts, congestion, deadlocks, or inefficiencies are found. Put genes here that describe rerouting, command trimming, collision avoidance, local wall adjustment, delayed release, fallback moves, or other localized repair mechanisms. This section may contain local procedural detail, but it must still describe repair rather than a full end-to-end solver. Plain language, mathematical descriptions, pseudocode-like descriptions, numeric choices, and short local code-like sketches are allowed here. Do not place a full implementation in this section.
+
+# CONTROL_POLICY
+This section defines outer control over phases, stopping criteria, escalation logic, stage switching, or loop budgets. Put genes here that describe phase sequencing, when to switch from construction to repair, when to stop adding commands, or how to escalate from coarse to fine planning. This section is about global control flow, not the local details of construction or repair. Plain language, mathematical descriptions, pseudocode-like descriptions, and numeric thresholds are allowed here. Full Python code is not allowed here.
+
+# PARAMETERS
+This section stores explicit parameter choices, schedules, thresholds, relative coefficients, limits, ratios, and other quantitative settings used by the other sections. Put genes here that make the organism's quantitative choices specific. This section may contain numbers, formulas, inequalities, ranges, ratios, ordering constraints, or named parameter bundles in plain text. This section should not introduce a brand-new heuristic mechanism that belongs in another section. Full Python code is not allowed here.
+
+# OPTIONAL_CODE_SKETCH
+This section is optional in spirit but must always exist in the schema. It is reserved for local executable or near-executable sketches that help preserve heritable procedural detail for one module only. Content here may include pseudocode, local Python-like fragments, or patch-style code sketches, but only when they are narrowly scoped to a single mechanism already defined by the other sections. This section must never contain a full `implementation.py`, must never redefine the whole heuristic end to end, and must never replace the higher-level genetic descriptions in the earlier sections. Use this section only for localized inheritable procedural detail.

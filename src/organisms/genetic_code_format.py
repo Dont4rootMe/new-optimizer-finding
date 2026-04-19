@@ -12,18 +12,6 @@ TOP_LEVEL_SECTION_NAMES = (
     "COMPUTE_NOTES",
     "CHANGE_DESCRIPTION",
 )
-DEFAULT_CORE_GENE_SECTION_NAMES = (
-    "INIT_GEOMETRY",
-    "RADIUS_POLICY",
-    "EXPANSION_POLICY",
-    "CONFLICT_MODEL",
-    "REPAIR_POLICY",
-    "CONTROL_POLICY",
-    "PARAMETERS",
-    "OPTIONAL_CODE_SKETCH",
-)
-OPTIONAL_CODE_SKETCH_SECTION = "OPTIONAL_CODE_SKETCH"
-
 _SCHEMA_HEADER_RE = re.compile(r"^# ([A-Z][A-Z0-9_]*)$")
 _TOP_LEVEL_HEADER_RE = re.compile(r"^## ([A-Z_]+)$")
 _SUBSECTION_HEADER_RE = re.compile(r"^### ([A-Z][A-Z0-9_]*)$")
@@ -127,21 +115,29 @@ def parse_section_issue_list(
     if "\n" in raw or raw.startswith(("- ", "* ", "1. ")):
         raise ValueError("SECTIONS_AT_ISSUE must not use bullets, numbering, or prose blocks.")
 
-    expected = expected_section_names or DEFAULT_CORE_GENE_SECTION_NAMES
-    expected_index = {name: index for index, name in enumerate(expected)}
     names = tuple(part.strip() for part in raw.split(","))
     if any(not name for name in names):
         raise ValueError("SECTIONS_AT_ISSUE contains an empty section name.")
 
     seen: set[str] = set()
+    if expected_section_names is not None:
+        expected_index = {name: index for index, name in enumerate(expected_section_names)}
+        for name in names:
+            if name not in expected_index:
+                raise ValueError(f"SECTIONS_AT_ISSUE contains unknown section name {name!r}.")
+            if name in seen:
+                raise ValueError(f"SECTIONS_AT_ISSUE contains duplicate section name {name!r}.")
+            seen.add(name)
+        if tuple(sorted(names, key=lambda name: expected_index[name])) != names:
+            raise ValueError("SECTIONS_AT_ISSUE section names must appear in schema order.")
+        return names
+
     for name in names:
-        if name not in expected_index:
+        if _SCHEMA_HEADER_RE.match(f"# {name}") is None:
             raise ValueError(f"SECTIONS_AT_ISSUE contains unknown section name {name!r}.")
         if name in seen:
             raise ValueError(f"SECTIONS_AT_ISSUE contains duplicate section name {name!r}.")
         seen.add(name)
-    if tuple(sorted(names, key=lambda name: expected_index[name])) != names:
-        raise ValueError("SECTIONS_AT_ISSUE section names must appear in schema order.")
     return names
 
 
@@ -350,20 +346,19 @@ def _validate_expected_sectioned_core_genes(
             f"in name, count, and order; expected [{expected}], got [{actual}]."
         )
 
+    optional_section_name = expected_section_names[-1]
     for section in sections[:-1]:
         if not section.entries:
             raise ValueError(f"Required CORE_GENES subsection {section.name} must contain at least one gene entry.")
         if any(entry.text == "None." for entry in section.entries):
-            raise ValueError("- None. is only valid inside OPTIONAL_CODE_SKETCH.")
+            raise ValueError(f"- None. is only valid inside {optional_section_name}.")
 
     optional = sections[-1]
-    if optional.name != OPTIONAL_CODE_SKETCH_SECTION:
-        raise ValueError(f"Last CORE_GENES subsection must be {OPTIONAL_CODE_SKETCH_SECTION}.")
     if not optional.entries:
-        raise ValueError(f"{OPTIONAL_CODE_SKETCH_SECTION} must contain at least one gene entry or - None.")
+        raise ValueError(f"{optional_section_name} must contain at least one gene entry or - None.")
     optional_none_entries = [entry for entry in optional.entries if entry.text == "None."]
     if optional_none_entries and len(optional.entries) != 1:
-        raise ValueError("- None. must be the only entry when used inside OPTIONAL_CODE_SKETCH.")
+        raise ValueError(f"- None. must be the only entry when used inside {optional_section_name}.")
 
 
 def _parse_legacy_core_genes(core_text: str) -> tuple[str, ...]:

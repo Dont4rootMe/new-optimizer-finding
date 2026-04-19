@@ -24,6 +24,16 @@ SCHEMA_SECTION_NAMES = (
     "PARAMETERS",
     "OPTIONAL_CODE_SKETCH",
 )
+OPTIMIZER_SECTION_NAMES = (
+    "STATE_REPRESENTATION",
+    "GRADIENT_PROCESSING",
+    "UPDATE_RULE",
+    "PARAMETER_GROUP_POLICY",
+    "STEP_CONTROL_POLICY",
+    "STABILITY_POLICY",
+    "PARAMETERS",
+    "OPTIONAL_CODE_SKETCH",
+)
 
 SECTIONED_GENETIC_CODE = """## CORE_GENES
 ### INIT_GEOMETRY
@@ -82,6 +92,14 @@ def test_parse_genome_schema_text_accepts_valid_schema_file() -> None:
 
     assert tuple(section.name for section in sections) == SCHEMA_SECTION_NAMES
     assert sections[0].description.startswith("This section defines how the organism proposes")
+
+
+def test_parse_genome_schema_text_accepts_non_circle_schema_file() -> None:
+    schema_path = ROOT / "conf" / "experiments" / "optimization_survey" / "prompts" / "shared" / "genome_schema.txt"
+    sections = parse_genome_schema_text(schema_path.read_text(encoding="utf-8"))
+
+    assert tuple(section.name for section in sections) == OPTIMIZER_SECTION_NAMES
+    assert "optimizer state" in sections[0].description
 
 
 def test_parse_genome_schema_text_rejects_duplicate_sections() -> None:
@@ -154,3 +172,27 @@ def test_sectioned_parser_attaches_continuation_lines_to_previous_bullet() -> No
         "move the worse-conflicting circle along the separating direction,\n"
         "then re-check its immediate neighbors only."
     )
+
+
+def test_sectioned_parser_uses_arbitrary_schema_section_names() -> None:
+    core = "\n\n".join(
+        f"### {name}\n- "
+        + ("None." if name == OPTIMIZER_SECTION_NAMES[-1] else f"Optimizer idea for {name.lower()}.")
+        for name in OPTIMIZER_SECTION_NAMES
+    )
+    text = (
+        "## CORE_GENES\n"
+        f"{core}\n\n"
+        "## INTERACTION_NOTES\n"
+        "Optimizer sections coordinate state, gradients, and updates.\n\n"
+        "## COMPUTE_NOTES\n"
+        "Single-pass tensor updates.\n\n"
+        "## CHANGE_DESCRIPTION\n"
+        "A sectioned optimizer fixture.\n"
+    )
+
+    parsed = parse_genetic_code_text(text, expected_section_names=OPTIMIZER_SECTION_NAMES)
+
+    assert parsed.format_kind == "sectioned"
+    assert parsed.core_gene_sections is not None
+    assert tuple(section.name for section in parsed.core_gene_sections) == OPTIMIZER_SECTION_NAMES

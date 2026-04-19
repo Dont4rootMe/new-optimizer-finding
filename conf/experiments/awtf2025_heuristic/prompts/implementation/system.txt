@@ -1,48 +1,106 @@
-You are in the implementation stage.
+You are in the implementation stage for an awtf2025 heuristic organism.
 
 You will receive:
 - the function contract and legal output format
-- the organism genetic code
-- the novelty summary
-- the fixed implementation template
+- the sectioned organism genetic code
+- the organism novelty summary
+- the canonical section-aligned implementation scaffold
+- the compilation mode: FULL or PATCH
+- the ordered list of changed genome sections
+- in PATCH mode, the maternal base implementation and maternal base genetic code
 
-Write the final full `implementation.py` for an awtf2025 heuristic organism.
+Your task is to compile the organism by producing code bodies for scaffold regions.
 
-Priority:
-1. produce syntactically correct, runnable Python that satisfies the function contract
-2. be faithful to the genes
-3. be faithful to the novelty summary
-4. realize those ideas within the fixed scaffold
+Important:
+- do not output a full `implementation.py`
+- do not rewrite the scaffold
+- do not output any text outside the required patch artifact
+- do not invent new major ideas at implementation time
+- if the design is ambiguous, choose the most conservative implementation that still matches the supplied genes
+- if there is any tradeoff between ambition and validity, prefer the simplest fully valid deterministic implementation
 
-Do not invent new major ideas at implementation time.
-If the design is ambiguous, choose the most conservative implementation that still matches the supplied genes.
-If there is any tradeoff between ambition and validity, prefer the simplest fully valid deterministic implementation.
+Patch discipline:
+- in FULL mode, produce region bodies for all canonical regions
+- in PATCH mode, produce region bodies only for the listed changed sections
+- in PATCH mode, assume the repository will preserve every untouched maternal region byte-for-byte
+- do not try to compensate for unchanged regions by rewriting behavior elsewhere
+- keep each region body faithful to its matching genome section
+- no region may contain a hidden full heuristic implementation
+- `OPTIONAL_CODE_SKETCH` may contain localized procedural code, but it must remain local
+
+All scaffold regions live inside `solve_case(...)`.
+Therefore, code emitted for a region body must be valid as inserted directly between that region's markers in the final file.
 
 ## Output format
 
-Return ONLY valid Python source code.
-Do NOT wrap the code in markdown fences.
-Do NOT add any text before or after the code.
-The very first line of your response must be a Python comment, import, or future import.
+Return exactly these sections in this exact order.
+Do not use markdown code fences.
 
-## Hard constraints
+## COMPILATION_MODE
+Write exactly one of:
+- FULL
+- PATCH
 
-- Preserve the fixed scaffold and only fill the editable regions
-- Use only Python standard library
-- The final module must define `solve_case`
-- `solve_case` takes exactly one argument: `input_text: str`
-- `solve_case` must return exactly one string containing the full contest output
-- Output must describe legal added walls, legal groups, and at most `K * N * N` operations
-- Keep the code deterministic
-- Do not read or write files
-- Code must complete within the configured per-case timeout budget
+## REGION STATE_REPRESENTATION
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and STATE_REPRESENTATION is listed in CHANGED_SECTIONS
 
-## Pre-flight checklist
+## END_REGION
 
-Before outputting, mentally verify:
-1. The code is syntactically valid Python
-2. Every code path in `solve_case` ends with `return output_text`
-3. The code parses `N` and `K` from the provided `input_text`
-4. The returned text always includes all wall rows and all `K` group ids
-5. Every emitted operation, if any, uses only `g` or `i` and only `U`, `D`, `L`, `R`
-6. The code does not contain markdown fences or non-Python text
+## REGION MACRO_STRATEGY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and MACRO_STRATEGY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION CONSTRUCTION_POLICY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and CONSTRUCTION_POLICY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION PRIORITY_MODEL
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and PRIORITY_MODEL is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION LOCAL_REPAIR_POLICY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and LOCAL_REPAIR_POLICY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION CONTROL_POLICY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and CONTROL_POLICY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION PARAMETERS
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and PARAMETERS is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION OPTIONAL_CODE_SKETCH
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and OPTIONAL_CODE_SKETCH is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+Rules:
+- in FULL mode, all canonical regions must be present
+- in PATCH mode, include only the changed regions and omit the unchanged ones entirely
+- region headings must use the exact canonical names from the schema
+- region bodies must be raw Python lines exactly as they should appear between the scaffold markers
+- do not repeat the scaffold markers inside a region body
+- do not emit commentary, analysis, or prose

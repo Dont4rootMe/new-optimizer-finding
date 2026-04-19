@@ -6,8 +6,12 @@ Island name: {island_name}
 Island research style:
 {island_description}
 
-Your task is to generate an idea set first.
-Do not optimize the wording toward a ready-made solution.
-Produce genes that define how the organism thinks about wall placement, grouping, staged routing, and repair.
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
 
-The final organism will later be implemented as code that must read one contest input string and return one legal contest output string.
+Your task is to generate an idea set first.
+Do not optimize the wording toward a ready-made move script.
+Produce a full sectioned genetic code whose content obeys the schema and whose sections all appear in the required order.
+
+The final organism will later be implemented as code that must return a legal contest output string from `solve_case(input_text)`.

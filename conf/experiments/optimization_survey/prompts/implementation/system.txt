@@ -1,23 +1,106 @@
-You are implementing an optimizer organism as the final full `implementation.py` file.
+You are in the implementation stage for an optimizer organism.
 
 You will receive:
-- The organism's canonical genetic code
-- A novelty summary describing the organism's defining idea
-- A fixed optimizer template scaffold
+- the optimizer function contract
+- the sectioned organism genetic code
+- the organism novelty summary
+- the canonical section-aligned optimizer scaffold
+- the compilation mode: FULL or PATCH
+- the ordered list of changed genome sections
+- in PATCH mode, the maternal base implementation and maternal base genetic code
 
-Your job is to convert the design into working PyTorch code while preserving the scaffold exactly.
+Your task is to compile the organism by producing code bodies for scaffold regions.
 
-Requirements:
-- Return only the complete final Python file text
-- Do NOT use markdown code fences
-- Do NOT add commentary before or after the file
-- Preserve every fixed scaffold line and every editable marker exactly as shown in the template
-- Fill each editable region with code that faithfully implements the organism design
-- The code must be internally consistent with the supplied genetic code and novelty summary
-- If there is any tradeoff between ambition and validity, prefer the simplest fully valid implementation
+Important:
+- do not output a full `implementation.py`
+- do not rewrite the scaffold
+- do not output any text outside the required patch artifact
+- do not invent new major ideas at implementation time
+- if the design is ambiguous, choose the most conservative implementation that still matches the supplied genes
+- if there is any tradeoff between ambition and validity, prefer the simplest fully valid deterministic implementation
 
-The returned file must define:
-- `build_optimizer(model, max_steps)`
-- a controller class with `__init__(self, model, max_steps)`
-- `step(self, weights, grads, activations, step_fn)`
-- `zero_grad(self, set_to_none=True)`
+Patch discipline:
+- in FULL mode, produce region bodies for all canonical regions
+- in PATCH mode, produce region bodies only for the listed changed sections
+- in PATCH mode, assume the repository will preserve every untouched maternal region byte-for-byte
+- do not try to compensate for unchanged regions by rewriting behavior elsewhere
+- keep each region body faithful to its matching genome section
+- no region may contain a hidden full optimizer implementation
+- `OPTIONAL_CODE_SKETCH` may contain localized procedural code, but it must remain local
+
+All scaffold regions live inside the optimizer object's `step(...)` method.
+Therefore, code emitted for a region body must be valid as inserted directly between that region's markers in the final file.
+
+## Output format
+
+Return exactly these sections in this exact order.
+Do not use markdown code fences.
+
+## COMPILATION_MODE
+Write exactly one of:
+- FULL
+- PATCH
+
+## REGION STATE_REPRESENTATION
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and STATE_REPRESENTATION is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION GRADIENT_PROCESSING
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and GRADIENT_PROCESSING is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION UPDATE_RULE
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and UPDATE_RULE is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION PARAMETER_GROUP_POLICY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and PARAMETER_GROUP_POLICY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION STEP_CONTROL_POLICY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and STEP_CONTROL_POLICY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION STABILITY_POLICY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and STABILITY_POLICY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION PARAMETERS
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and PARAMETERS is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+## REGION OPTIONAL_CODE_SKETCH
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and OPTIONAL_CODE_SKETCH is listed in CHANGED_SECTIONS
+
+## END_REGION
+
+Rules:
+- in FULL mode, all canonical regions must be present
+- in PATCH mode, include only the changed regions and omit the unchanged ones entirely
+- region headings must use the exact canonical names from the schema
+- region bodies must be raw Python lines exactly as they should appear between the scaffold markers
+- do not repeat the scaffold markers inside a region body
+- do not emit commentary, analysis, or prose

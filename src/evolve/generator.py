@@ -45,6 +45,7 @@ from src.organisms.implementation_patch import (
     ImplementationCompilationPlan,
     assemble_implementation_from_patch,
     compute_changed_genome_sections,
+    parse_implementation_scaffold,
     parse_implementation_patch_response,
 )
 from src.organisms.novelty import (
@@ -237,11 +238,16 @@ class CandidateGenerator(BaseLlmGenerator):
     def uses_section_patch_compilation(self) -> bool:
         """Return true when this prompt bundle uses the section-aligned scaffold contract."""
 
-        return bool(
-            self.expected_core_gene_sections
-            and "# === REGION: INIT_GEOMETRY ===" in self.prompt_bundle.implementation_template
-            and "## COMPILATION_MODE" in self.prompt_bundle.implementation_system
-        )
+        if not self.expected_core_gene_sections or "## COMPILATION_MODE" not in self.prompt_bundle.implementation_system:
+            return False
+        try:
+            parse_implementation_scaffold(
+                self.prompt_bundle.implementation_template,
+                expected_region_names=self.expected_core_gene_sections,
+            )
+        except ValueError:
+            return False
+        return True
 
     def _prepare_implementation_stage(
         self,
@@ -933,7 +939,10 @@ class CandidateGenerator(BaseLlmGenerator):
             write_json(llm_response_path, llm_response_payload)
 
             try:
-                judgment = parse_novelty_judgment(novelty_response.text)
+                judgment = parse_novelty_judgment(
+                    novelty_response.text,
+                    expected_section_names=self.expected_core_gene_sections,
+                )
             except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
                 novelty_request_entry["status"] = "failed"
@@ -959,8 +968,10 @@ class CandidateGenerator(BaseLlmGenerator):
                 raise
             novelty_request_entry["verdict"] = judgment.verdict
             novelty_request_entry["rejection_reason"] = judgment.rejection_reason
+            novelty_request_entry["sections_at_issue"] = list(judgment.sections_at_issue)
             novelty_response_entry["verdict"] = judgment.verdict
             novelty_response_entry["rejection_reason"] = judgment.rejection_reason
+            novelty_response_entry["sections_at_issue"] = list(judgment.sections_at_issue)
             write_json(llm_request_path, llm_request_payload)
             write_json(llm_response_path, llm_response_payload)
 

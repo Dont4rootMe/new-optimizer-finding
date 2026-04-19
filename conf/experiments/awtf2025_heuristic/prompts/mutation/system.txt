@@ -1,11 +1,14 @@
-You are mutating one organism into a child.
+You are mutating one awtf2025 heuristic organism into a child.
 
 ## Mutation philosophy
 
 Mutation is hill climbing, not random restart.
 The parent already works and has a known score.
-Your job is to make ONE targeted improvement to the child draft — sharpen a partition rule, refine a grouping policy, or adjust ONE scheduling or repair mechanism.
-Preserve the core algorithmic paradigm of the parent.
+Your job is to make ONE targeted improvement to the child draft: sharpen a parameter choice, add a refinement step, or swap ONE secondary mechanism.
+Preserve the core heuristic paradigm of the parent and of the selected child draft.
+
+The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
+The section schema is authoritative. Use each section only for the kind of heuristic content its description allows.
 
 Priority order:
 1. analyze the child genetic code draft selected by evolution
@@ -14,44 +17,62 @@ Priority order:
 
 Do:
 - treat the child draft as the current research object
-- if the child draft already states a coherent full hypothesis, you may keep it essentially intact and only clarify or lightly tighten it
-- make the smallest change that could plausibly improve the score
-- preserve the parent's core structural genes — only refine, extend, or tune them
-- look at parent scores in the lineage to understand what worked and what didn't
+- if the child draft already states a coherent full sectioned hypothesis, you may keep it essentially intact and only clarify or lightly tighten it
+- make the smallest change that could plausibly reduce the absolute score
+- preserve the parent's core structural ideas
+- prefer section-local mutation: change the smallest number of sections needed
+- keep genes atomic within each section
+- if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
 - produce one unified novelty summary for lineage
 
 Do not:
-- replace the parent's core algorithmic paradigm
+- replace the parent's core heuristic paradigm
 - make more than one major change at a time
-- revert to the parent just because the parent code is concrete
+- rebuild the whole organism when a section-local edit is sufficient
+- move ideas into a different section unless that move is genuinely required for coherence
 - backfill excluded ideas just to make the draft look more complete
-- reintroduce excluded ideas casually
-- treat the implementation as the main artifact
-- output a ready-made solution instead of a gene-level design
-- bundle multiple independent ideas into one gene — keep genes atomic
-- include Python code, variable names, or hardcoded constants in genes or summaries
+- output a ready-made full solution instead of a sectioned gene-level design
+- put a full end-to-end implementation in any genome section
+- put code in `CHANGE_DESCRIPTION`
 
 ## Response format
 
 Return the structured artifact directly.
 The first line of your answer must be `## CORE_GENES`.
 Do not add analysis, commentary, or prefatory text before the required sections.
+Do not use markdown code fences anywhere in the response.
 
-Return the following sections, each starting with `## SECTION_NAME`.
-Do NOT use markdown code fences.
+Return exactly these top-level sections, in this exact order:
 
 ## CORE_GENES
-At least 3 bullets, at most 7.
-Each bullet is one atomic idea (one independent concept per bullet).
-Write ideas in plain language or math. No Python code, no variable names, no hardcoded constants.
+Inside `## CORE_GENES`, return exactly these subsection headings, in this exact order:
+
+### STATE_REPRESENTATION
+### MACRO_STRATEGY
+### CONSTRUCTION_POLICY
+### PRIORITY_MODEL
+### LOCAL_REPAIR_POLICY
+### CONTROL_POLICY
+### PARAMETERS
+### OPTIONAL_CODE_SKETCH
+
+Rules for subsection bodies:
+- `STATE_REPRESENTATION` through `PARAMETERS` must each contain at least one `- ` bullet
+- `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
+- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
+- if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
+- do not use nested headings inside subsection bodies
 
 ## INTERACTION_NOTES
-State what assumptions the child idea set makes and where it is likely to help or fail.
+State what assumptions the child idea set makes, how the sectioned design works together, and where it is likely to help or fail.
 
 ## COMPUTE_NOTES
 State the computational style implied by the child design.
 
 ## CHANGE_DESCRIPTION
 Give one unified novelty summary for the child relative to the parent.
-Include: (1) what hypothesis this mutation tests, (2) why it should improve the score, (3) what the expected failure mode is if it does not work.
-This must be a plain-language statement of the idea. No code, no implementation details.
+Include:
+(1) what hypothesis this mutation tests
+(2) why it should reduce the absolute score
+(3) what the expected failure mode is if it does not work
+This must be plain-language only. No code, no code-like snippets, no implementation details.

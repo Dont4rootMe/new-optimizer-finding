@@ -6,6 +6,7 @@ creation:
   max_attempts_to_create_organism: 3
   max_attempts_to_repair_organism_after_error: 2
   max_attempts_to_regenerate_organism_after_novelty_rejection: 2
+  max_attempts_to_regenerate_organism_after_compatibility_rejection: 3
   max_parallel_organisms: 4
 
 islands:
@@ -15,19 +16,30 @@ islands:
 
 prompts:
   project_context: conf/experiments/optimization_survey/prompts/shared/project_context.txt
+  genome_schema: conf/experiments/optimization_survey/prompts/shared/genome_schema.txt
+
   seed_system: conf/experiments/optimization_survey/prompts/seed/system.txt
   seed_user: conf/experiments/optimization_survey/prompts/seed/user.txt
+  compatibility_seed_system: conf/experiments/optimization_survey/prompts/compatibility/seed/system.txt
+  compatibility_seed_user: conf/experiments/optimization_survey/prompts/compatibility/seed/user.txt
+
   mutation_system: conf/experiments/optimization_survey/prompts/mutation/system.txt
   mutation_user: conf/experiments/optimization_survey/prompts/mutation/user.txt
   mutation_novelty_system: conf/experiments/optimization_survey/prompts/novelty/mutation/system.txt
   mutation_novelty_user: conf/experiments/optimization_survey/prompts/novelty/mutation/user.txt
+  compatibility_mutation_system: conf/experiments/optimization_survey/prompts/compatibility/mutation/system.txt
+  compatibility_mutation_user: conf/experiments/optimization_survey/prompts/compatibility/mutation/user.txt
+
   crossover_system: conf/experiments/optimization_survey/prompts/crossover/system.txt
   crossover_user: conf/experiments/optimization_survey/prompts/crossover/user.txt
   crossover_novelty_system: conf/experiments/optimization_survey/prompts/novelty/crossover/system.txt
   crossover_novelty_user: conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt
+  compatibility_crossover_system: conf/experiments/optimization_survey/prompts/compatibility/crossover/system.txt
+  compatibility_crossover_user: conf/experiments/optimization_survey/prompts/compatibility/crossover/user.txt
+
   implementation_system: conf/experiments/optimization_survey/prompts/implementation/system.txt
   implementation_user: conf/experiments/optimization_survey/prompts/implementation/user.txt
-  implementation_template: conf/experiments/optimization_survey/prompts/implementation/template.txt
+  implementation_template: conf/experiments/optimization_survey/prompts/shared/template.txt
   repair_system: conf/experiments/optimization_survey/prompts/repair/system.txt
   repair_user: conf/experiments/optimization_survey/prompts/repair/user.txt
 
@@ -48,6 +60,12 @@ reproduction:
     mutation_softmax_temperature: 1.0
     within_island_crossover_softmax_temperature: 1.0
     inter_island_crossover_softmax_temperature: 1.0
+  selection_score:
+    mode: weighted_sum
+    normalize_weights: true
+    weights:
+      simple_score: 1.0
+      inheritance_fitness: 0.0
 
 operators:
   mutation:

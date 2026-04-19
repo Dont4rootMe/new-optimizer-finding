@@ -4,8 +4,28 @@ from __future__ import annotations
 
 import pytest
 
-from src.organisms.genetic_code_format import DEFAULT_CORE_GENE_SECTION_NAMES
 from src.organisms.novelty import parse_novelty_judgment
+
+SECTION_NAMES = (
+    "INIT_GEOMETRY",
+    "RADIUS_POLICY",
+    "EXPANSION_POLICY",
+    "CONFLICT_MODEL",
+    "REPAIR_POLICY",
+    "CONTROL_POLICY",
+    "PARAMETERS",
+    "OPTIONAL_CODE_SKETCH",
+)
+OPTIMIZER_SECTION_NAMES = (
+    "STATE_REPRESENTATION",
+    "GRADIENT_PROCESSING",
+    "UPDATE_RULE",
+    "PARAMETER_GROUP_POLICY",
+    "STEP_CONTROL_POLICY",
+    "STABILITY_POLICY",
+    "PARAMETERS",
+    "OPTIONAL_CODE_SKETCH",
+)
 
 
 def test_parse_novelty_judgment_accepts_exact_code_phrase() -> None:
@@ -26,7 +46,7 @@ def test_parse_section_aware_novelty_judgment_accepts_none_sections() -> None:
             "## SECTIONS_AT_ISSUE\n"
             "NONE\n"
         ),
-        expected_section_names=DEFAULT_CORE_GENE_SECTION_NAMES,
+        expected_section_names=SECTION_NAMES,
     )
 
     assert judgment.is_accepted is True
@@ -44,7 +64,7 @@ def test_parse_section_aware_novelty_judgment_rejected_with_one_section() -> Non
             "## SECTIONS_AT_ISSUE\n"
             "REPAIR_POLICY\n"
         ),
-        expected_section_names=DEFAULT_CORE_GENE_SECTION_NAMES,
+        expected_section_names=SECTION_NAMES,
     )
 
     assert judgment.is_accepted is False
@@ -62,7 +82,7 @@ def test_parse_section_aware_novelty_judgment_rejected_with_multiple_sections() 
             "## SECTIONS_AT_ISSUE\n"
             "CONFLICT_MODEL, REPAIR_POLICY\n"
         ),
-        expected_section_names=DEFAULT_CORE_GENE_SECTION_NAMES,
+        expected_section_names=SECTION_NAMES,
     )
 
     assert judgment.sections_at_issue == ("CONFLICT_MODEL", "REPAIR_POLICY")
@@ -91,7 +111,7 @@ def test_parse_section_aware_novelty_judgment_rejects_malformed_sections_at_issu
                 "## SECTIONS_AT_ISSUE\n"
                 "- REPAIR_POLICY\n"
             ),
-            expected_section_names=DEFAULT_CORE_GENE_SECTION_NAMES,
+            expected_section_names=SECTION_NAMES,
         )
 
 
@@ -106,5 +126,21 @@ def test_parse_section_aware_novelty_judgment_rejects_unknown_section_name() -> 
                 "## SECTIONS_AT_ISSUE\n"
                 "GEOMETRY\n"
             ),
-            expected_section_names=DEFAULT_CORE_GENE_SECTION_NAMES,
+            expected_section_names=SECTION_NAMES,
         )
+
+
+def test_parse_section_aware_novelty_judgment_uses_family_local_sections() -> None:
+    judgment = parse_novelty_judgment(
+        (
+            "## NOVELTY_VERDICT\n"
+            "NOVELTY_REJECTED\n\n"
+            "## REJECTION_REASON\n"
+            "The update novelty is unsupported by gradient processing.\n\n"
+            "## SECTIONS_AT_ISSUE\n"
+            "GRADIENT_PROCESSING, UPDATE_RULE\n"
+        ),
+        expected_section_names=OPTIMIZER_SECTION_NAMES,
+    )
+
+    assert judgment.sections_at_issue == ("GRADIENT_PROCESSING", "UPDATE_RULE")

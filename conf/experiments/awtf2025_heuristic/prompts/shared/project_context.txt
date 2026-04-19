@@ -5,39 +5,36 @@ Task:
 - For each input, output added walls, robot groups, and an operation sequence
 - Minimize the absolute score `T + 100 * sum_k Manhattan(final_position_k, target_k)`
 
-## Primary research artifact
+## Primary Research Artifact
 
 The primary object is the organism's genetic code.
 
 Genetic code is not decoration. It is the canonical set of ideas that defines the organism:
-- how the organism decomposes the grid into controllable regions
-- how it chooses robot grouping and synchronized motion
-- how it routes robots while avoiding congestion and deadlock
-- what corrective or scheduling principles it relies on
+- how the organism represents the board, robots, targets, groups, walls, and derived state
+- what macro decomposition or routing strategy it uses
+- how it constructs an initial or ongoing solution
+- what priority logic decides which robot, group, route, or defect is processed next
+- what local repair and control principles it relies on
 
 `implementation.py` is secondary. It is only the concrete realization of the genetic code.
 
-`CHANGE_DESCRIPTION` is also first-class:
-- it must summarize the single main novelty of the new organism
-- it is later written into lineage
-- it should describe the unified idea of the child, not a changelog of tiny edits
-
-## Evolution setting
+## Evolution Setting
 
 Organisms are created by:
 - seed
 - mutation
 - crossover
 
-Creation is two-stage:
-1. design stage: genetic code, interaction notes, compute notes, novelty summary
-2. implementation stage: faithful realization of that design as `implementation.py`
+Creation is staged:
+1. design stage: sectioned genetic code, interaction notes, compute notes, novelty summary
+2. validation stage: novelty and compatibility checks where configured
+3. implementation stage: faithful compilation into `implementation.py`
 
 In mutation and crossover, evolutionary sampling already proposes a child-side genetic draft.
 That draft is the main object you must work on.
 Parent code and parent lineage are reference context only.
 
-## Runtime contract
+## Runtime Contract
 
 The final program must define:
 
@@ -66,50 +63,45 @@ Score:
 - lower is better
 - repo fitness is `-mean_absolute_score` across the configured fixed corpus
 
-## Hard constraints
+## Hard Constraints
 
 - Use only Python standard library
 - No file I/O, subprocesses, network calls, or external solvers
 - Keep the program deterministic
 - Return only the required output string from `solve_case`
-- In implementation stage, return only final Python code
 
-## Genetic code rule
+## Genetic Code Rule
 
 Think in genes first, implementation second.
 
-Each gene must express one concrete idea.
+For `awtf2025_heuristic`, `## CORE_GENES` is sectioned.
+The section names and their order are defined by the genome section schema artifact supplied to the generation prompts.
+
+Each gene must live in the correct genome section.
 Do not replace the idea set with a hand-crafted answer.
 Do not treat parent code as the truth.
 Do not skip idea formation and jump straight to a full command script.
 
-Genes and CHANGE_DESCRIPTION are idea-level artifacts. They must NEVER contain:
-- Python code, code snippets, or inline code
-- specific variable names, function calls, or parsing instructions
-- hardcoded numeric constants presented as implementation knobs
-- full move sequences or literal contest output fragments
+The section schema is authoritative about what kind of content belongs in each section.
+If a section allows only plain language, graph reasoning, mathematical descriptions, or pseudocode-like descriptions, obey that restriction.
+If a section allows localized procedural detail, numeric parameterization, or a narrow local code-like sketch, keep that content local to the section and local to the mechanism it describes.
 
-They MAY contain:
-- high-level algorithmic ideas and principles
-- geometric or graph-based reasoning about the grid and walls
-- brief pseudocode in plain language
-- qualitative parameter descriptions
+`CHANGE_DESCRIPTION` remains a plain-language idea-level artifact:
+- it must summarize the single main novelty of the new organism
+- it is later written into lineage
+- it should describe the unified idea of the child, not a changelog of tiny edits
+- it must not contain Python code, code-like snippets, or a full implementation recipe
 
-## Gene atomicity
+No genome section may contain a full end-to-end implementation or a full `implementation.py`.
+Local procedural detail is allowed only when it fits the section description and remains narrowly scoped.
 
-Each gene must express exactly one independent, testable idea.
+## Gene Atomicity
+
+Each bullet within a genome section must express exactly one independent, testable idea.
 
 Atomicity test:
 - If removing gene A makes gene B meaningless, they belong in ONE gene.
 - If gene A and gene B could independently be true or false, they MUST be separate genes.
-- If a gene contains "and" or "with" joining two distinct mechanisms, split it.
-
-Bad: "Partition the board into corridors and use greedy repair"
-  (two independent ideas bundled — macro partitioning and local repair)
-Good: "Partition the board into directional corridors using added walls" + "Apply deterministic local repair when synchronized moves create congestion"
-
-Bad: "Group robots by target quadrant and use staged release"
-  (grouping rule and scheduling rule are independent)
-Good: "Assign robots to groups by target-side locality" + "Release groups in deterministic stages based on remaining target distance"
+- If a gene contains two distinct mechanisms joined by "and" or "with", split it unless they are inseparable parts of one local idea.
 
 Why this matters: evolution operates on genes. If one gene contains two ideas, removing it loses both. Crossover inheriting it brings both. Coarse genes break the evolutionary mechanism.

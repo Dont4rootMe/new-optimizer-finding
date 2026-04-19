@@ -34,6 +34,8 @@ def test_parse_llm_response_sections() -> None:
 
 
 def test_implementation_template_asset_exists() -> None:
-    template_path = ROOT / "conf" / "experiments" / "optimization_survey" / "prompts" / "implementation" / "template.txt"
+    template_path = ROOT / "conf" / "experiments" / "optimization_survey" / "prompts" / "shared" / "template.txt"
     assert template_path.exists()
-    assert "{imports}" in template_path.read_text(encoding="utf-8")
+    text = template_path.read_text(encoding="utf-8")
+    assert "# === REGION: STATE_REPRESENTATION ===" in text
+    assert "{imports}" not in text

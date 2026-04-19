@@ -27,6 +27,7 @@ def _cfg():
             "evolver": {
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
+                    "genome_schema": "conf/experiments/optimization_survey/prompts/shared/genome_schema.txt",
                     "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
                     "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
                     "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
@@ -39,7 +40,7 @@ def _cfg():
                     "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
-                    "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                    "implementation_template": "conf/experiments/optimization_survey/prompts/shared/template.txt",
                     "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
                     "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
                 },
@@ -321,15 +322,15 @@ def test_mutation_operator_produce_persists_artifacts_and_lineage(tmp_path: Path
     )
 
     _, _, user_prompt, _ = generator.calls[0]
-    assert "=== INHERITED GENE POOL ===" in user_prompt
-    assert "=== REMOVED GENES ===" in user_prompt
+    assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
+    assert "=== EXCLUDED IDEAS ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
-    assert "=== PARENT GENETIC CODE ===" in user_prompt
+    assert "=== PARENT GENETIC CODE (REFERENCE ONLY) ===" in user_prompt
     assert "IMPLEMENTATION CODE" not in user_prompt
     assert generator.calls[1][0] == "novelty_check"
     assert "=== CANDIDATE CHILD GENETIC CODE ===" in generator.calls[1][2]
     assert generator.calls[2][0] == "implementation"
-    assert "=== FIXED IMPLEMENTATION TEMPLATE ===" in generator.calls[2][2]
+    assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in generator.calls[2][2]
     assert child.island_id == parent.island_id
     assert child.mother_id == parent.organism_id
     assert child.implementation_path == str(org_dir / "implementation.py")
@@ -391,8 +392,8 @@ def test_crossover_operator_produce_records_cross_island_lineage(tmp_path: Path)
 
     _, _, user_prompt, _ = generator.calls[0]
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
-    assert "MOTHER (primary parent" in user_prompt
-    assert "FATHER (secondary parent" in user_prompt
+    assert "=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ===" in user_prompt
+    assert "=== SECONDARY PARENT GENETIC CODE (REFERENCE ONLY) ===" in user_prompt
     assert "Mother implementation code" not in user_prompt
     assert "Father implementation code" not in user_prompt
     assert generator.calls[1][0] == "novelty_check"

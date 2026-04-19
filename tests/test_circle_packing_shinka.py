@@ -73,7 +73,7 @@ def test_circle_packing_config_composes() -> None:
 
     assert set(cfg.experiments.keys()) == {"unit_square_26"}
     assert "safety" not in cfg
-    assert set(cfg.api_platforms.keys()) == {"ollama_qwen35_122b"}
+    assert "ollama_qwen35_122b" in cfg.api_platforms
     assert cfg.experiments.unit_square_26.need_cuda is False
     assert cfg.evolver.phases.simple.experiments == ["unit_square_26"]
     assert cfg.evolver.phases.great_filter.enabled is False

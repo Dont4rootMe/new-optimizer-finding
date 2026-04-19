@@ -1,11 +1,17 @@
-Mutate this parent organism into an improved child.
+Mutate this parent optimizer into an improved child.
 
-=== INHERITED GENE POOL ===
-These genes were selected to carry forward into the child:
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
+
+=== CHILD GENETIC CODE DRAFT ===
+This is the child-side draft already selected by evolution.
+This is the main object you must work on.
 {inherited_gene_pool}
 
-=== REMOVED GENES ===
-These genes were deliberately dropped. Do not reintroduce without strong justification:
+=== EXCLUDED IDEAS ===
+These ideas were deliberately removed during mutation sampling.
+Treat them as excluded-by-evolution context, not as default candidates to restore.
 {removed_gene_pool}
 
 === NOVELTY REJECTION FEEDBACK ===
@@ -13,17 +19,19 @@ If a previous child draft was rejected for lacking novelty, address these issues
 If there was no prior rejection, this section will say so.
 {novelty_rejection_feedback}
 
-=== PARENT GENETIC CODE ===
-Structured description of the parent's algorithmic design:
+=== PARENT GENETIC CODE (REFERENCE ONLY) ===
+Use this only to understand where the child draft came from.
 {parent_genetic_code}
 
-=== PARENT EVOLUTIONARY HISTORY ===
-Recent lineage entries, most recent last:
+=== PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
+Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
 {parent_lineage_summary}
 
-===
-
-Analyze the parent's strengths and weaknesses based on scores and lineage. Produce a child that addresses the most impactful weakness or amplifies the strongest trait. If novelty feedback is present, fix those issues directly instead of paraphrasing the same parent idea again.
-The inherited gene pool is already the evolved child draft. If it already describes a coherent optimizer, keep it mostly intact.
-Do not backfill removed genes or reconstruct the parent just because a parent design looks more complete.
+=== TASK ===
+The parent organism already works and has been evaluated.
+Your goal: make ONE small, targeted improvement to the child draft that could push the score higher.
+Do NOT replace the core algorithmic structure; refine it.
+The result must be a full sectioned genetic code in the canonical format, not a partial diff.
+If novelty rejection feedback is present, resolve it explicitly instead of rephrasing the parent.
+If the child draft is already coherent and viable, keep it mostly intact rather than rebuilding the parent.
 Return the structured design directly. Do not add preface text before `## CORE_GENES`.

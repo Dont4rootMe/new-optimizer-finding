@@ -114,17 +114,104 @@ def _mock_circle_region_body(region_name: str) -> str:
     return f"    # {region_name} is already satisfied by the deterministic constructive baseline.\n"
 
 
-def _render_mock_circle_patch(user_prompt: str) -> str:
-    section_names = (
-        "INIT_GEOMETRY",
-        "RADIUS_POLICY",
-        "EXPANSION_POLICY",
-        "CONFLICT_MODEL",
-        "REPAIR_POLICY",
-        "CONTROL_POLICY",
-        "PARAMETERS",
-        "OPTIONAL_CODE_SKETCH",
+def _mock_optimizer_region_body(region_name: str) -> str:
+    if region_name == "STATE_REPRESENTATION":
+        return "        lr = 1e-3\n        max_grad_norm = 1.0\n"
+    if region_name == "GRADIENT_PROCESSING":
+        return (
+            "        processed_params = []\n"
+            "        for param in params:\n"
+            "            if param.grad is None:\n"
+            "                continue\n"
+            "            grad = param.grad.detach()\n"
+            "            processed_params.append((param, grad))\n"
+        )
+    if region_name == "UPDATE_RULE":
+        return (
+            "        with torch.no_grad():\n"
+            "            for param, grad in processed_params:\n"
+            "                param.add_(grad, alpha=-lr)\n"
+        )
+    if region_name == "STABILITY_POLICY":
+        return (
+            "        if max_grad_norm > 0:\n"
+            "            for param, grad in processed_params:\n"
+            "                norm = torch.linalg.vector_norm(grad)\n"
+            "                if torch.isfinite(norm) and norm > max_grad_norm:\n"
+            "                    param.add_(grad * (max_grad_norm / (norm + 1e-12)) - grad, alpha=0.0)\n"
+        )
+    return f"        # {region_name} uses the deterministic baseline optimizer behavior.\n"
+
+
+def _mock_awtf_region_body(region_name: str) -> str:
+    if region_name == "STATE_REPRESENTATION":
+        return "    parsed_state = {'n': n, 'k': k, 'line_count': len(lines)}\n"
+    if region_name == "MACRO_STRATEGY":
+        return "    del parsed_state\n"
+    if region_name == "CONSTRUCTION_POLICY":
+        return "    operations = []\n"
+    return f"    # {region_name} keeps the legal no-op baseline unchanged.\n"
+
+
+def _extract_schema_sections_from_prompt(prompt: str) -> tuple[str, ...]:
+    return tuple(re.findall(r"^# ([A-Z][A-Z0-9_]*)$", prompt, flags=re.MULTILINE))
+
+
+def _extract_template_region_names(text: str) -> tuple[str, ...]:
+    return tuple(re.findall(r"# === REGION: ([A-Z][A-Z0-9_]*) ===", text))
+
+
+def _render_mock_sectioned_design(prompt: str) -> str | None:
+    section_names = _extract_schema_sections_from_prompt(prompt)
+    if not section_names:
+        return None
+
+    if "circle-packing" in prompt.lower() or "circle packing" in prompt.lower() or "run_packing" in prompt:
+        subject = "circle-packing"
+        score_goal = "packing score"
+    elif "awtf2025" in prompt.lower() or "solve_case(input_text: str)" in prompt:
+        subject = "heuristic"
+        score_goal = "absolute contest score"
+    else:
+        subject = "optimizer"
+        score_goal = "training score"
+
+    pieces = ["## CORE_GENES"]
+    for index, section_name in enumerate(section_names):
+        pieces.append(f"### {section_name}")
+        if index == len(section_names) - 1:
+            pieces.append("- None.")
+        else:
+            label = section_name.lower().replace("_", " ")
+            pieces.append(f"- Use a deterministic {subject} baseline idea for {label}.")
+        pieces.append("")
+    pieces.extend(
+        [
+            "## INTERACTION_NOTES",
+            f"This sectioned {subject} design keeps the baseline coherent while leaving clear local regions for later evolution.",
+            "",
+            "## COMPUTE_NOTES",
+            "The method is deterministic and keeps computation intentionally lightweight for mock-route testing.",
+            "",
+            "## CHANGE_DESCRIPTION",
+            f"A sectioned deterministic {subject} baseline that can be compiled safely while later mutations target {score_goal}.",
+        ]
     )
+    return "\n".join(pieces).rstrip() + "\n"
+
+
+def _mock_region_body(region_name: str, prompt: str) -> str:
+    if "def run_packing" in prompt:
+        return _mock_circle_region_body(region_name)
+    if "def solve_case(input_text: str)" in prompt:
+        return _mock_awtf_region_body(region_name)
+    if "def build_optimizer" in prompt or "SectionAlignedOptimizer" in prompt:
+        return _mock_optimizer_region_body(region_name)
+    return f"    # {region_name} uses the deterministic mock baseline.\n"
+
+
+def _render_mock_region_patch(user_prompt: str) -> str:
+    template_regions = _extract_template_region_names(user_prompt)
     mode_match = re.search(r"=== COMPILATION MODE ===\n(.+?)(?:\n\n|$)", user_prompt, flags=re.DOTALL)
     mode = mode_match.group(1).strip() if mode_match else "FULL"
     changed_match = re.search(r"=== CHANGED_SECTIONS ===\n(.+?)(?:\n\n=== |$)", user_prompt, flags=re.DOTALL)
@@ -132,14 +219,14 @@ def _render_mock_circle_patch(user_prompt: str) -> str:
     if mode == "PATCH":
         regions = tuple(line.strip() for line in changed_text.splitlines() if line.strip() and line.strip() != "NONE")
     else:
-        regions = section_names
+        regions = template_regions
     pieces = ["## COMPILATION_MODE", mode]
     for region_name in regions:
         pieces.extend(
             (
                 "",
                 f"## REGION {region_name}",
-                _mock_circle_region_body(region_name).rstrip("\n"),
+                _mock_region_body(region_name, user_prompt).rstrip("\n"),
                 "## END_REGION",
             )
         )
@@ -165,6 +252,12 @@ def build_mock_text(request: LlmRequest) -> str:
             "## SECTIONS_AT_ISSUE\n"
             "NONE\n"
         )
+    if request.stage == "design":
+        sectioned_design = _render_mock_sectioned_design(f"{request.system_prompt}\n{request.user_prompt}")
+        if sectioned_design is not None:
+            return sectioned_design
+    if request.stage == "implementation" and "compilation mode" in joined_prompt:
+        return _render_mock_region_patch(request.user_prompt)
     if "circle-packing" in joined_prompt or "circle packing" in joined_prompt or "run_packing" in joined_prompt:
         if request.stage == "design":
             return (
@@ -192,8 +285,6 @@ def build_mock_text(request: LlmRequest) -> str:
                 "## CHANGE_DESCRIPTION\n"
                 "A deterministic staggered packing program that starts from a valid geometric template for 26 circles.\n"
             )
-        if request.stage == "implementation" and "compilation mode" in joined_prompt:
-            return _render_mock_circle_patch(request.user_prompt)
         if template:
             return _render_mock_implementation(template, organism_id, generation, request.seed)
     if (

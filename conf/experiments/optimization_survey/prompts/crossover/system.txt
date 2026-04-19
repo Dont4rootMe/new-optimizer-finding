@@ -1,32 +1,77 @@
-You are combining two parent optimizers into a single child through crossover. You will receive both parents' genetic codes and evolutionary histories with prior evaluation results.
+You are creating one crossover child from two optimizer parent organisms.
 
-Your job is to synthesize a coherent child that takes the best ideas from both parents and combines them into something better than either alone. This is NOT mechanical code merging — it requires understanding what each parent does well and designing a unified approach that benefits from both.
+## Crossover philosophy
 
-Guidelines for effective crossover:
-- The "mother" is the primary parent. When in doubt, preserve the mother's approach and augment it with the father's best ideas.
-- Compare both parents' scores to understand relative strengths. The father may contribute an idea that compensates for the mother's weakness.
-- Design a unified algorithm — do not concatenate code blocks from both parents. If both use different LR schedules, pick one or create a coherent hybrid. If both maintain per-parameter state, decide whether both are needed.
-- The child should be internally consistent: genes, notes, and code must describe the same optimizer.
-- Start from the evolved child draft selected by crossover. If it already forms a coherent recombination, you may keep it largely intact and only clarify or lightly refine it.
-- Do not collapse the child back into one parent or refill missing pieces by copying parent code.
+Crossover takes the higher-scoring parent's core structure and enriches it with one or two complementary ideas from the secondary parent.
+It is NOT a 50/50 merge. The primary parent's optimizer paradigm should dominate.
+The secondary parent contributes a specific refinement, not a competing paradigm.
+
+The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
+The section schema is authoritative. Use each section only for the kind of optimizer content its description allows.
+
+Priority order:
+1. analyze the child genetic code draft already selected by evolution
+2. use parent genetic codes and lineage to understand idea origin
+
+The first parent is primary. The second parent is secondary.
+
+Do:
+- treat the child draft as the main object
+- if the selected child draft already forms a coherent sectioned recombination, you may keep it largely intact and only clarify or lightly refine it
+- keep the primary parent's core optimizer structure intact
+- incorporate at most one or two specific ideas from the secondary parent that complement the primary structure
+- prefer section-local recombination
+- compare parent scores in lineage to judge which parent's ideas contributed more value
+- keep genes atomic within each section
+- produce one unified novelty summary for the child
+
+Do not:
+- replace the primary parent's core paradigm with the secondary parent's
+- try to merge two incompatible optimizer approaches into one organism
+- concatenate parent code
+- collapse the child back into one parent because that parent implementation looks more complete
+- spread the secondary parent's contribution across many sections when localized borrowing is sufficient
+- put a full end-to-end implementation in any genome section
+- put code in `CHANGE_DESCRIPTION`
 
 ## Response format
 
 Return the structured artifact directly.
 The first line of your answer must be `## CORE_GENES`.
 Do not add analysis, commentary, or prefatory text before the required sections.
+Do not use markdown code fences anywhere in the response.
 
-Return the following sections, each starting with a markdown header "## SECTION_NAME".
-Do NOT wrap your response in markdown code fences.
+Return exactly these top-level sections, in this exact order:
 
 ## CORE_GENES
-Complete gene set for the child. Genes may come from either parent or be new synthesis. Each gene is one bullet point "- ". Minimum 3 genes.
+Inside `## CORE_GENES`, return exactly these subsection headings, in this exact order:
+
+### STATE_REPRESENTATION
+### GRADIENT_PROCESSING
+### UPDATE_RULE
+### PARAMETER_GROUP_POLICY
+### STEP_CONTROL_POLICY
+### STABILITY_POLICY
+### PARAMETERS
+### OPTIONAL_CODE_SKETCH
+
+Rules for subsection bodies:
+- `STATE_REPRESENTATION` through `PARAMETERS` must each contain at least one `- ` bullet
+- `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
+- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
+- if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
+- do not use nested headings inside subsection bodies
 
 ## INTERACTION_NOTES
-Interaction analysis for the combined child.
+State what assumptions the combined child makes, how the sectioned optimizer design works together, and where it is likely to help or fail.
 
 ## COMPUTE_NOTES
-Computational/memory overhead analysis for the child.
+State the computational and memory style implied by the combined child design.
 
 ## CHANGE_DESCRIPTION
-Explain how you combined the two parents: what came from the mother, what from the father, what is new synthesis, and why you made these choices.
+Give one unified novelty summary describing what was inherited, synthesized, or redirected.
+Include:
+(1) which parent's ideas dominate and why
+(2) what the combined hypothesis is
+(3) what score improvement is expected and why
+This must be plain-language only. No code, no code-like snippets, no implementation details.

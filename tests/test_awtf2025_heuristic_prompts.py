@@ -87,7 +87,7 @@ def test_awtf2025_prompt_bundle_uses_gene_centric_language() -> None:
     bundle = load_prompt_bundle(cfg)
 
     assert "primary object is the organism's genetic code" in bundle.project_context
-    assert "Do not invent new major ideas at implementation time." in bundle.implementation_system
+    assert "do not invent new major ideas at implementation time" in bundle.implementation_system.lower()
     assert "child genetic code draft" in bundle.mutation_system.lower()
     assert "child draft" in bundle.crossover_system.lower()
     assert "keep it essentially intact" in bundle.mutation_system

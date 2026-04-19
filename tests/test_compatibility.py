@@ -9,7 +9,27 @@ from src.organisms.compatibility import (
     format_compatibility_rejection_feedback,
     parse_compatibility_judgment,
 )
-from src.organisms.genetic_code_format import DEFAULT_CORE_GENE_SECTION_NAMES
+
+SECTION_NAMES = (
+    "INIT_GEOMETRY",
+    "RADIUS_POLICY",
+    "EXPANSION_POLICY",
+    "CONFLICT_MODEL",
+    "REPAIR_POLICY",
+    "CONTROL_POLICY",
+    "PARAMETERS",
+    "OPTIONAL_CODE_SKETCH",
+)
+OPTIMIZER_SECTION_NAMES = (
+    "STATE_REPRESENTATION",
+    "GRADIENT_PROCESSING",
+    "UPDATE_RULE",
+    "PARAMETER_GROUP_POLICY",
+    "STEP_CONTROL_POLICY",
+    "STABILITY_POLICY",
+    "PARAMETERS",
+    "OPTIONAL_CODE_SKETCH",
+)
 
 
 def _accepted_text() -> str:
@@ -94,8 +114,20 @@ def test_parse_compatibility_judgment_rejects_unknown_section_name() -> None:
     with pytest.raises(ValueError, match="unknown section name"):
         parse_compatibility_judgment(
             _rejected_text("Bad section name.", "GEOMETRY"),
-            expected_section_names=DEFAULT_CORE_GENE_SECTION_NAMES,
+            expected_section_names=SECTION_NAMES,
         )
+
+
+def test_parse_compatibility_judgment_uses_family_local_sections() -> None:
+    judgment = parse_compatibility_judgment(
+        _rejected_text(
+            "The parameter schedule refers to an absent step controller.",
+            "STEP_CONTROL_POLICY, PARAMETERS",
+        ),
+        expected_section_names=OPTIMIZER_SECTION_NAMES,
+    )
+
+    assert judgment.sections_at_issue == ("STEP_CONTROL_POLICY", "PARAMETERS")
 
 
 def test_format_compatibility_rejection_feedback_empty_history() -> None:

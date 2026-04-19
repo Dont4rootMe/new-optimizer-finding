@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from src.organisms.genetic_code_format import (
-    OPTIONAL_CODE_SKETCH_SECTION,
     ParsedGeneticCode,
     parse_genetic_code_text as parse_structured_genetic_code_text,
 )
@@ -382,9 +381,9 @@ def _genetic_code_payload(parsed: ParsedGeneticCode) -> dict[str, Any]:
         ]
         flattened_core_genes = [
             entry
-            for section in core_gene_sections
+            for index, section in enumerate(core_gene_sections)
             for entry in section["entries"]
-            if not (section["name"] == OPTIONAL_CODE_SKETCH_SECTION and entry == "None.")
+            if not (index == len(core_gene_sections) - 1 and entry == "None.")
         ]
         payload["core_gene_sections"] = core_gene_sections
         payload["core_genes"] = flattened_core_genes

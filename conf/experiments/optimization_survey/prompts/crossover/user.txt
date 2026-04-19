@@ -1,7 +1,12 @@
-Combine these two parent organisms into one child through crossover.
+Create one crossover child from these two optimizer parents.
 
-=== INHERITED GENE POOL ===
-Maternal-biased selection of genes from both parents:
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
+
+=== CHILD GENETIC CODE DRAFT ===
+This merged draft was already selected by evolution.
+This is the main object you must refine.
 {inherited_gene_pool}
 
 === NOVELTY REJECTION FEEDBACK ===
@@ -9,29 +14,25 @@ If a previous child draft was rejected for lacking novelty, address these issues
 If there was no prior rejection, this section will say so.
 {novelty_rejection_feedback}
 
-============================================================
-MOTHER (primary parent — preserve continuity with her approach)
-============================================================
-
---- Mother genetic code ---
+=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ===
+Use this to understand continuity and provenance of ideas.
 {mother_genetic_code}
 
---- Mother evolutionary history ---
+=== PRIMARY PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
+Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
 {mother_lineage_summary}
 
-============================================================
-FATHER (secondary parent — contribute best complementary ideas)
-============================================================
-
---- Father genetic code ---
+=== SECONDARY PARENT GENETIC CODE (REFERENCE ONLY) ===
+Use this to understand complementary idea sources.
 {father_genetic_code}
 
---- Father evolutionary history ---
+=== SECONDARY PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
+Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
 {father_lineage_summary}
 
-============================================================
-
-Analyze both parents' approaches, scores, and histories. Design a child that inherits the mother's core framework while incorporating the father's most valuable contributions. The child must be a unified, coherent design — not a patchwork. If novelty feedback is present, fix those issues directly instead of rephrasing one parent.
-The inherited gene pool is already the child draft selected by evolution. A faithful, coherent recombination is allowed.
-Do not overwrite that draft with one parent's full design just because that parent looks more complete.
+=== TASK ===
+Refine the child genetic code draft into one coherent optimizer.
+The result must be a full sectioned genetic code in the canonical format, internally consistent, and summarized by one unified novelty statement for lineage.
+If novelty rejection feedback is present, resolve it explicitly instead of rephrasing one parent.
+If the selected recombination is already coherent, keep it mostly intact instead of rebuilding one parent.
 Return the structured design directly. Do not add preface text before `## CORE_GENES`.

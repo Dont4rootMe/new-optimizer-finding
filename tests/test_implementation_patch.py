@@ -29,6 +29,19 @@ REGIONS = (
     "PARAMETERS",
     "OPTIONAL_CODE_SKETCH",
 )
+OPTIMIZER_TEMPLATE = (
+    ROOT / "conf" / "experiments" / "optimization_survey" / "prompts" / "shared" / "template.txt"
+).read_text(encoding="utf-8")
+OPTIMIZER_REGIONS = (
+    "STATE_REPRESENTATION",
+    "GRADIENT_PROCESSING",
+    "UPDATE_RULE",
+    "PARAMETER_GROUP_POLICY",
+    "STEP_CONTROL_POLICY",
+    "STABILITY_POLICY",
+    "PARAMETERS",
+    "OPTIONAL_CODE_SKETCH",
+)
 
 
 def _full_patch_response() -> str:
@@ -356,3 +369,40 @@ def test_assemble_implementation_from_patch_rejects_non_scaffold_base() -> None:
             expected_region_names=REGIONS,
             base_source_text="def run_packing():\n    pass\n",
         )
+
+
+def test_non_circle_scaffold_and_patch_preserve_unchanged_regions() -> None:
+    regions = parse_implementation_scaffold(OPTIMIZER_TEMPLATE, expected_region_names=OPTIMIZER_REGIONS)
+    assert tuple(region.name for region in regions) == OPTIMIZER_REGIONS
+
+    full_patch = ParsedImplementationPatch(
+        compilation_mode="FULL",
+        region_bodies=tuple(
+            (region, f"        # optimizer body for {region}\n")
+            for region in OPTIMIZER_REGIONS
+        ),
+    )
+    base_source = assemble_implementation_from_patch(
+        scaffold_text=OPTIMIZER_TEMPLATE,
+        patch=full_patch,
+        expected_region_names=OPTIMIZER_REGIONS,
+    )
+    patched_body = "        # patched optimizer update\n"
+    patch = ParsedImplementationPatch(
+        compilation_mode="PATCH",
+        region_bodies=(("UPDATE_RULE", patched_body),),
+    )
+
+    final_source = assemble_implementation_from_patch(
+        scaffold_text=OPTIMIZER_TEMPLATE,
+        patch=patch,
+        expected_region_names=OPTIMIZER_REGIONS,
+        base_source_text=base_source,
+    )
+    base_bodies = dict(extract_region_bodies_from_source(base_source, expected_region_names=OPTIMIZER_REGIONS))
+    final_bodies = dict(extract_region_bodies_from_source(final_source, expected_region_names=OPTIMIZER_REGIONS))
+
+    assert final_bodies["UPDATE_RULE"] == patched_body
+    for region in OPTIMIZER_REGIONS:
+        if region != "UPDATE_RULE":
+            assert final_bodies[region] == base_bodies[region]

@@ -114,10 +114,13 @@ def test_awtf2025_config_composes() -> None:
     }
     assert cfg.experiments.group_commands_and_wall_planning.need_cuda is False
     assert cfg.evolver.phases.simple.experiments == ["group_commands_and_wall_planning"]
-    assert cfg.evolver.phases.great_filter.enabled is True
+    assert cfg.evolver.phases.great_filter.enabled is False
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 25
     assert cfg.evolver.prompts.project_context == "conf/experiments/awtf2025_heuristic/prompts/shared/project_context.txt"
+    assert cfg.evolver.prompts.genome_schema == "conf/experiments/awtf2025_heuristic/prompts/shared/genome_schema.txt"
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
+    assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
 
 
 def test_awtf2025_prompt_bundle_loads() -> None:
@@ -129,7 +132,10 @@ def test_awtf2025_prompt_bundle_loads() -> None:
 
     assert "Group Commands and Wall Planning" in bundle.project_context
     assert "solve_case" in bundle.implementation_system
-    assert "SOLVE_CASE_BODY" in bundle.implementation_template
+    assert "## COMPILATION_MODE" in bundle.implementation_system
+    assert "# STATE_REPRESENTATION" in bundle.genome_schema
+    assert "# === REGION: MACRO_STRATEGY ===" in bundle.implementation_template
+    assert "SOLVE_CASE_BODY" not in bundle.implementation_template
 
 
 def test_awtf2025_noop_score_matches_closed_form_case0() -> None:

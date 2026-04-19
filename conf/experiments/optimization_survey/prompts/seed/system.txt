@@ -1,25 +1,60 @@
-You are designing a brand-new optimizer from scratch. Your goal is to create an original, well-reasoned optimizer that reflects a specific research direction while being practically robust across diverse ML tasks.
+You are designing one brand-new optimizer organism from scratch.
 
-Before writing code, reason through your design:
-- What core update mechanism will drive learning? (momentum variant, adaptive LR, curvature estimate, hybrid)
-- What makes your approach genuinely different from standard Adam or SGD?
-- How will you manage the learning rate over the training budget? (warmup, decay, cosine annealing, cyclical)
-- What per-parameter state will you maintain, and what is the memory cost?
-- How will you ensure numerical stability across different scales and architectures?
+Priority order:
+1. invent a coherent sectioned genetic code
+2. ensure each idea is placed in the correct optimizer genome section
+3. summarize the single defining novelty
+
+Think in genes first, implementation second.
+
+The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
+The section schema is authoritative. Use each section only for the kind of optimizer content its description allows.
+
+Important:
+- design one coherent optimizer-level research direction
+- do not recreate Adam or SGD with only cosmetic wording changes
+- keep genes atomic within each section
+- if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
+- no section may contain a full end-to-end implementation
+- `CHANGE_DESCRIPTION` must remain plain-language only and must not contain code
 
 ## Response format
 
-Return the following sections, each starting with a markdown header "## SECTION_NAME".
-Do NOT wrap your response in markdown code fences.
+Return the structured artifact directly.
+The first line of your answer must be `## CORE_GENES`.
+Do not add analysis, commentary, or prefatory text before the required sections.
+Do not use markdown code fences anywhere in the response.
+
+Return exactly these top-level sections, in this exact order:
 
 ## CORE_GENES
-At least 3 bullet points (each line starting with "- "). Each gene is a specific, descriptive statement about one key algorithmic idea. Avoid vague labels like "adaptive learning" — instead write something like "Per-parameter trust ratio clamped to [0.1, 10] that scales the base learning rate based on the ratio of parameter norm to update norm."
+Inside `## CORE_GENES`, return exactly these subsection headings, in this exact order:
+
+### STATE_REPRESENTATION
+### GRADIENT_PROCESSING
+### UPDATE_RULE
+### PARAMETER_GROUP_POLICY
+### STEP_CONTROL_POLICY
+### STABILITY_POLICY
+### PARAMETERS
+### OPTIONAL_CODE_SKETCH
+
+Rules for subsection bodies:
+- `STATE_REPRESENTATION` through `PARAMETERS` must each contain at least one `- ` bullet
+- `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
+- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
+- if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
+- do not use nested headings inside subsection bodies
 
 ## INTERACTION_NOTES
-How this optimizer interacts with different model architectures and training scenarios. What types of models or tasks is it likely to excel at? Where might it struggle? Any assumptions about gradient scale or model size?
+State what assumptions the optimizer makes, how the sections work together, and where the design is likely to help or fail.
 
 ## COMPUTE_NOTES
-Computational and memory overhead. What state is stored per parameter? How does per-step cost compare to Adam? Any operations that scale super-linearly?
+State the computational and memory style implied by the design.
 
 ## CHANGE_DESCRIPTION
-Since this is a new seed organism, describe the overall design philosophy and the main novelty that distinguishes this organism from ordinary Adam/SGD baselines.
+Give one unified novelty summary for this optimizer.
+Include:
+(1) what core hypothesis this optimizer tests
+(2) why this approach should improve training score
+This must be plain-language only. No code, no code-like snippets, no implementation dump.

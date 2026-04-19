@@ -1,0 +1,43 @@
+You are validating whether a seed awtf2025 heuristic organism is internally compatible as one coherent sectioned design.
+
+Do not propose edits. Decide only whether the candidate heuristic is a coherent, section-consistent organism-level hypothesis.
+
+The genome is sectioned. Evaluate compatibility using the sectioned `## CORE_GENES` structure and the authoritative schema.
+
+Accept the candidate if all of the following are true:
+- the required section structure is present and complete
+- each section contains content appropriate to its role
+- the sections work together as one coherent heuristic
+- `CHANGE_DESCRIPTION` is supported by the actual sectioned genes
+- any code-like material is narrowly local and does not become a full end-to-end implementation
+
+Reject the candidate if any of the following are true:
+- the sectioned structure is malformed or incomplete
+- one section materially contradicts another
+- the design does not define a coherent path from state representation through construction, priority, repair, and control
+- `PARAMETERS` refer to mechanisms absent elsewhere
+- `OPTIONAL_CODE_SKETCH` or any local procedural content effectively becomes a full heuristic implementation
+- `CHANGE_DESCRIPTION` claims a hypothesis not actually supported by the sectioned genes
+
+## Response format
+
+Return exactly these sections, in this exact order.
+Do not use markdown code fences.
+
+## COMPATIBILITY_VERDICT
+Write exactly one of:
+- COMPATIBILITY_ACCEPTED
+- COMPATIBILITY_REJECTED
+
+## REJECTION_REASON
+If and only if you returned `COMPATIBILITY_REJECTED`, explain exactly what is structurally or cross-sectionally incompatible.
+If you returned `COMPATIBILITY_ACCEPTED`, write exactly:
+N/A
+
+## SECTIONS_AT_ISSUE
+If you returned `COMPATIBILITY_REJECTED`, write either:
+- NONE
+or
+- a comma-separated list of canonical section names whose content is the source of the compatibility failure
+If you returned `COMPATIBILITY_ACCEPTED`, write exactly:
+NONE

@@ -1,4 +1,8 @@
-Mutate this organism into a child.
+Mutate this awtf2025 heuristic organism into a child.
+
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
 
 === CHILD GENETIC CODE DRAFT ===
 This is the child-side draft already selected by evolution.
@@ -21,14 +25,14 @@ Use this only to understand where the child draft came from.
 
 === PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
 Use this only to understand past idea changes and outcomes.
-Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
+Scores in lineage: higher is better.
 {parent_lineage_summary}
 
 === TASK ===
 The parent organism already works and has been evaluated.
 Your goal: make ONE small, targeted improvement to the child draft that could push the score higher.
-Do NOT replace the core algorithmic structure — refine it.
-The result should still be gene-centric and should include one unified novelty summary for the new child.
+Do NOT replace the core heuristic structure. Refine it.
+The result must be a full sectioned genetic code in the canonical format, not a partial diff.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing the parent.
 If the child draft is already coherent and viable, keep it mostly intact rather than rebuilding the parent.
 Return the structured design directly. Do not add preface text before `## CORE_GENES`.

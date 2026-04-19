@@ -107,11 +107,12 @@ def test_manual_prompt_helpers_build_expected_sections() -> None:
 
     assert crossover["child_gene_pool"]
     assert "## CHANGE_DESCRIPTION" in crossover["system_prompt"]
-    assert "--- Mother genetic code ---" in crossover["user_prompt"]
-    assert "--- Father genetic code ---" in crossover["user_prompt"]
+    assert "=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ===" in crossover["user_prompt"]
+    assert "=== SECONDARY PARENT GENETIC CODE (REFERENCE ONLY) ===" in crossover["user_prompt"]
     assert mutation["inherited_genes"]
-    assert "=== REMOVED GENES ===" in mutation["user_prompt"]
-    assert "=== ORGANISM NOVELTY SUMMARY ===" in implementation["user_prompt"]
+    assert "=== EXCLUDED IDEAS ===" in mutation["user_prompt"]
+    assert "=== ORGANISM CHANGE_DESCRIPTION ===" in implementation["user_prompt"]
+    assert "=== COMPILATION MODE ===\nFULL" in implementation["user_prompt"]
     assert "Combined stable normalization" in implementation["user_prompt"]
 
 

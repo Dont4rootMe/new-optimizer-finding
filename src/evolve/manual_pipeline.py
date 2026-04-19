@@ -241,10 +241,14 @@ def build_manual_implementation_prompts(
         organism_genetic_code_text,
         expected_section_names=load_expected_core_gene_sections_from_config(context.cfg),
     )
+    expected_sections = load_expected_core_gene_sections_from_config(context.cfg)
+    changed_sections = "\n".join(expected_sections) if expected_sections else "NONE"
     system_prompt, user_prompt = build_implementation_prompt(
         genetic_code=genetic_code,
         change_description=str(novelty_summary),
         prompts=context.prompt_bundle,
+        compilation_mode="FULL",
+        changed_sections=changed_sections,
     )
     return {
         "system_prompt": system_prompt,
