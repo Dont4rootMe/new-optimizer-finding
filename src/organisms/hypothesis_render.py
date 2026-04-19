@@ -40,7 +40,7 @@ def render_genetic_code_markdown(genome: dict, schema_provider) -> str:
     render_fields = genome["render_fields"]
 
     core_lines = [
-        f"- [{slot}] {slots[slot]['hypothesis']}"
+        f"- [{slot} | {slots[slot]['module_key']}] {slots[slot]['hypothesis']}"
         for slot in slot_order
     ]
 

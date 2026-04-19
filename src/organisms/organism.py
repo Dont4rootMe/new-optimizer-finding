@@ -63,7 +63,10 @@ def genetic_code_from_canonical_genome(genome: dict[str, Any], schema_provider: 
     slots = genome["slots"]
     render_fields = genome["render_fields"]
 
-    core_genes = [f"[{slot}] {slots[slot]['hypothesis']}" for slot in slot_order]
+    core_genes = [
+        f"[{slot} | {slots[slot]['module_key']}] {slots[slot]['hypothesis']}"
+        for slot in slot_order
+    ]
 
     interaction_values: list[str] = []
     interaction_values.extend(render_fields["interaction_notes"])

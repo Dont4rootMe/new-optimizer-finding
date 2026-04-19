@@ -26,7 +26,7 @@ def test_write_canonical_genome_also_writes_genetic_code_markdown(tmp_path: Path
     write_canonical_genome(tmp_path, genome, schema)
 
     markdown = (tmp_path / "genetic_code.md").read_text(encoding="utf-8")
-    assert markdown.startswith("## CORE_GENES\n- [layout]")
+    assert markdown.startswith("## CORE_GENES\n- [layout | layout_triangular_lattice]")
     assert "## CHANGE_DESCRIPTION\n" in markdown
 
 
@@ -37,7 +37,7 @@ def test_read_fails_cleanly_if_genome_json_missing(tmp_path: Path) -> None:
 
 def test_read_fails_if_markdown_exists_but_genome_json_does_not(tmp_path: Path) -> None:
     (tmp_path / "genetic_code.md").write_text(
-        "## CORE_GENES\n- [layout] Rendered only.\n",
+        "## CORE_GENES\n- [layout | layout_triangular_lattice] Rendered only.\n",
         encoding="utf-8",
     )
 
@@ -49,7 +49,7 @@ def test_read_does_not_use_markdown_as_source_of_truth(tmp_path: Path) -> None:
     genome = valid_circle_packing_genome()
     write_canonical_genome(tmp_path, genome, schema)
     (tmp_path / "genetic_code.md").write_text(
-        "## CORE_GENES\n- [layout] Tampered rendered markdown.\n",
+        "## CORE_GENES\n- [layout | layout_triangular_lattice] Tampered rendered markdown.\n",
         encoding="utf-8",
     )
 
@@ -61,7 +61,7 @@ def test_prompt_hypothesis_read_prefers_genome_over_markdown(tmp_path: Path) -> 
     genome = valid_circle_packing_genome()
     write_canonical_genome(tmp_path, genome, schema)
     (tmp_path / "genetic_code.md").write_text(
-        "## CORE_GENES\n- [layout] Tampered rendered markdown.\n",
+        "## CORE_GENES\n- [layout | layout_triangular_lattice] Tampered rendered markdown.\n",
         encoding="utf-8",
     )
     organism = OrganismMeta(
@@ -80,7 +80,9 @@ def test_prompt_hypothesis_read_prefers_genome_over_markdown(tmp_path: Path) -> 
     )
 
     prompt_payload = read_organism_hypothesis_for_prompt(organism, schema_provider=schema)
-    assert prompt_payload["core_genes"][0] == f"[layout] {genome['slots']['layout']['hypothesis']}"
+    assert prompt_payload["core_genes"][0] == (
+        f"[layout | layout_triangular_lattice] {genome['slots']['layout']['hypothesis']}"
+    )
 
 
 def test_written_json_is_pretty_sorted_and_has_trailing_newline(tmp_path: Path) -> None:

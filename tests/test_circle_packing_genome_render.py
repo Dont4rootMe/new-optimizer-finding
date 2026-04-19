@@ -27,7 +27,7 @@ def test_core_genes_contains_eight_bullets_in_slot_order() -> None:
 
     assert len(bullets) == 8
     assert bullets == [
-        f"- [{slot}] {genome['slots'][slot]['hypothesis']}"
+        f"- [{slot} | {genome['slots'][slot]['module_key']}] {genome['slots'][slot]['hypothesis']}"
         for slot in schema.SLOT_ORDER
     ]
 

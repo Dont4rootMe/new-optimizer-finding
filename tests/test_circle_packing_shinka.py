@@ -301,5 +301,5 @@ def test_circle_packing_seed_and_evolve_with_mock_route(tmp_path: Path) -> None:
         assert genome["schema_name"] == "typed_segmented_genome"
         assert genome["representation"] == "typed_segmented_hypothesis"
         assert (organism_dir / "genetic_code.md").read_text(encoding="utf-8").startswith(
-            "## CORE_GENES\n- [layout]"
+            "## CORE_GENES\n- [layout | layout_triangular_lattice]"
         )

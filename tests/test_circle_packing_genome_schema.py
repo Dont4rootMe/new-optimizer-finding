@@ -65,15 +65,27 @@ def test_duplicate_module_id_fails() -> None:
 
 def test_non_boolean_boolean_parameter_fails() -> None:
     genome = valid_circle_packing_genome()
-    genome["slots"]["layout"]["parameterization"] = [
+    genome["slots"]["repair"] = schema.materialize_module_instance(
+        slot="repair",
+        module_key="repair_shrink_on_persistent_failure",
+        module_id="org_alpha_repair",
+        parameterization=[
+            {
+                "name": "fallback_shrink_enabled",
+                "value_kind": "boolean",
+                "value": False,
+            }
+        ],
+    )
+    genome["slots"]["repair"]["parameterization"] = [
         {
-            "name": "use_boundary_bias",
+            "name": "fallback_shrink_enabled",
             "value_kind": "boolean",
             "value": "true",
         }
     ]
 
-    _assert_invalid(genome, "JSON boolean")
+    _assert_invalid(genome, "must be a boolean")
 
 
 def test_numeric_parameter_value_fails() -> None:
