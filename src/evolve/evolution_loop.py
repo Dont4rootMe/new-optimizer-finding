@@ -725,7 +725,11 @@ class EvolutionLoop:
             planned_key: [plan.to_dict() for plan in planned_organisms],
             "creation_queue": {
                 "pending": [plan.organism_id for plan in planned_organisms if plan.pipeline_state == "planned_creation"],
-                "active": [plan.organism_id for plan in planned_organisms if plan.pipeline_state == "creating"],
+                "active": [
+                    plan.organism_id
+                    for plan in planned_organisms
+                    if plan.pipeline_state in {"creating", "compatibility_check"}
+                ],
                 "completed": [
                     plan.organism_id
                     for plan in planned_organisms
@@ -1451,7 +1455,7 @@ class EvolutionLoop:
 
         creation_tasks: set[asyncio.Task[tuple[str, OrganismMeta | None]]] = set()
         for plan in planned_organisms:
-            if plan.pipeline_state in {"planned_creation", "creating"}:
+            if plan.pipeline_state in {"planned_creation", "creating", "compatibility_check"}:
                 creation_tasks.add(asyncio.create_task(_run_creation(plan)))
                 continue
             if plan.pipeline_state == "failed_creation":

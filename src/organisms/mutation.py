@@ -9,6 +9,13 @@ from pathlib import Path
 from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
 from src.evolve.storage import utc_now_iso
 from src.evolve.types import OrganismMeta
+from src.organisms.compatibility import (
+    CompatibilityCheckContext,
+    CompatibilityJudgment,
+    CompatibilityValidationContext,
+    build_mutation_compatibility_prompt,
+    format_compatibility_rejection_feedback,
+)
 from src.organisms.novelty import (
     NoveltyCheckContext,
     build_mutation_novelty_prompt,
@@ -59,6 +66,7 @@ def _build_mutate_prompt(
     parent: OrganismMeta,
     prompts: PromptBundle,
     novelty_feedback: list[str] | None = None,
+    compatibility_feedback: list[CompatibilityJudgment] | None = None,
 ) -> tuple[str, str]:
     """Build `(system_prompt, user_prompt)` for mutation LLM call."""
 
@@ -72,6 +80,7 @@ def _build_mutate_prompt(
         parent_lineage=parent_lineage,
         prompts=prompts,
         novelty_feedback=novelty_feedback,
+        compatibility_feedback=compatibility_feedback,
     )
 
 
@@ -83,6 +92,7 @@ def build_mutation_prompt_from_artifacts(
     parent_lineage: list[dict[str, Any]],
     prompts: PromptBundle,
     novelty_feedback: list[str] | None = None,
+    compatibility_feedback: list[CompatibilityJudgment] | None = None,
 ) -> tuple[str, str]:
     """Build mutation prompts from raw canonical artifacts."""
 
@@ -95,6 +105,11 @@ def build_mutation_prompt_from_artifacts(
         parent_lineage_summary=format_lineage_summary(list(parent_lineage)),
         novelty_rejection_feedback=format_novelty_rejection_feedback(list(novelty_feedback or [])),
     )
+    if compatibility_feedback:
+        user = (
+            f"{user}\n\n=== COMPATIBILITY REJECTION FEEDBACK ===\n"
+            f"{format_compatibility_rejection_feedback(compatibility_feedback)}"
+        )
     return system, user
 
 
@@ -150,15 +165,42 @@ class MutationOperator:
                 expected_core_gene_sections=getattr(generator, "expected_core_gene_sections", None),
             ),
         )
+        compatibility_context = None
+        if (
+            getattr(generator.prompt_bundle, "compatibility_mutation_system", "")
+            and getattr(generator.prompt_bundle, "compatibility_mutation_user", "")
+        ):
+            compatibility_context = CompatibilityValidationContext(
+                check=CompatibilityCheckContext(operator_kind="mutation"),
+                build_design_prompts=lambda novelty_feedback, compatibility_feedback: _build_mutate_prompt(
+                    inherited_genes,
+                    removed_genes,
+                    parent,
+                    generator.prompt_bundle,
+                    novelty_feedback=novelty_feedback,
+                    compatibility_feedback=compatibility_feedback,
+                ),
+                build_compatibility_prompts=lambda candidate_design: build_mutation_compatibility_prompt(
+                    inherited_genes=inherited_genes,
+                    removed_genes=removed_genes,
+                    parent=parent,
+                    candidate_design=candidate_design,
+                    prompts=generator.prompt_bundle,
+                    expected_core_gene_sections=getattr(generator, "expected_core_gene_sections", None),
+                ),
+            )
         run_creation = getattr(generator, "run_creation_stages_with_retries", generator.run_creation_stages)
-        creation = run_creation(
-            design_system_prompt=system_prompt,
-            design_user_prompt=user_prompt,
-            org_dir=org_dir,
-            organism_id=organism_id,
-            generation=generation,
-            novelty_context=novelty_context,
-        )
+        creation_kwargs = {
+            "design_system_prompt": system_prompt,
+            "design_user_prompt": user_prompt,
+            "org_dir": org_dir,
+            "organism_id": organism_id,
+            "generation": generation,
+            "novelty_context": novelty_context,
+        }
+        if compatibility_context is not None:
+            creation_kwargs["compatibility_context"] = compatibility_context
+        creation = run_creation(**creation_kwargs)
         parent_lineage = read_organism_lineage(parent)
         return build_organism_from_response(
             parsed=creation.parsed_design,

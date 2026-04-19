@@ -6,6 +6,7 @@ creation:
   max_attempts_to_create_organism: 3
   max_attempts_to_repair_organism_after_error: 2
   max_attempts_to_regenerate_organism_after_novelty_rejection: 2
+  max_attempts_to_regenerate_organism_after_compatibility_rejection: 3
   max_parallel_organisms: 20
 
 islands:
@@ -22,10 +23,16 @@ prompts:
   mutation_user: conf/experiments/circle_packing_shinka/prompts/mutation/user.txt
   mutation_novelty_system: conf/experiments/circle_packing_shinka/prompts/novelty/mutation/system.txt
   mutation_novelty_user: conf/experiments/circle_packing_shinka/prompts/novelty/mutation/user.txt
+  compatibility_mutation_system: conf/experiments/circle_packing_shinka/prompts/compatibility/mutation/system.txt
+  compatibility_mutation_user: conf/experiments/circle_packing_shinka/prompts/compatibility/mutation/user.txt
   crossover_system: conf/experiments/circle_packing_shinka/prompts/crossover/system.txt
   crossover_user: conf/experiments/circle_packing_shinka/prompts/crossover/user.txt
   crossover_novelty_system: conf/experiments/circle_packing_shinka/prompts/novelty/crossover/system.txt
   crossover_novelty_user: conf/experiments/circle_packing_shinka/prompts/novelty/crossover/user.txt
+  compatibility_seed_system: conf/experiments/circle_packing_shinka/prompts/compatibility/seed/system.txt
+  compatibility_seed_user: conf/experiments/circle_packing_shinka/prompts/compatibility/seed/user.txt
+  compatibility_crossover_system: conf/experiments/circle_packing_shinka/prompts/compatibility/crossover/system.txt
+  compatibility_crossover_user: conf/experiments/circle_packing_shinka/prompts/compatibility/crossover/user.txt
   implementation_system: conf/experiments/circle_packing_shinka/prompts/implementation/system.txt
   implementation_user: conf/experiments/circle_packing_shinka/prompts/implementation/user.txt
   implementation_template: conf/experiments/circle_packing_shinka/prompts/implementation/template.txt

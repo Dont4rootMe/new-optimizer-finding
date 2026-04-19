@@ -9,6 +9,11 @@ from hydra import compose, initialize_config_dir
 from src.evolve.operators import SeedOperator
 from src.evolve.prompt_utils import load_prompt_bundle
 from src.evolve.types import Island, OrganismMeta
+from src.organisms.compatibility import (
+    build_crossover_compatibility_prompt,
+    build_mutation_compatibility_prompt,
+    build_seed_compatibility_prompt,
+)
 from src.organisms.crossbreeding import _build_crossbreed_prompt
 from src.organisms.mutation import _build_mutate_prompt
 from src.organisms.organism import save_organism_artifacts
@@ -30,6 +35,13 @@ SECTION_HEADINGS = (
     "### PARAMETERS",
     "### OPTIONAL_CODE_SKETCH",
 )
+
+
+def _sectioned_core_genes_body() -> str:
+    return "\n\n".join(
+        f"{heading}\n- {'None.' if heading.endswith('OPTIONAL_CODE_SKETCH') else 'Section-local test idea.'}"
+        for heading in SECTION_HEADINGS
+    )
 
 
 def _compose_cfg():
@@ -108,6 +120,8 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     assert "keep it essentially intact" in bundle.mutation_system
     assert "valid source of novelty" in bundle.mutation_novelty_user
     assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
+    assert "## COMPATIBILITY_VERDICT" in bundle.compatibility_seed_system
+    assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system
 
 
 def test_circle_packing_generation_prompt_files_are_section_schema_aware() -> None:
@@ -187,14 +201,124 @@ def test_circle_packing_generation_prompt_rendering_includes_schema(tmp_path: Pa
         assert "# OPTIONAL_CODE_SKETCH" in rendered
 
 
-def test_circle_packing_non_generation_prompts_do_not_require_genome_schema() -> None:
+def test_circle_packing_validation_prompt_rendering_includes_schema(tmp_path: Path) -> None:
+    cfg = _compose_cfg()
+    bundle = load_prompt_bundle(cfg)
+    parent = _make_parent(tmp_path, "parent_validation", "symmetric_constructions")
+    secondary = _make_parent(tmp_path, "secondary_validation", "iterative_repair")
+    candidate_design = {
+        "CORE_GENES": _sectioned_core_genes_body(),
+        "INTERACTION_NOTES": "The sectioned ideas are mutually supportive.",
+        "COMPUTE_NOTES": "The design uses deterministic staged construction.",
+        "CHANGE_DESCRIPTION": "A sectioned validation fixture.",
+    }
+
+    rendered_prompts = [
+        build_seed_compatibility_prompt(
+            candidate_design=candidate_design,
+            prompts=bundle,
+            expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
+        )[1],
+        build_mutation_compatibility_prompt(
+            inherited_genes=["Child draft sectioned idea"],
+            removed_genes=["Excluded idea"],
+            parent=parent,
+            candidate_design=candidate_design,
+            prompts=bundle,
+            expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
+        )[1],
+        build_crossover_compatibility_prompt(
+            inherited_genes=["Merged sectioned idea"],
+            mother=parent,
+            father=secondary,
+            candidate_design=candidate_design,
+            prompts=bundle,
+            expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
+        )[1],
+    ]
+
+    for rendered in rendered_prompts:
+        assert "=== GENOME SECTION SCHEMA ===" in rendered
+        assert "{genome_schema}" not in rendered
+        assert "# INIT_GEOMETRY" in rendered
+        assert "=== CANDIDATE" in rendered
+
+
+def test_circle_packing_validation_prompts_are_section_schema_aware() -> None:
     bundle = load_prompt_bundle(_compose_cfg())
 
-    non_generation_prompts = (
+    novelty_prompts = (
         bundle.mutation_novelty_system,
         bundle.mutation_novelty_user,
         bundle.crossover_novelty_system,
         bundle.crossover_novelty_user,
+    )
+    for prompt in novelty_prompts:
+        assert "sectioned `## CORE_GENES`" in prompt or "=== GENOME SECTION SCHEMA ===" in prompt
+    for prompt in (bundle.mutation_novelty_system, bundle.crossover_novelty_system):
+        assert "not as a flat list" in prompt
+    for prompt in (bundle.mutation_novelty_user, bundle.crossover_novelty_user):
+        assert "=== GENOME SECTION SCHEMA ===" in prompt
+        assert "{genome_schema}" in prompt
+    for prompt in (bundle.mutation_novelty_system, bundle.crossover_novelty_system):
+        assert "## NOVELTY_VERDICT" in prompt
+        assert "## REJECTION_REASON" in prompt
+        assert "## SECTIONS_AT_ISSUE" in prompt
+        assert "Do not propose edits" in prompt
+
+    compatibility_prompts = (
+        bundle.compatibility_seed_system,
+        bundle.compatibility_seed_user,
+        bundle.compatibility_mutation_system,
+        bundle.compatibility_mutation_user,
+        bundle.compatibility_crossover_system,
+        bundle.compatibility_crossover_user,
+    )
+    for prompt in compatibility_prompts:
+        assert prompt.strip()
+    for prompt in (
+        bundle.compatibility_seed_user,
+        bundle.compatibility_mutation_user,
+        bundle.compatibility_crossover_user,
+    ):
+        assert "=== GENOME SECTION SCHEMA ===" in prompt
+        assert "{genome_schema}" in prompt
+    for prompt in (
+        bundle.compatibility_seed_system,
+        bundle.compatibility_mutation_system,
+        bundle.compatibility_crossover_system,
+    ):
+        assert "## COMPATIBILITY_VERDICT" in prompt
+        assert "## REJECTION_REASON" in prompt
+        assert "## SECTIONS_AT_ISSUE" in prompt
+        assert "Do not propose edits" in prompt
+        assert "full end-to-end implementation" in prompt or "full algorithm implementation" in prompt
+    assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system
+    assert "compatibility is not the same as novelty" in bundle.compatibility_crossover_system
+    assert "{candidate_genetic_code}" in bundle.compatibility_seed_user
+    assert "{candidate_change_description}" in bundle.compatibility_seed_user
+    for placeholder in (
+        "{inherited_gene_pool}",
+        "{removed_gene_pool}",
+        "{parent_genetic_code}",
+        "{candidate_genetic_code}",
+        "{candidate_change_description}",
+    ):
+        assert placeholder in bundle.compatibility_mutation_user
+    for placeholder in (
+        "{inherited_gene_pool}",
+        "{mother_genetic_code}",
+        "{father_genetic_code}",
+        "{candidate_genetic_code}",
+        "{candidate_change_description}",
+    ):
+        assert placeholder in bundle.compatibility_crossover_user
+
+
+def test_circle_packing_implementation_and_repair_prompts_do_not_require_genome_schema() -> None:
+    bundle = load_prompt_bundle(_compose_cfg())
+
+    non_generation_prompts = (
         bundle.implementation_system,
         bundle.implementation_user,
         bundle.implementation_template,

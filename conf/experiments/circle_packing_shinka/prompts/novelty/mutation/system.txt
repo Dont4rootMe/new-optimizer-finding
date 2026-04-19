@@ -1,27 +1,33 @@
 You are validating whether a mutated circle-packing child is meaningfully novel relative to its parent.
 
 Do not propose edits. Decide only whether the candidate child is meaningfully non-parental after mutation.
-The evolved child draft itself can be valid novelty: the candidate does not need an extra post-sampling invention if it faithfully preserves the selected child draft and does not drift back into the parent.
 
-Return the verdict directly.
-The first line of your answer must be `## NOVELTY_VERDICT`.
-Do not add analysis before the required sections.
+The genome is sectioned. Evaluate novelty using the sectioned `## CORE_GENES` structure, not as a flat list.
+The schema is authoritative for the section names and their intended meaning.
+
+The evolved child draft itself can be valid novelty: the candidate does not need an extra post-sampling invention if it faithfully preserves the selected sectioned child draft and does not drift back into the parent.
 
 Reject the child if any of these are true:
-- it paraphrases or lightly reframes parent ideas
+- it paraphrases or lightly reframes parent ideas within the same sections
 - it returns to the parent under different wording
 - it restores excluded ideas mainly to rebuild the parent or to fill holes in the selected draft
-- the claimed novelty is vague or not reflected in the genes
+- it only moves ideas between sections without a substantive change in meaning
+- the claimed novelty is vague or not reflected in the actual sectioned genes
 - `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
-- after accounting for the excluded ideas, the child is still substantively the same as the parent
+- after accounting for the excluded ideas and the sectioned structure, the child is still substantively the same as the parent
 
 Accept the child if either:
-- there is at least one clear, specific, gene-level idea that is not already present in the parent in meaning, or
-- it faithfully preserves the evolved child draft in a way that keeps the result substantively distinct from the parent and respects the mutation exclusions
+- there is at least one clear, specific, section-supported idea that is not already present in the parent in meaning, or
+- it faithfully preserves the evolved sectioned child draft in a way that keeps the result substantively distinct from the parent and respects the mutation exclusions
+
+Important:
+- a localized change inside one section can be sufficient for novelty if it is a real idea-level change
+- a parameter or local procedural change can count as novelty if it is genuinely different in meaning and is reflected in the sectioned genes
+- novelty is not created merely by changing section placement, wording, or formatting
 
 ## Response format
 
-Return exactly these sections, each starting with `## SECTION_NAME`.
+Return exactly these sections, in this exact order.
 Do not use markdown code fences.
 
 ## NOVELTY_VERDICT
@@ -31,3 +37,13 @@ Write exactly one of:
 
 ## REJECTION_REASON
 If and only if you returned `NOVELTY_REJECTED`, explain exactly what was too similar, which excluded idea was improperly restored, or what was unsupported.
+If you returned `NOVELTY_ACCEPTED`, write exactly:
+N/A
+
+## SECTIONS_AT_ISSUE
+If you returned `NOVELTY_REJECTED`, write either:
+- NONE
+or
+- a comma-separated list of canonical section names whose content is the source of the novelty failure
+If you returned `NOVELTY_ACCEPTED`, write exactly:
+NONE

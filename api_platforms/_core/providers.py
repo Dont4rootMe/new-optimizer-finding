@@ -107,7 +107,16 @@ def build_mock_text(request: LlmRequest) -> str:
     joined_prompt = f"{request.system_prompt}\n{request.user_prompt}".lower()
     template = str(request.metadata.get("implementation_template", "")).strip()
     if request.stage == "novelty_check":
-        return "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n"
+        return "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n\n## REJECTION_REASON\nN/A\n\n## SECTIONS_AT_ISSUE\nNONE\n"
+    if request.stage == "compatibility_check":
+        return (
+            "## COMPATIBILITY_VERDICT\n"
+            "COMPATIBILITY_ACCEPTED\n\n"
+            "## REJECTION_REASON\n"
+            "N/A\n\n"
+            "## SECTIONS_AT_ISSUE\n"
+            "NONE\n"
+        )
     if "circle-packing" in joined_prompt or "circle packing" in joined_prompt or "run_packing" in joined_prompt:
         if request.stage == "design":
             return (

@@ -1,5 +1,9 @@
 Evaluate whether this mutation child is meaningfully novel relative to its parent.
 
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
+
 === CHILD GENETIC CODE DRAFT SELECTED BY EVOLUTION ===
 {inherited_gene_pool}
 
@@ -18,6 +22,6 @@ These ideas were explicitly removed during mutation sampling.
 
 === TASK ===
 The evolved child draft itself is a valid source of novelty.
-Accept a candidate that stays faithful to that selected child draft, even if it does not add one more post-sampling idea, as long as it does not collapse back to the parent in substance.
-Reject a candidate that mainly restores excluded ideas, reconstructs the parent, or only rephrases parent ideas.
-If `CHANGE_DESCRIPTION` overclaims novelty that the genes do not support, reject it.
+Accept a candidate that stays faithful to that selected sectioned child draft, even if it does not add one more post-sampling idea, as long as it does not collapse back to the parent in substance.
+Reject a candidate that mainly restores excluded ideas, reconstructs the parent, only rephrases parent ideas, or only reshuffles ideas across sections without substantive change.
+If `CHANGE_DESCRIPTION` overclaims novelty that the sectioned genes do not support, reject it.

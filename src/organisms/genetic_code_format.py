@@ -12,6 +12,16 @@ TOP_LEVEL_SECTION_NAMES = (
     "COMPUTE_NOTES",
     "CHANGE_DESCRIPTION",
 )
+DEFAULT_CORE_GENE_SECTION_NAMES = (
+    "INIT_GEOMETRY",
+    "RADIUS_POLICY",
+    "EXPANSION_POLICY",
+    "CONFLICT_MODEL",
+    "REPAIR_POLICY",
+    "CONTROL_POLICY",
+    "PARAMETERS",
+    "OPTIONAL_CODE_SKETCH",
+)
 OPTIONAL_CODE_SKETCH_SECTION = "OPTIONAL_CODE_SKETCH"
 
 _SCHEMA_HEADER_RE = re.compile(r"^# ([A-Z][A-Z0-9_]*)$")
@@ -100,6 +110,39 @@ def load_genome_schema(path: str) -> tuple[GenomeSchemaSection, ...]:
     """Load and parse a genome schema artifact from disk."""
 
     return parse_genome_schema_text(Path(path).read_text(encoding="utf-8"))
+
+
+def parse_section_issue_list(
+    text: str,
+    *,
+    expected_section_names: tuple[str, ...] | None = None,
+) -> tuple[str, ...]:
+    """Parse a strict comma-separated section issue list or NONE."""
+
+    raw = str(text).strip()
+    if raw == "NONE":
+        return ()
+    if not raw:
+        raise ValueError("SECTIONS_AT_ISSUE must be NONE or a comma-separated section list.")
+    if "\n" in raw or raw.startswith(("- ", "* ", "1. ")):
+        raise ValueError("SECTIONS_AT_ISSUE must not use bullets, numbering, or prose blocks.")
+
+    expected = expected_section_names or DEFAULT_CORE_GENE_SECTION_NAMES
+    expected_index = {name: index for index, name in enumerate(expected)}
+    names = tuple(part.strip() for part in raw.split(","))
+    if any(not name for name in names):
+        raise ValueError("SECTIONS_AT_ISSUE contains an empty section name.")
+
+    seen: set[str] = set()
+    for name in names:
+        if name not in expected_index:
+            raise ValueError(f"SECTIONS_AT_ISSUE contains unknown section name {name!r}.")
+        if name in seen:
+            raise ValueError(f"SECTIONS_AT_ISSUE contains duplicate section name {name!r}.")
+        seen.add(name)
+    if tuple(sorted(names, key=lambda name: expected_index[name])) != names:
+        raise ValueError("SECTIONS_AT_ISSUE section names must appear in schema order.")
+    return names
 
 
 def detect_genetic_code_format(text: str) -> str:

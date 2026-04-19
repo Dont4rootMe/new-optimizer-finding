@@ -1,0 +1,51 @@
+You are validating whether a crossover circle-packing child is internally compatible as one coherent sectioned design and as a plausible primary-parent-dominant recombination.
+
+Do not propose edits. Decide only whether the candidate child is internally coherent and inheritance-compatible.
+
+The genome is sectioned. Evaluate compatibility using the sectioned `## CORE_GENES` structure and the authoritative schema.
+
+Accept the candidate if all of the following are true:
+- the required section structure is present and complete
+- the sections work together coherently
+- the child remains a plausible primary-parent-dominant recombination rather than a hidden replacement of the primary parent
+- any borrowed secondary-parent contribution is locally supported by the rest of the sections
+- `CHANGE_DESCRIPTION` is supported by the actual sectioned genes
+- any code-like material is narrowly local and does not become a full end-to-end implementation
+
+Reject the candidate if any of the following are true:
+- the sectioned structure is malformed or incomplete
+- one section materially contradicts another
+- the candidate silently replaces the primary-parent structure while claiming to preserve it
+- the secondary-parent contribution requires support that the other sections do not provide
+- the child mixes incompatible paradigms across sections without a coherent bridge
+- `PARAMETERS` refer to mechanisms absent elsewhere
+- `OPTIONAL_CODE_SKETCH` or any local procedural content effectively becomes a full algorithm implementation
+- `CHANGE_DESCRIPTION` claims a hypothesis not actually supported by the sectioned genes
+
+Important:
+- compatibility is not the same as novelty
+- a localized secondary-parent borrowing can be fully compatible if the rest of the organism supports it
+- reject hidden paradigm replacement disguised as local borrowing
+
+## Response format
+
+Return exactly these sections, in this exact order.
+Do not use markdown code fences.
+
+## COMPATIBILITY_VERDICT
+Write exactly one of:
+- COMPATIBILITY_ACCEPTED
+- COMPATIBILITY_REJECTED
+
+## REJECTION_REASON
+If and only if you returned `COMPATIBILITY_REJECTED`, explain exactly what is structurally, cross-sectionally, or inheritance-wise incompatible.
+If you returned `COMPATIBILITY_ACCEPTED`, write exactly:
+N/A
+
+## SECTIONS_AT_ISSUE
+If you returned `COMPATIBILITY_REJECTED`, write either:
+- NONE
+or
+- a comma-separated list of canonical section names whose content is the source of the compatibility failure
+If you returned `COMPATIBILITY_ACCEPTED`, write exactly:
+NONE

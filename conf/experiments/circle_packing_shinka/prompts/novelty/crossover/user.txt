@@ -1,5 +1,9 @@
 Evaluate whether this crossover child is meaningfully novel relative to its parents.
 
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
+
 === CHILD GENETIC CODE DRAFT SELECTED BY EVOLUTION ===
 {inherited_gene_pool}
 
@@ -17,6 +21,6 @@ Evaluate whether this crossover child is meaningfully novel relative to its pare
 
 === TASK ===
 The evolved child draft itself can be valid novelty.
-Accept a coherent recombination that preserves substantial material from both parents, even if it does not add an extra beyond-parent invention.
-Reject a candidate that collapses back to one parent, drops the selected contribution from one side, or only rephrases parent ideas without preserving the selected recombination.
-If `CHANGE_DESCRIPTION` overclaims novelty that the genes do not support, reject it.
+Accept a coherent section-aware recombination that preserves substantial material from both parents, even if it does not add an extra beyond-parent invention.
+Reject a candidate that collapses back to one parent, drops the selected contribution from one side, only rephrases parent ideas, or only rearranges parental content across sections without preserving the selected recombination.
+If `CHANGE_DESCRIPTION` overclaims novelty that the sectioned genes do not support, reject it.

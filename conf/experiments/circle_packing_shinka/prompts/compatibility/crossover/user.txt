@@ -1,0 +1,25 @@
+Evaluate whether this crossover child is internally compatible as one coherent sectioned design.
+
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
+
+=== CHILD GENETIC CODE DRAFT SELECTED BY EVOLUTION ===
+{inherited_gene_pool}
+
+=== PRIMARY PARENT GENETIC CODE ===
+{mother_genetic_code}
+
+=== SECONDARY PARENT GENETIC CODE ===
+{father_genetic_code}
+
+=== CANDIDATE CHILD GENETIC CODE ===
+{candidate_genetic_code}
+
+=== CANDIDATE CHILD CHANGE_DESCRIPTION ===
+{candidate_change_description}
+
+=== TASK ===
+Decide whether the candidate is internally coherent as one organism and remains a plausible primary-parent-dominant recombination of the selected child draft rather than a hidden paradigm replacement.
+Focus on section completeness, cross-section consistency, support for the claimed hypothesis, and whether any code-like detail remains local rather than becoming a full implementation.
+Do not decide novelty here.

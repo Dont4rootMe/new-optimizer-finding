@@ -12,6 +12,12 @@ from api_platforms import LlmResponse
 import src.evolve.operators as canonical_seed_operators
 from src.evolve.generator import CandidateGenerator
 from src.evolve.types import Island, OrganismMeta
+from src.organisms.compatibility import (
+    CompatibilityCheckContext,
+    CompatibilityRejectionExhaustedError,
+    CompatibilityValidationContext,
+    format_compatibility_rejection_feedback,
+)
 from src.organisms.novelty import NoveltyCheckContext, NoveltyRejectionExhaustedError
 from src.organisms.organism import save_organism_artifacts
 
@@ -25,6 +31,7 @@ def _cfg():
                     "max_attempts_to_create_organism": 2,
                     "max_attempts_to_repair_organism_after_error": 2,
                     "max_attempts_to_regenerate_organism_after_novelty_rejection": 1,
+                    "max_attempts_to_regenerate_organism_after_compatibility_rejection": 1,
                 },
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
@@ -117,6 +124,81 @@ def _make_repairable_organism(tmp_path: Path) -> OrganismMeta:
         ],
     )
     return organism
+
+
+def _design_text(change_description: str = "Candidate change.") -> str:
+    return (
+        "## CORE_GENES\n"
+        "- candidate gene one\n"
+        "- candidate gene two\n"
+        "- candidate gene three\n\n"
+        "## INTERACTION_NOTES\n"
+        "Candidate.\n\n"
+        "## COMPUTE_NOTES\n"
+        "Cheap.\n\n"
+        "## CHANGE_DESCRIPTION\n"
+        f"{change_description}\n"
+    )
+
+
+def _implementation_text() -> str:
+    return (
+        "import torch.nn as nn\n\n"
+        "class Impl:\n"
+        "    def __init__(self, model: nn.Module, max_steps: int) -> None:\n"
+        "        self.model = model\n"
+        "        self.max_steps = max_steps\n\n"
+        "    def step(self, weights, grads, activations, step_fn) -> None:\n"
+        "        del weights, grads, activations, step_fn\n\n"
+        "    def zero_grad(self, set_to_none: bool = True) -> None:\n"
+        "        del set_to_none\n\n"
+        "def build_optimizer(model: nn.Module, max_steps: int):\n"
+        "    return Impl(model, max_steps)\n"
+    )
+
+
+def _novelty_accepted_text() -> str:
+    return (
+        "## NOVELTY_VERDICT\n"
+        "NOVELTY_ACCEPTED\n\n"
+        "## REJECTION_REASON\n"
+        "N/A\n\n"
+        "## SECTIONS_AT_ISSUE\n"
+        "NONE\n"
+    )
+
+
+def _novelty_rejected_text(reason: str) -> str:
+    return (
+        "## NOVELTY_VERDICT\n"
+        "NOVELTY_REJECTED\n\n"
+        "## REJECTION_REASON\n"
+        f"{reason}\n\n"
+        "## SECTIONS_AT_ISSUE\n"
+        "NONE\n"
+    )
+
+
+def _compatibility_accepted_text() -> str:
+    return (
+        "## COMPATIBILITY_VERDICT\n"
+        "COMPATIBILITY_ACCEPTED\n\n"
+        "## REJECTION_REASON\n"
+        "N/A\n\n"
+        "## SECTIONS_AT_ISSUE\n"
+        "NONE\n"
+    )
+
+
+def _compatibility_rejected_text(reason: str, sections: str = "NONE") -> str:
+    return (
+        "## COMPATIBILITY_VERDICT\n"
+        "COMPATIBILITY_REJECTED\n\n"
+        "## REJECTION_REASON\n"
+        f"{reason}\n\n"
+        "## SECTIONS_AT_ISSUE\n"
+        f"{sections}\n"
+    )
 
 
 def test_generator_loads_only_current_prompt_bundle_assets(monkeypatch) -> None:
@@ -674,3 +756,401 @@ def test_run_creation_stages_with_novelty_parse_failure_retries_full_creation(
         generator.close()
 
     assert calls == ["design", "novelty_check", "design", "novelty_check", "implementation"]
+
+
+def test_run_creation_stages_seed_runs_compatibility_before_implementation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_seed_compatibility"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    calls: list[str] = []
+
+    def fake_generate(request):
+        calls.append(request.stage)
+        if request.stage == "design":
+            text = _design_text("Seed candidate.")
+        elif request.stage == "compatibility_check":
+            text = _compatibility_accepted_text()
+        else:
+            text = _implementation_text()
+        return LlmResponse(
+            text=text,
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    compatibility_context = CompatibilityValidationContext(
+        check=CompatibilityCheckContext(operator_kind="seed"),
+        build_design_prompts=lambda _novelty_feedback, compatibility_feedback: (
+            "design retry",
+            format_compatibility_rejection_feedback(compatibility_feedback),
+        ),
+        build_compatibility_prompts=lambda _parsed: ("compatibility system", "compatibility user"),
+    )
+
+    try:
+        result = generator.run_creation_stages(
+            design_system_prompt="design system",
+            design_user_prompt="design user",
+            compatibility_context=compatibility_context,
+            org_dir=organism_dir,
+            organism_id="org_seed_compatibility",
+            generation=0,
+        )
+    finally:
+        generator.close()
+
+    assert calls == ["design", "compatibility_check", "implementation"]
+    assert result.parsed_design["CHANGE_DESCRIPTION"] == "Seed candidate."
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    assert "novelty_checks" not in llm_request
+    assert len(llm_request["compatibility_checks"]) == 1
+
+
+def test_run_creation_stages_mutation_runs_novelty_before_compatibility(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_mutation_validation"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    calls: list[str] = []
+
+    def fake_generate(request):
+        calls.append(request.stage)
+        if request.stage == "design":
+            text = _design_text("Mutation candidate.")
+        elif request.stage == "novelty_check":
+            text = _novelty_accepted_text()
+        elif request.stage == "compatibility_check":
+            text = _compatibility_accepted_text()
+        else:
+            text = _implementation_text()
+        return LlmResponse(
+            text=text,
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    novelty_context = NoveltyCheckContext(
+        operator="mutation",
+        build_design_prompts=lambda feedback: ("design retry", f"novelty :: {feedback[-1]}"),
+        build_novelty_prompts=lambda _parsed: ("novelty system", "novelty user"),
+    )
+    compatibility_context = CompatibilityValidationContext(
+        check=CompatibilityCheckContext(operator_kind="mutation"),
+        build_design_prompts=lambda novelty_feedback, compatibility_feedback: (
+            "design retry",
+            "\n".join(novelty_feedback)
+            + "\n"
+            + format_compatibility_rejection_feedback(compatibility_feedback),
+        ),
+        build_compatibility_prompts=lambda _parsed: ("compatibility system", "compatibility user"),
+    )
+
+    try:
+        generator.run_creation_stages(
+            design_system_prompt="design system",
+            design_user_prompt="design user",
+            novelty_context=novelty_context,
+            compatibility_context=compatibility_context,
+            org_dir=organism_dir,
+            organism_id="org_mutation_validation",
+            generation=0,
+        )
+    finally:
+        generator.close()
+
+    assert calls == ["design", "novelty_check", "compatibility_check", "implementation"]
+
+
+def test_run_creation_stages_crossover_runs_novelty_before_compatibility(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_crossover_validation"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    calls: list[str] = []
+
+    def fake_generate(request):
+        calls.append(request.stage)
+        if request.stage == "design":
+            text = _design_text("Crossover candidate.")
+        elif request.stage == "novelty_check":
+            text = _novelty_accepted_text()
+        elif request.stage == "compatibility_check":
+            text = _compatibility_accepted_text()
+        else:
+            text = _implementation_text()
+        return LlmResponse(
+            text=text,
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    novelty_context = NoveltyCheckContext(
+        operator="crossover",
+        build_design_prompts=lambda feedback: ("design retry", f"novelty :: {feedback[-1]}"),
+        build_novelty_prompts=lambda _parsed: ("novelty system", "novelty user"),
+    )
+    compatibility_context = CompatibilityValidationContext(
+        check=CompatibilityCheckContext(operator_kind="crossover"),
+        build_design_prompts=lambda novelty_feedback, compatibility_feedback: (
+            "design retry",
+            "\n".join(novelty_feedback)
+            + "\n"
+            + format_compatibility_rejection_feedback(compatibility_feedback),
+        ),
+        build_compatibility_prompts=lambda _parsed: ("compatibility system", "compatibility user"),
+    )
+
+    try:
+        generator.run_creation_stages(
+            design_system_prompt="design system",
+            design_user_prompt="design user",
+            novelty_context=novelty_context,
+            compatibility_context=compatibility_context,
+            org_dir=organism_dir,
+            organism_id="org_crossover_validation",
+            generation=0,
+        )
+    finally:
+        generator.close()
+
+    assert calls == ["design", "novelty_check", "compatibility_check", "implementation"]
+
+
+def test_run_creation_stages_skips_compatibility_when_novelty_rejects(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    generator.evolver_cfg.creation.max_attempts_to_regenerate_organism_after_novelty_rejection = 0
+    organism_dir = tmp_path / "org_novelty_blocks_compatibility"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    calls: list[str] = []
+
+    def fake_generate(request):
+        calls.append(request.stage)
+        if request.stage == "design":
+            text = _design_text("Rejected candidate.")
+        else:
+            text = _novelty_rejected_text("Too close to the parent.")
+        return LlmResponse(
+            text=text,
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    novelty_context = NoveltyCheckContext(
+        operator="mutation",
+        build_design_prompts=lambda feedback: ("design retry", f"novelty :: {feedback[-1]}"),
+        build_novelty_prompts=lambda _parsed: ("novelty system", "novelty user"),
+    )
+    compatibility_context = CompatibilityValidationContext(
+        check=CompatibilityCheckContext(operator_kind="mutation"),
+        build_design_prompts=lambda _novelty_feedback, _compatibility_feedback: ("design retry", "retry"),
+        build_compatibility_prompts=lambda _parsed: ("compatibility system", "compatibility user"),
+    )
+
+    try:
+        with pytest.raises(NoveltyRejectionExhaustedError):
+            generator.run_creation_stages(
+                design_system_prompt="design system",
+                design_user_prompt="design user",
+                novelty_context=novelty_context,
+                compatibility_context=compatibility_context,
+                org_dir=organism_dir,
+                organism_id="org_novelty_blocks_compatibility",
+                generation=0,
+            )
+    finally:
+        generator.close()
+
+    assert calls == ["design", "novelty_check"]
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    assert llm_request["compatibility_checks"] == []
+    assert "implementation" not in llm_request
+
+
+def test_run_creation_stages_skips_implementation_when_compatibility_rejects(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    generator.evolver_cfg.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection = 0
+    organism_dir = tmp_path / "org_compatibility_blocks_implementation"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    calls: list[str] = []
+
+    def fake_generate(request):
+        calls.append(request.stage)
+        if request.stage == "design":
+            text = _design_text("Rejected compatibility candidate.")
+        elif request.stage == "novelty_check":
+            text = _novelty_accepted_text()
+        else:
+            text = _compatibility_rejected_text("Repair depends on an absent conflict model.", "CONFLICT_MODEL")
+        return LlmResponse(
+            text=text,
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    novelty_context = NoveltyCheckContext(
+        operator="mutation",
+        build_design_prompts=lambda feedback: ("design retry", f"novelty :: {feedback[-1]}"),
+        build_novelty_prompts=lambda _parsed: ("novelty system", "novelty user"),
+    )
+    compatibility_context = CompatibilityValidationContext(
+        check=CompatibilityCheckContext(operator_kind="mutation"),
+        build_design_prompts=lambda _novelty_feedback, _compatibility_feedback: ("design retry", "retry"),
+        build_compatibility_prompts=lambda _parsed: ("compatibility system", "compatibility user"),
+    )
+
+    try:
+        with pytest.raises(CompatibilityRejectionExhaustedError):
+            generator.run_creation_stages(
+                design_system_prompt="design system",
+                design_user_prompt="design user",
+                novelty_context=novelty_context,
+                compatibility_context=compatibility_context,
+                org_dir=organism_dir,
+                organism_id="org_compatibility_blocks_implementation",
+                generation=0,
+            )
+    finally:
+        generator.close()
+
+    assert calls == ["design", "novelty_check", "compatibility_check"]
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    assert len(llm_request["compatibility_checks"]) == 1
+    assert "implementation" not in llm_request
+
+
+def test_run_creation_stages_compatibility_retry_uses_own_budget_and_feedback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    generator.evolver_cfg.creation.max_attempts_to_regenerate_organism_after_novelty_rejection = 0
+    generator.evolver_cfg.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection = 1
+    organism_dir = tmp_path / "org_compatibility_retry"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    calls: list[tuple[str, str]] = []
+    compatibility_responses = iter(
+        [
+            _compatibility_rejected_text(
+                "Repair depends on an absent conflict ranking.",
+                "CONFLICT_MODEL, REPAIR_POLICY",
+            ),
+            _compatibility_accepted_text(),
+        ]
+    )
+
+    def fake_generate(request):
+        calls.append((request.stage, request.user_prompt))
+        if request.stage == "design":
+            text = _design_text("Candidate after compatibility retry.")
+        elif request.stage == "novelty_check":
+            text = _novelty_accepted_text()
+        elif request.stage == "compatibility_check":
+            text = next(compatibility_responses)
+        else:
+            text = _implementation_text()
+        return LlmResponse(
+            text=text,
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    novelty_context = NoveltyCheckContext(
+        operator="mutation",
+        build_design_prompts=lambda feedback: ("design retry", f"novelty :: {feedback[-1]}"),
+        build_novelty_prompts=lambda _parsed: ("novelty system", "novelty user"),
+    )
+    compatibility_context = CompatibilityValidationContext(
+        check=CompatibilityCheckContext(operator_kind="mutation"),
+        build_design_prompts=lambda novelty_feedback, compatibility_feedback: (
+            "design retry",
+            "\n".join(novelty_feedback)
+            + "\n"
+            + format_compatibility_rejection_feedback(compatibility_feedback),
+        ),
+        build_compatibility_prompts=lambda _parsed: ("compatibility system", "compatibility user"),
+    )
+
+    try:
+        generator.run_creation_stages(
+            design_system_prompt="design system",
+            design_user_prompt="design user",
+            novelty_context=novelty_context,
+            compatibility_context=compatibility_context,
+            org_dir=organism_dir,
+            organism_id="org_compatibility_retry",
+            generation=0,
+        )
+    finally:
+        generator.close()
+
+    assert [stage for stage, _ in calls] == [
+        "design",
+        "novelty_check",
+        "compatibility_check",
+        "design",
+        "novelty_check",
+        "compatibility_check",
+        "implementation",
+    ]
+    assert "Repair depends on an absent conflict ranking." in calls[3][1]
+    assert "Sections at issue: CONFLICT_MODEL, REPAIR_POLICY" in calls[3][1]
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    assert len(llm_request["compatibility_checks"]) == 2
+    assert "Repair depends on an absent conflict ranking." in llm_request["design_attempts"][1][
+        "compatibility_rejection_feedback"
+    ]

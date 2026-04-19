@@ -50,6 +50,9 @@ def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
     assert "valid source of novelty" in bundle.mutation_novelty_user
     assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
     assert bundle.genome_schema == ""
+    assert bundle.compatibility_seed_system == ""
+    assert bundle.compatibility_mutation_system == ""
+    assert bundle.compatibility_crossover_system == ""
 
 
 def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contract() -> None:
@@ -90,6 +93,7 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
     assert "keep it mostly intact" in bundle.crossover_user
     assert "valid source of novelty" in bundle.mutation_novelty_user
     assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
+    assert bundle.compatibility_seed_system == ""
 
 
 def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
@@ -150,4 +154,6 @@ def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
     assert bundle.implementation_template == "implementation template"
     assert bundle.repair_user == "repair user"
     assert bundle.genome_schema == ""
+    assert bundle.compatibility_seed_system == ""
+    assert bundle.compatibility_mutation_user == ""
     assert compose_system_prompt(bundle.project_context, bundle.seed_system) == "project context\n\nseed system"

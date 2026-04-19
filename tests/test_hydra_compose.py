@@ -195,7 +195,11 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
     assert cfg.evolver.creation.max_parallel_organisms == 20
+    assert cfg.evolver.prompts.compatibility_seed_system.endswith("/compatibility/seed/system.txt")
+    assert cfg.evolver.prompts.compatibility_mutation_user.endswith("/compatibility/mutation/user.txt")
+    assert cfg.evolver.prompts.compatibility_crossover_system.endswith("/compatibility/crossover/system.txt")
     assert cfg.evolver.islands.seed_organisms_per_island == 5
     assert cfg.evolver.islands.max_organisms_per_island == 20
     assert cfg.evolver.reproduction.species_sampling.strategy == "weighted_rule"
@@ -245,6 +249,7 @@ def test_circle_packing_canonical_preset_accepts_standalone_validation_overrides
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
     assert cfg.evolver.creation.max_parallel_organisms == 20
 
 

@@ -12,7 +12,7 @@ from omegaconf import OmegaConf
 
 from src.evolve.evolution_loop import EvolutionLoop
 from src.evolve.orchestrator import DEFAULT_EVAL_ENTRYPOINT_MODULE, EvolverOrchestrator
-from src.evolve.types import OrganismMeta
+from src.evolve.types import OrganismMeta, PlannedOrganismCreation
 from src.organisms.organism import save_organism_artifacts
 
 
@@ -511,6 +511,38 @@ def test_assign_batch_routes_respects_weight_proportions(tmp_path: Path) -> None
         counts[route] += 1
     # Hamilton apportionment for 8 plans with 3:1 weights => 6:2
     assert counts == {"heavy": 6, "light": 2}
+
+
+def test_compatibility_check_pipeline_state_is_active_creation_state(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    loop = EvolutionLoop(cfg)
+    plan = PlannedOrganismCreation(
+        organism_id="org-compatibility",
+        organism_dir=str(tmp_path / "org-compatibility"),
+        island_id="gradient_methods",
+        generation=1,
+        route="mock",
+        operator="seed",
+        mother_id=None,
+        mother_organism_dir=None,
+        father_id=None,
+        father_organism_dir=None,
+        father_island_id=None,
+        operator_seed=123,
+        timestamp="2026-01-01T00:00:00Z",
+        pipeline_state="compatibility_check",
+    )
+
+    round_tripped = PlannedOrganismCreation.from_dict(plan.to_dict())
+    payload = loop._serialize_planned_creation_state(
+        [round_tripped],
+        planned_key="planned_seed",
+        include_parent_snapshot=False,
+    )
+
+    assert round_tripped.pipeline_state == "compatibility_check"
+    assert payload["creation_queue"]["active"] == ["org-compatibility"]
+    assert payload["creation_queue"]["pending"] == []
 
 
 def test_max_parallel_organisms_bounds_seed_parallelism(tmp_path: Path, monkeypatch) -> None:
