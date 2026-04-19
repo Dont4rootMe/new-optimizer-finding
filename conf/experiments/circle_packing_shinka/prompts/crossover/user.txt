@@ -1,5 +1,9 @@
 Create one crossover child from these two parents.
 
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
+
 === CHILD GENETIC CODE DRAFT ===
 This merged draft was already selected by evolution.
 This is the main object you must refine.
@@ -28,7 +32,7 @@ Scores in lineage: higher is better. Use score trends to identify which ideas im
 
 === TASK ===
 Refine the child genetic code draft into one coherent organism.
-The result should be gene-centric, internally consistent, and summarized by one unified novelty statement for lineage.
+The result must be a full sectioned genetic code in the canonical format, internally consistent, and summarized by one unified novelty statement for lineage.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing one parent.
 If the selected recombination is already coherent, keep it mostly intact instead of rebuilding one parent.
 Return the structured design directly. Do not add preface text before `## CORE_GENES`.

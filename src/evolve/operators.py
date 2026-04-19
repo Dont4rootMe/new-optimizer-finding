@@ -21,5 +21,6 @@ class SeedOperator:
             island_id=self.island.island_id,
             island_name=self.island.name,
             island_description=self.island.description_text,
+            genome_schema=prompts.genome_schema,
         )
         return system, user

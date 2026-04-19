@@ -98,6 +98,7 @@ def build_crossover_prompt_from_artifacts(
 
     system = compose_system_prompt(prompts.project_context, prompts.crossover_system)
     user = prompts.crossover_user.format(
+        genome_schema=prompts.genome_schema,
         inherited_gene_pool="\n".join(f"- {gene}" for gene in inherited_genes) or "(none)",
         mother_genetic_code=format_genetic_code(dict(mother_genetic_code)),
         mother_lineage_summary=format_lineage_summary(list(mother_lineage)),

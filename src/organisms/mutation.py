@@ -88,6 +88,7 @@ def build_mutation_prompt_from_artifacts(
 
     system = compose_system_prompt(prompts.project_context, prompts.mutation_system)
     user = prompts.mutation_user.format(
+        genome_schema=prompts.genome_schema,
         inherited_gene_pool="\n".join(f"- {gene}" for gene in inherited_genes) or "(none)",
         removed_gene_pool="\n".join(f"- {gene}" for gene in removed_genes) or "(none)",
         parent_genetic_code=format_genetic_code(dict(parent_genetic_code)),

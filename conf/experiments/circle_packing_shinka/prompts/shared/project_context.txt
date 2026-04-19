@@ -69,38 +69,34 @@ Score:
 
 Think in genes first, implementation second.
 
-Each gene must express one concrete idea.
+For `circle_packing_shinka`, `## CORE_GENES` is sectioned.
+The section names and their order are defined by the genome section schema artifact supplied to the generation prompts.
+
+Each gene must live in the correct genome section.
 Do not replace the idea set with a hand-crafted answer.
 Do not treat parent code as the truth.
 Do not skip idea formation and jump straight to coordinates.
 
-Genes and CHANGE_DESCRIPTION are idea-level artifacts. They must NEVER contain:
-- Python code, code snippets, or inline code
-- Specific variable names, function calls, or numpy operations
-- Hardcoded numeric constants (e.g., "learning_rate = 0.15", "grid_dim = 6")
-- Concrete implementation recipes disguised as ideas
+The section schema is authoritative about what kind of content belongs in each section.
+If a section allows only plain language, mathematical descriptions, or pseudocode-like descriptions, obey that restriction.
+If a section allows localized procedural detail, numeric parameterization, or a narrow local code-like sketch, keep that content local to the section and local to the mechanism it describes.
 
-They MAY contain:
-- High-level algorithmic ideas and principles
-- Mathematical formulas and geometric reasoning
-- Brief pseudocode using plain language (e.g., "for each pair of overlapping circles, push them apart proportionally to overlap")
-- Qualitative parameter descriptions (e.g., "use a small damping factor")
+`CHANGE_DESCRIPTION` remains a plain-language idea-level artifact:
+- it must summarize the single main novelty of the new organism
+- it is later written into lineage
+- it should describe the unified idea of the child, not a changelog of tiny edits
+- it must not contain Python code, code-like snippets, or a full implementation recipe
+
+No genome section may contain a full end-to-end implementation or a full `implementation.py`.
+Local procedural detail is allowed only when it fits the section description and remains narrowly scoped.
 
 ## Gene atomicity
 
-Each gene must express exactly one independent, testable idea.
+Each bullet within a genome section must express exactly one independent, testable idea.
 
 Atomicity test:
 - If removing gene A makes gene B meaningless, they belong in ONE gene.
 - If gene A and gene B could independently be true or false, they MUST be separate genes.
-- If a gene contains "and" or "with" joining two distinct mechanisms, split it.
-
-Bad: "Use hexagonal grid with iterative overlap repair"
-  (two independent ideas bundled — layout choice and repair strategy)
-Good: "Use hexagonal grid as initial circle layout" + "Apply iterative pairwise overlap repair after placement"
-
-Bad: "Sort circles by radius and use greedy placement"
-  (sorting strategy and placement strategy are independent)
-Good: "Sort circles by decreasing radius before placement" + "Place each circle greedily at the position maximizing remaining space"
+- If a gene contains two distinct mechanisms joined by "and" or "with", split it unless they are inseparable parts of one local idea.
 
 Why this matters: evolution operates on genes. If one gene contains two ideas, removing it loses both. Crossover inheriting it brings both. Coarse genes break the evolutionary mechanism.

@@ -1,40 +1,62 @@
-Design a brand-new circle-packing organism from scratch.
+You are designing one brand-new circle-packing organism from scratch.
 
 Priority order:
-1. invent a coherent idea set
-2. express that idea set as genes
+1. invent a coherent sectioned genetic code
+2. ensure each idea is placed in the correct genome section
 3. summarize the single defining novelty
 
-Do:
-- think in terms of ideas, assumptions, and constructive principles
-- make the genes precise enough that they can later be implemented faithfully
-- produce one organism with one coherent research direction
+Think in genes first, implementation second.
 
-Do not:
-- jump directly to a finished placement recipe
-- write genes that are just vague labels
-- rely on parent-like assumptions, because this is a new seed
-- treat a hand-tuned arrangement as a substitute for a real idea
-- include Python code, variable names, or hardcoded constants in genes or summaries
+The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
+The section schema is authoritative. Use each section only for the kind of content its description allows.
+
+Important:
+- the goal is still to design an organism at the level of ideas, assumptions, constructive principles, and local procedures
+- do not jump directly to a finished placement recipe
+- do not replace the genetic code with a hand-tuned solved arrangement
+- do not treat the schema as decoration; it defines the structure of the genome
+- keep genes atomic within each section: one independent, testable idea per bullet
+- if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
+- no section may contain a full end-to-end implementation
+- `CHANGE_DESCRIPTION` must remain plain-language only and must not contain code
 
 ## Response format
 
-Return the following sections, each starting with `## SECTION_NAME`.
-Do NOT use markdown code fences.
+Return the structured artifact directly.
+The first line of your answer must be `## CORE_GENES`.
+Do not add analysis, commentary, or prefatory text before the required sections.
+Do not use markdown code fences anywhere in the response.
+
+Return exactly these top-level sections, in this exact order:
 
 ## CORE_GENES
-At least 3 bullets, at most 7.
-Each bullet is one atomic idea (one independent, testable concept per bullet).
-If a bullet contains two independent mechanisms joined by "and" or "with", split it into two bullets.
-Write ideas in plain language or math. No Python code, no variable names, no hardcoded constants.
+Inside `## CORE_GENES`, return exactly these subsection headings, in this exact order:
+
+### INIT_GEOMETRY
+### RADIUS_POLICY
+### EXPANSION_POLICY
+### CONFLICT_MODEL
+### REPAIR_POLICY
+### CONTROL_POLICY
+### PARAMETERS
+### OPTIONAL_CODE_SKETCH
+
+Rules for subsection bodies:
+- `INIT_GEOMETRY` through `PARAMETERS` must each contain at least one `- ` bullet
+- `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
+- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
+- if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
+- do not use nested headings inside subsection bodies
 
 ## INTERACTION_NOTES
-State what assumptions the idea set makes and where it is likely to help or fail.
+State what assumptions the organism makes, how the sections work together, and where the design is likely to help or fail.
 
 ## COMPUTE_NOTES
-State the computational style of the organism and what kind of procedure it implies.
+State the computational style implied by the design.
 
 ## CHANGE_DESCRIPTION
 Give one unified novelty summary for this organism.
-Include: (1) what core hypothesis this organism tests, (2) why this approach should produce a good packing score.
-This must be a plain-language statement of the idea. No code, no implementation details.
+Include:
+(1) what core hypothesis this organism tests
+(2) why this approach should produce a good packing score
+This must be plain-language only. No code, no code-like snippets, no implementation dump.

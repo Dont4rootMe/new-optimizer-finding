@@ -6,8 +6,12 @@ Island name: {island_name}
 Island research style:
 {island_description}
 
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
+
 Your task is to generate an idea set first.
 Do not optimize the wording toward a ready-made solution.
-Produce genes that define how the organism thinks about constructing a packing.
+Produce a full sectioned genetic code whose content obeys the schema and whose sections all appear in the required order.
 
 The final organism will later be implemented as code that must return a valid packing of 26 circles in the unit square.

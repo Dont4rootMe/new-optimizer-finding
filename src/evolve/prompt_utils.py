@@ -28,6 +28,7 @@ class PromptBundle:
     implementation_template: str
     repair_system: str
     repair_user: str
+    genome_schema: str = ""
 
 
 def _read_path(path: Path) -> str:
@@ -48,6 +49,13 @@ def _resolve_prompt_path(cfg: DictConfig, key: str) -> Path:
         if repo_relative.exists():
             return repo_relative
     raise FileNotFoundError(f"Configured prompt file for '{key}' was not found: {candidate}")
+
+
+def _read_optional_prompt_asset(cfg: DictConfig, key: str) -> str:
+    prompts_cfg = cfg.evolver.get("prompts")
+    if prompts_cfg is None or key not in prompts_cfg:
+        return ""
+    return _read_path(_resolve_prompt_path(cfg, key))
 
 
 def load_prompt_bundle(cfg: DictConfig) -> PromptBundle:
@@ -73,6 +81,7 @@ def load_prompt_bundle(cfg: DictConfig) -> PromptBundle:
         implementation_template=_read_path(_resolve_prompt_path(cfg, "implementation_template")),
         repair_system=_read_path(_resolve_prompt_path(cfg, "repair_system")),
         repair_user=_read_path(_resolve_prompt_path(cfg, "repair_user")),
+        genome_schema=_read_optional_prompt_asset(cfg, "genome_schema"),
     )
 
 
