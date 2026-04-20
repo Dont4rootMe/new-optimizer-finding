@@ -11,8 +11,8 @@ creation:
 
 islands:
   dir: conf/experiments/circle_packing_shinka/prompts/islands
-  seed_organisms_per_island: 8
-  max_organisms_per_island: 8
+  seed_organisms_per_island: 5
+  max_organisms_per_island: 5
 
 prompts:
   project_context: conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt
@@ -44,7 +44,7 @@ prompts:
   repair_user: conf/experiments/circle_packing_shinka/prompts/repair/user.txt
 
 reproduction:
-  offspring_per_generation: 10
+  offspring_per_generation: 8
   operator_selection_strategy: random
   operator_weights:
     within_island_crossover: 0.7
