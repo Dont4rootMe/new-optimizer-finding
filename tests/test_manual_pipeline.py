@@ -223,6 +223,7 @@ def test_manual_section_aware_prompt_helpers_render_validation_and_patch_context
     assert "## COMPATIBILITY_VERDICT" in seed_compatibility["system_prompt"]
     assert "## COMPATIBILITY_VERDICT" in mutation_compatibility["system_prompt"]
     assert "## COMPATIBILITY_VERDICT" in crossover_compatibility["system_prompt"]
+    assert "## SECTIONS_AT_ISSUE" not in seed_compatibility["system_prompt"]
     assert "=== COMPILATION MODE ===\nFULL" in full_implementation["user_prompt"]
     assert "=== COMPILATION MODE ===\nPATCH" in patch_implementation["user_prompt"]
     assert "=== CHANGED_SECTIONS ===\nGRADIENT_PROCESSING" in patch_implementation["user_prompt"]

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Callable, Literal
 
 from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
-from src.organisms.genetic_code_format import parse_section_issue_list
 from src.organisms.organism import (
     build_genetic_code_from_design_response,
     format_genetic_code,
@@ -20,7 +19,6 @@ _COMPATIBILITY_REJECTED = "COMPATIBILITY_REJECTED"
 _COMPATIBILITY_SECTIONS = (
     "COMPATIBILITY_VERDICT",
     "REJECTION_REASON",
-    "SECTIONS_AT_ISSUE",
 )
 
 
@@ -58,6 +56,7 @@ def parse_compatibility_judgment(
 ) -> CompatibilityJudgment:
     """Parse compatibility-judge output into a strict verdict object."""
 
+    _ = expected_section_names
     parsed = _parse_exact_judgment_sections(text, _COMPATIBILITY_SECTIONS)
     verdict = require_response_section(parsed, "COMPATIBILITY_VERDICT").strip()
     if verdict not in {_COMPATIBILITY_ACCEPTED, _COMPATIBILITY_REJECTED}:
@@ -66,26 +65,22 @@ def parse_compatibility_judgment(
             "in ## COMPATIBILITY_VERDICT."
         )
 
-    sections_at_issue = parse_section_issue_list(
-        require_response_section(parsed, "SECTIONS_AT_ISSUE"),
-        expected_section_names=expected_section_names,
-    )
+    rejection_reason = require_response_section(parsed, "REJECTION_REASON").strip()
     if verdict == _COMPATIBILITY_ACCEPTED:
-        if sections_at_issue:
-            raise ValueError("Accepted compatibility judgments must use NONE for SECTIONS_AT_ISSUE.")
+        if rejection_reason != "N/A":
+            raise ValueError("Accepted compatibility judgments must use exactly N/A in ## REJECTION_REASON.")
         return CompatibilityJudgment(
             verdict=_COMPATIBILITY_ACCEPTED,
             rejection_reason=None,
             sections_at_issue=(),
         )
 
-    rejection_reason = require_response_section(parsed, "REJECTION_REASON").strip()
-    if not rejection_reason:
+    if not rejection_reason or rejection_reason == "N/A":
         raise ValueError("Rejected compatibility judgments require a non-empty REJECTION_REASON.")
     return CompatibilityJudgment(
         verdict=_COMPATIBILITY_REJECTED,
         rejection_reason=rejection_reason,
-        sections_at_issue=sections_at_issue,
+        sections_at_issue=(),
     )
 
 
@@ -100,13 +95,11 @@ def format_compatibility_rejection_feedback(
     blocks: list[str] = []
     for index, rejection in enumerate(rejection_history, start=1):
         reason = rejection.rejection_reason or "Compatibility rejected the candidate."
-        sections = ", ".join(rejection.sections_at_issue) if rejection.sections_at_issue else "NONE"
         blocks.append(
             "\n".join(
                 (
                     f"Compatibility rejection {index}:",
                     f"Reason: {reason.strip()}",
-                    f"Sections at issue: {sections}",
                 )
             )
         )

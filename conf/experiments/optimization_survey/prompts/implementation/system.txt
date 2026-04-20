@@ -34,7 +34,9 @@ Therefore, code emitted for a region body must be valid as inserted directly bet
 ## Output format
 
 Return exactly these sections in this exact order.
+The first line of your answer must be `## COMPILATION_MODE`.
 Do not use markdown code fences.
+A valid artifact starts exactly with `## COMPILATION_MODE`, then `FULL` or `PATCH`, then one or more `## REGION SECTION_NAME` blocks ending with `## END_REGION`.
 
 ## COMPILATION_MODE
 Write exactly one of:
@@ -102,5 +104,7 @@ Rules:
 - in PATCH mode, include only the changed regions and omit the unchanged ones entirely
 - region headings must use the exact canonical names from the schema
 - region bodies must be raw Python lines exactly as they should appear between the scaffold markers
+- do not start with `REGION ...`; region headings must start with `## REGION `
+- do not output text before `## COMPILATION_MODE`
 - do not repeat the scaffold markers inside a region body
 - do not emit commentary, analysis, or prose

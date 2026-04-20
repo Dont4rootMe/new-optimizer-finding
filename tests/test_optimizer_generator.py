@@ -376,31 +376,40 @@ def _compatibility_accepted_text() -> str:
         "## COMPATIBILITY_VERDICT\n"
         "COMPATIBILITY_ACCEPTED\n\n"
         "## REJECTION_REASON\n"
-        "N/A\n\n"
-        "## SECTIONS_AT_ISSUE\n"
-        "NONE\n"
+        "N/A\n"
     )
 
 
 def _compatibility_rejected_text(reason: str, sections: str = "NONE") -> str:
+    del sections
     return (
         "## COMPATIBILITY_VERDICT\n"
         "COMPATIBILITY_REJECTED\n\n"
         "## REJECTION_REASON\n"
-        f"{reason}\n\n"
-        "## SECTIONS_AT_ISSUE\n"
-        f"{sections}\n"
+        f"{reason}\n"
     )
 
 
-def _llm_response(stage: str, text: str) -> LlmResponse:
+def _llm_response(
+    stage: str,
+    text: str,
+    *,
+    content: str | None = None,
+    thinking: str | None = None,
+) -> LlmResponse:
+    raw_response = {"stage": stage}
+    if content is not None or thinking is not None:
+        raw_response["message"] = {
+            "content": content or "",
+            "thinking": thinking or "",
+        }
     return LlmResponse(
         text=text,
         route_id="mock",
         provider="mock",
         provider_model_id="mock-model",
         raw_request={"stage": stage},
-        raw_response={"stage": stage},
+        raw_response=raw_response,
         usage={},
         started_at="2026-01-01T00:00:00Z",
         finished_at="2026-01-01T00:00:01Z",
@@ -1313,6 +1322,152 @@ def test_run_creation_stages_seed_runs_compatibility_before_implementation(
     assert len(llm_request["compatibility_checks"]) == 1
 
 
+def test_structured_stages_parse_raw_content_before_thinking(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_structured_content"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    dirty_compatibility_text = "reasoning before final answer\n\n" + _compatibility_accepted_text()
+
+    def fake_generate(request):
+        if request.stage == "design":
+            return _llm_response("design", _design_text("Seed candidate."))
+        if request.stage == "compatibility_check":
+            return _llm_response(
+                "compatibility_check",
+                dirty_compatibility_text,
+                content=_compatibility_accepted_text(),
+                thinking="reasoning before final answer",
+            )
+        return _llm_response("implementation", _implementation_text())
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    compatibility_context = CompatibilityValidationContext(
+        check=CompatibilityCheckContext(operator_kind="seed"),
+        build_design_prompts=lambda _novelty_feedback, compatibility_feedback: (
+            "design retry",
+            format_compatibility_rejection_feedback(compatibility_feedback),
+        ),
+        build_compatibility_prompts=lambda _parsed: ("compatibility system", "compatibility user"),
+    )
+
+    try:
+        result = generator.run_creation_stages(
+            design_system_prompt="design system",
+            design_user_prompt="design user",
+            compatibility_context=compatibility_context,
+            org_dir=organism_dir,
+            organism_id="org_structured_content",
+            generation=0,
+        )
+    finally:
+        generator.close()
+
+    assert result.parsed_design["CHANGE_DESCRIPTION"] == "Seed candidate."
+    llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
+    compatibility_entry = llm_response["compatibility_checks"][0]
+    assert compatibility_entry["text"] == dirty_compatibility_text
+    assert compatibility_entry["content_text"] == _compatibility_accepted_text().strip()
+    assert compatibility_entry["thinking_text"] == "reasoning before final answer"
+    assert compatibility_entry["parse_text"] == _compatibility_accepted_text().strip()
+    assert compatibility_entry["parse_source"] == "message.content"
+    assert compatibility_entry["verdict"] == "COMPATIBILITY_ACCEPTED"
+
+
+def test_implementation_patch_parses_raw_content_before_thinking(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_implementation_content"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    dirty_implementation_text = "analysis that would break strict parsing\n\n" + _implementation_text()
+
+    def fake_generate(request):
+        if request.stage == "design":
+            return _llm_response("design", _design_text("Seed candidate."))
+        return _llm_response(
+            "implementation",
+            dirty_implementation_text,
+            content=_implementation_text(),
+            thinking="analysis that would break strict parsing",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+
+    try:
+        result = generator.run_creation_stages(
+            design_system_prompt="design system",
+            design_user_prompt="design user",
+            org_dir=organism_dir,
+            organism_id="org_implementation_content",
+            generation=0,
+        )
+    finally:
+        generator.close()
+
+    assert "# implementation body for STATE_REPRESENTATION" in result.implementation_code
+    llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
+    implementation_entry = llm_response["implementation"]
+    assert implementation_entry["text"] == result.implementation_code
+    assert implementation_entry["content_text"] == _implementation_text().strip()
+    assert implementation_entry["thinking_text"] == "analysis that would break strict parsing"
+    assert implementation_entry["parse_text"] == _implementation_text().strip()
+    assert implementation_entry["parse_source"] == "message.content"
+
+
+def test_structured_parse_failure_records_content_thinking_and_parse_text(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    generator.evolver_cfg.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection = 0
+    organism_dir = tmp_path / "org_structured_parse_failure"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+
+    def fake_generate(request):
+        if request.stage == "design":
+            return _llm_response("design", _design_text("Seed candidate."))
+        return _llm_response(
+            "compatibility_check",
+            "thinking\n\nCOMPATIBILITY_ACCEPTED\nN/A",
+            content="COMPATIBILITY_ACCEPTED\nN/A",
+            thinking="thinking",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+    compatibility_context = CompatibilityValidationContext(
+        check=CompatibilityCheckContext(operator_kind="seed"),
+        build_design_prompts=lambda _novelty_feedback, compatibility_feedback: (
+            "design retry",
+            format_compatibility_rejection_feedback(compatibility_feedback),
+        ),
+        build_compatibility_prompts=lambda _parsed: ("compatibility system", "compatibility user"),
+    )
+
+    try:
+        with pytest.raises(ValueError, match="text before the first section|exactly these sections"):
+            generator.run_creation_stages(
+                design_system_prompt="design system",
+                design_user_prompt="design user",
+                compatibility_context=compatibility_context,
+                org_dir=organism_dir,
+                organism_id="org_structured_parse_failure",
+                generation=0,
+            )
+    finally:
+        generator.close()
+
+    llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
+    compatibility_entry = llm_response["compatibility_checks"][0]
+    assert compatibility_entry["content_text"] == "COMPATIBILITY_ACCEPTED\nN/A"
+    assert compatibility_entry["thinking_text"] == "thinking"
+    assert compatibility_entry["parse_text"] == "COMPATIBILITY_ACCEPTED\nN/A"
+    assert compatibility_entry["error_kind"] == "compatibility_judgment_parse_failed"
+
+
 def test_run_creation_stages_mutation_runs_novelty_before_compatibility(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1651,7 +1806,7 @@ def test_run_creation_stages_compatibility_retry_uses_own_budget_and_feedback(
         "implementation",
     ]
     assert "Update depends on an absent gradient-processing rule." in calls[3][1]
-    assert "Sections at issue: GRADIENT_PROCESSING, UPDATE_RULE" in calls[3][1]
+    assert "Sections at issue" not in calls[3][1]
     llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
     assert len(llm_request["compatibility_checks"]) == 2
     assert "Update depends on an absent gradient-processing rule." in llm_request["design_attempts"][1][

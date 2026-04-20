@@ -134,9 +134,12 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
         assert "Do not propose edits" in prompt
         assert "## COMPATIBILITY_VERDICT" in prompt
         assert "## REJECTION_REASON" in prompt
-        assert "## SECTIONS_AT_ISSUE" in prompt
+        assert "## SECTIONS_AT_ISSUE" not in prompt
+        assert "The first line of your answer must be `## COMPATIBILITY_VERDICT`." in prompt
 
     assert "## COMPILATION_MODE" in bundle.implementation_system
+    assert "The first line of your answer must be `## COMPILATION_MODE`." in bundle.implementation_system
+    assert "do not start with `REGION ...`" in bundle.implementation_system
     assert "do not output a full `implementation.py`" in bundle.implementation_system
     assert "=== COMPILATION MODE ===" in bundle.implementation_user
     assert "=== CHANGED_SECTIONS ===" in bundle.implementation_user

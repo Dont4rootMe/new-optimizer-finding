@@ -290,7 +290,8 @@ def test_circle_packing_validation_prompts_are_section_schema_aware() -> None:
     ):
         assert "## COMPATIBILITY_VERDICT" in prompt
         assert "## REJECTION_REASON" in prompt
-        assert "## SECTIONS_AT_ISSUE" in prompt
+        assert "## SECTIONS_AT_ISSUE" not in prompt
+        assert "The first line of your answer must be `## COMPATIBILITY_VERDICT`." in prompt
         assert "Do not propose edits" in prompt
         assert "full end-to-end implementation" in prompt or "full algorithm implementation" in prompt
     assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system

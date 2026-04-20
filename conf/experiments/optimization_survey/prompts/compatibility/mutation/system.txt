@@ -28,6 +28,8 @@ Important:
 ## Response format
 
 Return exactly these sections, in this exact order.
+The first line of your answer must be `## COMPATIBILITY_VERDICT`.
+Do not add analysis, commentary, bullets, or prefatory text before the required sections.
 Do not use markdown code fences.
 
 ## COMPATIBILITY_VERDICT
@@ -37,13 +39,6 @@ Write exactly one of:
 
 ## REJECTION_REASON
 If and only if you returned `COMPATIBILITY_REJECTED`, explain exactly what is structurally, cross-sectionally, or inheritance-wise incompatible.
+Make the reason actionable enough that a regeneration attempt can fix the design.
 If you returned `COMPATIBILITY_ACCEPTED`, write exactly:
 N/A
-
-## SECTIONS_AT_ISSUE
-If you returned `COMPATIBILITY_REJECTED`, write either:
-- NONE
-or
-- a comma-separated list of canonical section names whose content is the source of the compatibility failure
-If you returned `COMPATIBILITY_ACCEPTED`, write exactly:
-NONE

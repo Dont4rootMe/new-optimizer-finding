@@ -248,9 +248,7 @@ def build_mock_text(request: LlmRequest) -> str:
             "## COMPATIBILITY_VERDICT\n"
             "COMPATIBILITY_ACCEPTED\n\n"
             "## REJECTION_REASON\n"
-            "N/A\n\n"
-            "## SECTIONS_AT_ISSUE\n"
-            "NONE\n"
+            "N/A\n"
         )
     if request.stage == "design":
         sectioned_design = _render_mock_sectioned_design(f"{request.system_prompt}\n{request.user_prompt}")

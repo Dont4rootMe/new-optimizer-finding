@@ -37,20 +37,16 @@ def _accepted_text() -> str:
         "## COMPATIBILITY_VERDICT\n"
         "COMPATIBILITY_ACCEPTED\n\n"
         "## REJECTION_REASON\n"
-        "N/A\n\n"
-        "## SECTIONS_AT_ISSUE\n"
-        "NONE\n"
+        "N/A\n"
     )
 
 
-def _rejected_text(reason: str, sections: str) -> str:
+def _rejected_text(reason: str) -> str:
     return (
         "## COMPATIBILITY_VERDICT\n"
         "COMPATIBILITY_REJECTED\n\n"
         "## REJECTION_REASON\n"
-        f"{reason}\n\n"
-        "## SECTIONS_AT_ISSUE\n"
-        f"{sections}\n"
+        f"{reason}\n"
     )
 
 
@@ -62,28 +58,14 @@ def test_parse_compatibility_judgment_accepts_none_sections() -> None:
     assert judgment.sections_at_issue == ()
 
 
-def test_parse_compatibility_judgment_rejected_with_one_section() -> None:
+def test_parse_compatibility_judgment_rejected_with_reason() -> None:
     judgment = parse_compatibility_judgment(
-        _rejected_text(
-            "The repair policy depends on an absent conflict ranking.",
-            "REPAIR_POLICY",
-        )
+        _rejected_text("The repair policy depends on an absent conflict ranking.")
     )
 
     assert judgment.is_accepted is False
     assert judgment.rejection_reason == "The repair policy depends on an absent conflict ranking."
-    assert judgment.sections_at_issue == ("REPAIR_POLICY",)
-
-
-def test_parse_compatibility_judgment_rejected_with_multiple_sections() -> None:
-    judgment = parse_compatibility_judgment(
-        _rejected_text(
-            "The repair policy depends on an absent conflict model.",
-            "CONFLICT_MODEL, REPAIR_POLICY",
-        )
-    )
-
-    assert judgment.sections_at_issue == ("CONFLICT_MODEL", "REPAIR_POLICY")
+    assert judgment.sections_at_issue == ()
 
 
 def test_parse_compatibility_judgment_rejects_malformed_verdict() -> None:
@@ -93,9 +75,7 @@ def test_parse_compatibility_judgment_rejects_malformed_verdict() -> None:
                 "## COMPATIBILITY_VERDICT\n"
                 "ACCEPT\n\n"
                 "## REJECTION_REASON\n"
-                "N/A\n\n"
-                "## SECTIONS_AT_ISSUE\n"
-                "NONE\n"
+                "N/A\n"
             )
         )
 
@@ -105,29 +85,37 @@ def test_parse_compatibility_judgment_rejects_missing_section() -> None:
         parse_compatibility_judgment("## COMPATIBILITY_VERDICT\nCOMPATIBILITY_ACCEPTED\n")
 
 
-def test_parse_compatibility_judgment_rejects_malformed_sections_at_issue() -> None:
-    with pytest.raises(ValueError, match="SECTIONS_AT_ISSUE"):
-        parse_compatibility_judgment(_rejected_text("Bad section list.", "- REPAIR_POLICY"))
-
-
-def test_parse_compatibility_judgment_rejects_unknown_section_name() -> None:
-    with pytest.raises(ValueError, match="unknown section name"):
+def test_parse_compatibility_judgment_rejects_accepted_reason_other_than_na() -> None:
+    with pytest.raises(ValueError, match="exactly N/A"):
         parse_compatibility_judgment(
-            _rejected_text("Bad section name.", "GEOMETRY"),
-            expected_section_names=SECTION_NAMES,
+            (
+                "## COMPATIBILITY_VERDICT\n"
+                "COMPATIBILITY_ACCEPTED\n\n"
+                "## REJECTION_REASON\n"
+                "Looks good.\n"
+            )
         )
 
 
-def test_parse_compatibility_judgment_uses_family_local_sections() -> None:
+def test_parse_compatibility_judgment_rejects_rejected_na_reason() -> None:
+    with pytest.raises(ValueError, match="non-empty REJECTION_REASON"):
+        parse_compatibility_judgment(
+            (
+                "## COMPATIBILITY_VERDICT\n"
+                "COMPATIBILITY_REJECTED\n\n"
+                "## REJECTION_REASON\n"
+                "N/A\n"
+            )
+        )
+
+
+def test_parse_compatibility_judgment_does_not_require_sections_at_issue() -> None:
     judgment = parse_compatibility_judgment(
-        _rejected_text(
-            "The parameter schedule refers to an absent step controller.",
-            "STEP_CONTROL_POLICY, PARAMETERS",
-        ),
+        _rejected_text("The parameter schedule refers to an absent step controller."),
         expected_section_names=OPTIMIZER_SECTION_NAMES,
     )
 
-    assert judgment.sections_at_issue == ("STEP_CONTROL_POLICY", "PARAMETERS")
+    assert judgment.sections_at_issue == ()
 
 
 def test_format_compatibility_rejection_feedback_empty_history() -> None:
@@ -152,6 +140,5 @@ def test_format_compatibility_rejection_feedback_includes_reason_and_sections() 
 
     assert "Compatibility rejection 1:" in text
     assert "Reason: Repair depends on a missing conflict ranking." in text
-    assert "Sections at issue: CONFLICT_MODEL, REPAIR_POLICY" in text
     assert "Compatibility rejection 2:" in text
-    assert "Sections at issue: OPTIONAL_CODE_SKETCH" in text
+    assert "Sections at issue" not in text

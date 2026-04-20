@@ -190,7 +190,11 @@ def test_circle_packing_shinka_config_composes() -> None:
 
     assert set(cfg.experiments.keys()) == {"unit_square_26"}
     assert "safety" not in cfg
-    assert "ollama_qwen35_122b" in cfg.api_platforms
+    assert set(cfg.api_platforms.keys()) == {
+        "ollama_qwen35_27b",
+        "ollama_gemma4_26b",
+        "ollama_nemotron_cascade_2_30b",
+    }
     assert cfg.experiments.unit_square_26._target_ == "experiments.circle_packing_shinka.unit_square_26.UnitSquare26CirclePackingExperiment"
     assert cfg.experiments.unit_square_26.need_cuda is False
     assert cfg.evolver.prompts.project_context == "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt"
@@ -215,8 +219,8 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.reproduction.selection_score.normalize_weights is True
     assert cfg.evolver.reproduction.selection_score.weights.simple_score == 1.0
     assert cfg.evolver.reproduction.selection_score.weights.inheritance_fitness == 0.0
-    assert cfg.evolver.islands.seed_organisms_per_island == 8
-    assert cfg.evolver.islands.max_organisms_per_island == 8
+    assert cfg.evolver.islands.seed_organisms_per_island == 5
+    assert cfg.evolver.islands.max_organisms_per_island == 5
     assert cfg.evolver.reproduction.species_sampling.strategy == "weighted_rule"
     assert cfg.evolver.reproduction.species_sampling.weighted_rule_lambda == 1.0
     assert cfg.evolver.reproduction.species_sampling.mutation_softmax_temperature == 1.0
@@ -224,30 +228,33 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.reproduction.species_sampling.inter_island_crossover_softmax_temperature == 1.0
     assert "top_k_per_island" not in cfg.evolver.phases.simple
     assert cfg.evolver.phases.great_filter.top_h_per_island == 5
-    assert cfg.evolver.reproduction.offspring_per_generation == 10
-    assert set(cfg.evolver.llm.route_weights.keys()) == {"ollama_qwen35_122b"}
-    assert cfg.evolver.llm.route_weights.ollama_qwen35_122b == 1.0
-    assert cfg.api_platforms.ollama_qwen35_122b.max_concurrency == 4
+    assert cfg.evolver.reproduction.offspring_per_generation == 8
+    assert set(cfg.evolver.llm.route_weights.keys()) == {
+        "ollama_qwen35_27b",
+        "ollama_gemma4_26b",
+        "ollama_nemotron_cascade_2_30b",
+    }
+    assert cfg.evolver.llm.route_weights.ollama_qwen35_27b == 1.0
+    assert cfg.evolver.llm.route_weights.ollama_gemma4_26b == 1.0
+    assert cfg.evolver.llm.route_weights.ollama_nemotron_cascade_2_30b == 1.0
+    assert cfg.api_platforms.ollama_qwen35_27b.max_concurrency == 3
 
-    qwen_route = instantiate(cfg.api_platforms.ollama_qwen35_122b, _recursive_=False)
-    assert qwen_route.route_id == "ollama_qwen35_122b"
-    assert qwen_route.provider_model_id == "qwen3.5:122b"
-    assert qwen_route.base_url == "http://127.0.0.1:11434/api"
-    assert qwen_route.gpu_ranks == []
-    assert qwen_route.gpu_rank_groups == []
-    assert qwen_route.max_concurrency == 4
+    qwen_route = instantiate(cfg.api_platforms.ollama_qwen35_27b, _recursive_=False)
+    assert qwen_route.route_id == "ollama_qwen35_27b"
+    assert qwen_route.provider_model_id == "qwen3.5:27b"
+    assert qwen_route.base_url == "http://127.0.0.1:12436/api"
+    assert qwen_route.gpu_ranks == [2]
+    assert qwen_route.gpu_rank_groups == [[2]]
+    assert qwen_route.max_concurrency == 3
     assert qwen_route.max_output_tokens == 12288
-    assert qwen_route.stage_options["design"]["think"] == "medium"
-    assert qwen_route.stage_options["design"]["temperature"] == 1.0
-    assert qwen_route.stage_options["design"]["max_output_tokens"] == 12288
-    assert qwen_route.stage_options["implementation"]["think"] == "low"
-    assert qwen_route.stage_options["implementation"]["temperature"] == 0.4
-    assert qwen_route.stage_options["implementation"]["max_output_tokens"] == 12288
-    assert qwen_route.stage_options["repair"]["think"] == "low"
-    assert qwen_route.stage_options["repair"]["max_output_tokens"] == 12288
-    assert qwen_route.stage_options["novelty_check"]["think"] == "low"
-    assert qwen_route.stage_options["novelty_check"]["temperature"] == 0.1
-    assert qwen_route.stage_options["novelty_check"]["max_output_tokens"] == 12288
+    assert qwen_route.stage_options["design"]["think"] is False
+    assert qwen_route.stage_options["design"]["max_output_tokens"] == 6000
+    assert qwen_route.stage_options["implementation"]["think"] is False
+    assert qwen_route.stage_options["implementation"]["max_output_tokens"] == 6000
+    assert qwen_route.stage_options["repair"]["think"] is False
+    assert qwen_route.stage_options["repair"]["max_output_tokens"] == 6000
+    assert qwen_route.stage_options["novelty_check"]["think"] is False
+    assert qwen_route.stage_options["novelty_check"]["max_output_tokens"] == 6000
     assert qwen_route.request_options["num_ctx"] == 65536
 
 

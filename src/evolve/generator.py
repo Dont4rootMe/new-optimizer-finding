@@ -74,6 +74,15 @@ class _PreparedImplementationStage:
     base_source_text: str | None
 
 
+@dataclass(frozen=True)
+class _StructuredResponseText:
+    full_text: str
+    content_text: str
+    thinking_text: str
+    parse_text: str
+    parse_source: str
+
+
 def _single_line(value: object, *, limit: int = 160) -> str:
     text = " ".join(str(value).split())
     if len(text) <= limit:
@@ -110,6 +119,69 @@ def _response_summary(*, text: str, raw_response: object, usage: object | None =
         if value is not None:
             parts.append(f"{key}={value}")
     return ", ".join(parts)
+
+
+def _structured_response_text(response: object) -> _StructuredResponseText:
+    """Return the text that strict structured parsers should consume.
+
+    Some Ollama models return reasoning in message.thinking and the final
+    answer in message.content. The provider-level response.text deliberately
+    preserves both for diagnostics, but strict artifact parsers must consume
+    only the final content when it is available.
+    """
+
+    full_text = str(getattr(response, "text", "") or "")
+    raw_response = getattr(response, "raw_response", {})
+    raw_payload = raw_response if isinstance(raw_response, dict) else {}
+    message = raw_payload.get("message", {})
+    if not isinstance(message, dict):
+        message = {}
+    content_text = str(message.get("content", "") or "").strip()
+    thinking_text = str(message.get("thinking", "") or "").strip()
+    if content_text:
+        return _StructuredResponseText(
+            full_text=full_text,
+            content_text=content_text,
+            thinking_text=thinking_text,
+            parse_text=content_text,
+            parse_source="message.content",
+        )
+    return _StructuredResponseText(
+        full_text=full_text,
+        content_text=content_text,
+        thinking_text=thinking_text,
+        parse_text=full_text,
+        parse_source="response.text",
+    )
+
+
+def _structured_response_fields(response_text: _StructuredResponseText) -> dict[str, str]:
+    return {
+        "content_text": response_text.content_text,
+        "thinking_text": response_text.thinking_text,
+        "parse_text": response_text.parse_text,
+        "parse_source": response_text.parse_source,
+    }
+
+
+def _parse_failure_diagnostics(response_text: _StructuredResponseText) -> str:
+    return (
+        f"parse_source={response_text.parse_source!r}, "
+        f"content_chars={len(response_text.content_text)}, "
+        f"thinking_chars={len(response_text.thinking_text)}, "
+        f"parse_chars={len(response_text.parse_text)}, "
+        f"content_preview={_single_line(response_text.content_text)!r}, "
+        f"thinking_preview={_single_line(response_text.thinking_text)!r}, "
+        f"full_text_preview={_single_line(response_text.full_text)!r}, "
+        f"parse_text_preview={_single_line(response_text.parse_text)!r}"
+    )
+
+
+def _first_non_empty_line(text: str) -> str:
+    for line in str(text).splitlines():
+        if line.strip():
+            return line.strip()
+    return ""
 
 
 def _format_changed_sections_for_prompt(changed_sections: tuple[str, ...]) -> str:
@@ -447,6 +519,7 @@ class CandidateGenerator(BaseLlmGenerator):
             llm_request_payload["design"]["error_msg"] = error_msg
             llm_response_payload["design"]["status"] = "failed"
             llm_response_payload["design"]["error_msg"] = error_msg
+            llm_response_payload["design"]["error_kind"] = "provider_failure"
             write_json(llm_request_path, llm_request_payload)
             write_json(llm_response_path, llm_response_payload)
             _announce(f"organism {organism_id} design stage failed (route={route_id}): {error_msg}")
@@ -456,6 +529,7 @@ class CandidateGenerator(BaseLlmGenerator):
             f"(route={route_id}, provider={design_response.provider}, "
             f"model={design_response.provider_model_id})"
         )
+        design_text = _structured_response_text(design_response)
         llm_request_payload["provider"] = design_response.provider
         llm_request_payload["provider_model_id"] = design_response.provider_model_id
         llm_request_payload["design"] = {
@@ -475,6 +549,7 @@ class CandidateGenerator(BaseLlmGenerator):
             "provider": design_response.provider,
             "provider_model_id": design_response.provider_model_id,
             "text": design_response.text,
+            **_structured_response_fields(design_text),
             "response": design_response.raw_response,
             "usage": design_response.usage,
             "started_at": design_response.started_at,
@@ -486,9 +561,10 @@ class CandidateGenerator(BaseLlmGenerator):
         write_json(llm_response_path, llm_response_payload)
 
         try:
-            parsed_design = parse_llm_response(design_response.text)
+            parsed_design = parse_llm_response(design_text.parse_text)
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
+            llm_response_payload["design"]["error_kind"] = "design_contract_parse_failed"
             llm_request_payload["design"]["status"] = "failed"
             llm_request_payload["design"]["error_msg"] = error_msg
             llm_response_payload["design"]["status"] = "failed"
@@ -496,15 +572,16 @@ class CandidateGenerator(BaseLlmGenerator):
             write_json(llm_request_path, llm_request_payload)
             write_json(llm_response_path, llm_response_payload)
             LOGGER.warning(
-                "Design parse failed organism=%s route=%s %s preview=%r error=%s",
+                "Design parse failed organism=%s route=%s expected_contract=%s %s %s error=%s",
                 organism_id,
                 route_id,
+                "top-level sections CORE_GENES, INTERACTION_NOTES, COMPUTE_NOTES, CHANGE_DESCRIPTION",
                 _response_summary(
                     text=design_response.text,
                     raw_response=design_response.raw_response,
                     usage=design_response.usage,
                 ),
-                _single_line(design_response.text),
+                _parse_failure_diagnostics(design_text),
                 error_msg,
             )
             raise
@@ -564,6 +641,7 @@ class CandidateGenerator(BaseLlmGenerator):
             llm_request_payload["implementation"]["error_msg"] = error_msg
             llm_response_payload["implementation"]["status"] = "failed"
             llm_response_payload["implementation"]["error_msg"] = error_msg
+            llm_response_payload["implementation"]["error_kind"] = "provider_failure"
             write_json(llm_request_path, llm_request_payload)
             write_json(llm_response_path, llm_response_payload)
             _announce(f"organism {organism_id} implementation stage failed (route={route_id}): {error_msg}")
@@ -572,6 +650,7 @@ class CandidateGenerator(BaseLlmGenerator):
             f"organism {organism_id} implementation stage returned "
             f"(route={route_id})"
         )
+        implementation_text = _structured_response_text(implementation_response)
         llm_request_payload["implementation"] = {
             "route_id": route_id,
             "provider": implementation_response.provider,
@@ -597,6 +676,7 @@ class CandidateGenerator(BaseLlmGenerator):
             "provider": implementation_response.provider,
             "provider_model_id": implementation_response.provider_model_id,
             "text": implementation_response.text,
+            **_structured_response_fields(implementation_text),
             "response": implementation_response.raw_response,
             "usage": implementation_response.usage,
             "started_at": implementation_response.started_at,
@@ -613,11 +693,12 @@ class CandidateGenerator(BaseLlmGenerator):
 
         try:
             implementation_code = self._extract_implementation_stage_code(
-                implementation_response.text,
+                implementation_text.parse_text,
                 prepared=prepared_implementation,
             )
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
+            llm_response_payload["implementation"]["error_kind"] = "implementation_patch_parse_failed"
             llm_request_payload["implementation"]["status"] = "failed"
             llm_request_payload["implementation"]["error_msg"] = error_msg
             llm_response_payload["implementation"]["status"] = "failed"
@@ -629,15 +710,26 @@ class CandidateGenerator(BaseLlmGenerator):
                 f"(route={route_id}): {error_msg}"
             )
             LOGGER.warning(
-                "Implementation extraction failed organism=%s route=%s %s preview=%r error=%s",
+                "Implementation extraction failed organism=%s route=%s expected_mode=%s expected_regions=%s first_non_empty_line=%r %s %s error=%s",
                 organism_id,
                 route_id,
+                (
+                    prepared_implementation.compilation_plan.compilation_mode
+                    if prepared_implementation.compilation_plan is not None
+                    else "legacy_full_source"
+                ),
+                (
+                    list(prepared_implementation.compilation_plan.changed_sections)
+                    if prepared_implementation.compilation_plan is not None
+                    else None
+                ),
+                _first_non_empty_line(implementation_text.parse_text),
                 _response_summary(
                     text=implementation_response.text,
                     raw_response=implementation_response.raw_response,
                     usage=implementation_response.usage,
                 ),
-                _single_line(implementation_response.text),
+                _parse_failure_diagnostics(implementation_text),
                 error_msg,
             )
             raise
@@ -806,10 +898,12 @@ class CandidateGenerator(BaseLlmGenerator):
                 request_entry["error_msg"] = error_msg
                 response_entry["status"] = "failed"
                 response_entry["error_msg"] = error_msg
+                response_entry["error_kind"] = "provider_failure"
                 llm_request_payload["design"]["status"] = "failed"
                 llm_request_payload["design"]["error_msg"] = error_msg
                 llm_response_payload["design"]["status"] = "failed"
                 llm_response_payload["design"]["error_msg"] = error_msg
+                llm_response_payload["design"]["error_kind"] = "provider_failure"
                 write_json(llm_request_path, llm_request_payload)
                 write_json(llm_response_path, llm_response_payload)
                 _announce(f"organism {organism_id} design stage failed (route={route_id}): {error_msg}")
@@ -820,6 +914,7 @@ class CandidateGenerator(BaseLlmGenerator):
                 f"(route={route_id}, provider={design_response.provider}, "
                 f"model={design_response.provider_model_id}, novelty_attempt={attempt})"
             )
+            design_text = _structured_response_text(design_response)
             request_entry.update(
                 {
                     "provider": design_response.provider,
@@ -834,6 +929,7 @@ class CandidateGenerator(BaseLlmGenerator):
                     "provider": design_response.provider,
                     "provider_model_id": design_response.provider_model_id,
                     "text": design_response.text,
+                    **_structured_response_fields(design_text),
                     "response": design_response.raw_response,
                     "usage": design_response.usage,
                     "started_at": design_response.started_at,
@@ -852,9 +948,10 @@ class CandidateGenerator(BaseLlmGenerator):
             write_json(llm_response_path, llm_response_payload)
 
             try:
-                parsed_design = parse_llm_response(design_response.text)
+                parsed_design = parse_llm_response(design_text.parse_text)
             except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
+                response_entry["error_kind"] = "design_contract_parse_failed"
                 request_entry["status"] = "failed"
                 request_entry["error_msg"] = error_msg
                 response_entry["status"] = "failed"
@@ -864,17 +961,18 @@ class CandidateGenerator(BaseLlmGenerator):
                 write_json(llm_request_path, llm_request_payload)
                 write_json(llm_response_path, llm_response_payload)
                 LOGGER.warning(
-                    "Design parse failed organism=%s route=%s novelty_attempt=%d/%d %s preview=%r error=%s",
+                    "Design parse failed organism=%s route=%s novelty_attempt=%d/%d expected_contract=%s %s %s error=%s",
                     organism_id,
                     route_id,
                     attempt,
                     max_design_attempts,
+                    "top-level sections CORE_GENES, INTERACTION_NOTES, COMPUTE_NOTES, CHANGE_DESCRIPTION",
                     _response_summary(
                         text=design_response.text,
                         raw_response=design_response.raw_response,
                         usage=design_response.usage,
                     ),
-                    _single_line(design_response.text),
+                    _parse_failure_diagnostics(design_text),
                     error_msg,
                 )
                 raise
@@ -935,11 +1033,13 @@ class CandidateGenerator(BaseLlmGenerator):
                 novelty_request_entry["error_msg"] = error_msg
                 novelty_response_entry["status"] = "failed"
                 novelty_response_entry["error_msg"] = error_msg
+                novelty_response_entry["error_kind"] = "provider_failure"
                 write_json(llm_request_path, llm_request_payload)
                 write_json(llm_response_path, llm_response_payload)
                 _announce(f"organism {organism_id} novelty_check stage failed (route={route_id}): {error_msg}")
                 raise
 
+            novelty_text = _structured_response_text(novelty_response)
             novelty_request_entry.update(
                 {
                     "provider": novelty_response.provider,
@@ -954,6 +1054,7 @@ class CandidateGenerator(BaseLlmGenerator):
                     "provider": novelty_response.provider,
                     "provider_model_id": novelty_response.provider_model_id,
                     "text": novelty_response.text,
+                    **_structured_response_fields(novelty_text),
                     "response": novelty_response.raw_response,
                     "usage": novelty_response.usage,
                     "started_at": novelty_response.started_at,
@@ -971,11 +1072,12 @@ class CandidateGenerator(BaseLlmGenerator):
 
             try:
                 judgment = parse_novelty_judgment(
-                    novelty_response.text,
+                    novelty_text.parse_text,
                     expected_section_names=self.expected_core_gene_sections,
                 )
             except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
+                novelty_response_entry["error_kind"] = "novelty_judgment_parse_failed"
                 novelty_request_entry["status"] = "failed"
                 novelty_request_entry["error_msg"] = error_msg
                 novelty_response_entry["status"] = "failed"
@@ -983,17 +1085,18 @@ class CandidateGenerator(BaseLlmGenerator):
                 write_json(llm_request_path, llm_request_payload)
                 write_json(llm_response_path, llm_response_payload)
                 LOGGER.warning(
-                    "Novelty judgment parse failed organism=%s route=%s design_attempt=%d/%d %s preview=%r error=%s",
+                    "Novelty judgment parse failed organism=%s route=%s design_attempt=%d/%d expected_contract=%s %s %s error=%s",
                     organism_id,
                     route_id,
                     attempt,
                     max_design_attempts,
+                    "NOVELTY_VERDICT, REJECTION_REASON, SECTIONS_AT_ISSUE",
                     _response_summary(
                         text=novelty_response.text,
                         raw_response=novelty_response.raw_response,
                         usage=novelty_response.usage,
                     ),
-                    _single_line(novelty_response.text),
+                    _parse_failure_diagnostics(novelty_text),
                     error_msg,
                 )
                 raise
@@ -1087,6 +1190,7 @@ class CandidateGenerator(BaseLlmGenerator):
             llm_request_payload["implementation"]["error_msg"] = error_msg
             llm_response_payload["implementation"]["status"] = "failed"
             llm_response_payload["implementation"]["error_msg"] = error_msg
+            llm_response_payload["implementation"]["error_kind"] = "provider_failure"
             write_json(llm_request_path, llm_request_payload)
             write_json(llm_response_path, llm_response_payload)
             _announce(f"organism {organism_id} implementation stage failed (route={route_id}): {error_msg}")
@@ -1096,6 +1200,7 @@ class CandidateGenerator(BaseLlmGenerator):
             f"organism {organism_id} implementation stage returned "
             f"(route={route_id})"
         )
+        implementation_text = _structured_response_text(implementation_response)
         llm_request_payload["implementation"] = {
             "route_id": route_id,
             "provider": implementation_response.provider,
@@ -1121,6 +1226,7 @@ class CandidateGenerator(BaseLlmGenerator):
             "provider": implementation_response.provider,
             "provider_model_id": implementation_response.provider_model_id,
             "text": implementation_response.text,
+            **_structured_response_fields(implementation_text),
             "response": implementation_response.raw_response,
             "usage": implementation_response.usage,
             "started_at": implementation_response.started_at,
@@ -1137,11 +1243,12 @@ class CandidateGenerator(BaseLlmGenerator):
 
         try:
             implementation_code = self._extract_implementation_stage_code(
-                implementation_response.text,
+                implementation_text.parse_text,
                 prepared=prepared_implementation,
             )
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
+            llm_response_payload["implementation"]["error_kind"] = "implementation_patch_parse_failed"
             llm_request_payload["implementation"]["status"] = "failed"
             llm_request_payload["implementation"]["error_msg"] = error_msg
             llm_response_payload["implementation"]["status"] = "failed"
@@ -1153,15 +1260,26 @@ class CandidateGenerator(BaseLlmGenerator):
                 f"(route={route_id}): {error_msg}"
             )
             LOGGER.warning(
-                "Implementation extraction failed organism=%s route=%s %s preview=%r error=%s",
+                "Implementation extraction failed organism=%s route=%s expected_mode=%s expected_regions=%s first_non_empty_line=%r %s %s error=%s",
                 organism_id,
                 route_id,
+                (
+                    prepared_implementation.compilation_plan.compilation_mode
+                    if prepared_implementation.compilation_plan is not None
+                    else "legacy_full_source"
+                ),
+                (
+                    list(prepared_implementation.compilation_plan.changed_sections)
+                    if prepared_implementation.compilation_plan is not None
+                    else None
+                ),
+                _first_non_empty_line(implementation_text.parse_text),
                 _response_summary(
                     text=implementation_response.text,
                     raw_response=implementation_response.raw_response,
                     usage=implementation_response.usage,
                 ),
-                _single_line(implementation_response.text),
+                _parse_failure_diagnostics(implementation_text),
                 error_msg,
             )
             raise
@@ -1338,15 +1456,18 @@ class CandidateGenerator(BaseLlmGenerator):
                 request_entry["error_msg"] = error_msg
                 response_entry["status"] = "failed"
                 response_entry["error_msg"] = error_msg
+                response_entry["error_kind"] = "provider_failure"
                 llm_request_payload["design"]["status"] = "failed"
                 llm_request_payload["design"]["error_msg"] = error_msg
                 llm_response_payload["design"]["status"] = "failed"
                 llm_response_payload["design"]["error_msg"] = error_msg
+                llm_response_payload["design"]["error_kind"] = "provider_failure"
                 write_json(llm_request_path, llm_request_payload)
                 write_json(llm_response_path, llm_response_payload)
                 _announce(f"organism {organism_id} design stage failed (route={route_id}): {error_msg}")
                 raise
 
+            design_text = _structured_response_text(design_response)
             request_entry.update(
                 {
                     "provider": design_response.provider,
@@ -1361,6 +1482,7 @@ class CandidateGenerator(BaseLlmGenerator):
                     "provider": design_response.provider,
                     "provider_model_id": design_response.provider_model_id,
                     "text": design_response.text,
+                    **_structured_response_fields(design_text),
                     "response": design_response.raw_response,
                     "usage": design_response.usage,
                     "started_at": design_response.started_at,
@@ -1379,13 +1501,14 @@ class CandidateGenerator(BaseLlmGenerator):
             write_json(llm_response_path, llm_response_payload)
 
             try:
-                parsed_design = parse_llm_response(design_response.text)
+                parsed_design = parse_llm_response(design_text.parse_text)
                 build_genetic_code_from_design_response(
                     parsed_design,
                     expected_core_gene_sections=self.expected_core_gene_sections,
                 )
             except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
+                response_entry["error_kind"] = "design_contract_parse_failed"
                 request_entry["status"] = "failed"
                 request_entry["error_msg"] = error_msg
                 response_entry["status"] = "failed"
@@ -1395,17 +1518,18 @@ class CandidateGenerator(BaseLlmGenerator):
                 write_json(llm_request_path, llm_request_payload)
                 write_json(llm_response_path, llm_response_payload)
                 LOGGER.warning(
-                    "Design parse failed organism=%s route=%s validation_attempt=%d/%d %s preview=%r error=%s",
+                    "Design parse failed organism=%s route=%s validation_attempt=%d/%d expected_contract=%s %s %s error=%s",
                     organism_id,
                     route_id,
                     attempt,
                     max_design_attempts,
+                    "sectioned genetic_code with CORE_GENES, INTERACTION_NOTES, COMPUTE_NOTES, CHANGE_DESCRIPTION",
                     _response_summary(
                         text=design_response.text,
                         raw_response=design_response.raw_response,
                         usage=design_response.usage,
                     ),
-                    _single_line(design_response.text),
+                    _parse_failure_diagnostics(design_text),
                     error_msg,
                 )
                 raise
@@ -1468,11 +1592,13 @@ class CandidateGenerator(BaseLlmGenerator):
                     novelty_request_entry["error_msg"] = error_msg
                     novelty_response_entry["status"] = "failed"
                     novelty_response_entry["error_msg"] = error_msg
+                    novelty_response_entry["error_kind"] = "provider_failure"
                     write_json(llm_request_path, llm_request_payload)
                     write_json(llm_response_path, llm_response_payload)
                     _announce(f"organism {organism_id} novelty_check stage failed (route={route_id}): {error_msg}")
                     raise
 
+                novelty_text = _structured_response_text(novelty_response)
                 novelty_request_entry.update(
                     {
                         "provider": novelty_response.provider,
@@ -1487,6 +1613,7 @@ class CandidateGenerator(BaseLlmGenerator):
                         "provider": novelty_response.provider,
                         "provider_model_id": novelty_response.provider_model_id,
                         "text": novelty_response.text,
+                        **_structured_response_fields(novelty_text),
                         "response": novelty_response.raw_response,
                         "usage": novelty_response.usage,
                         "started_at": novelty_response.started_at,
@@ -1504,11 +1631,12 @@ class CandidateGenerator(BaseLlmGenerator):
 
                 try:
                     novelty_judgment = parse_novelty_judgment(
-                        novelty_response.text,
+                        novelty_text.parse_text,
                         expected_section_names=self.expected_core_gene_sections,
                     )
                 except Exception as exc:  # noqa: BLE001
                     error_msg = f"{type(exc).__name__}: {exc}"
+                    novelty_response_entry["error_kind"] = "novelty_judgment_parse_failed"
                     novelty_request_entry["status"] = "failed"
                     novelty_request_entry["error_msg"] = error_msg
                     novelty_response_entry["status"] = "failed"
@@ -1516,17 +1644,18 @@ class CandidateGenerator(BaseLlmGenerator):
                     write_json(llm_request_path, llm_request_payload)
                     write_json(llm_response_path, llm_response_payload)
                     LOGGER.warning(
-                        "Novelty judgment parse failed organism=%s route=%s design_attempt=%d/%d %s preview=%r error=%s",
+                        "Novelty judgment parse failed organism=%s route=%s design_attempt=%d/%d expected_contract=%s %s %s error=%s",
                         organism_id,
                         route_id,
                         attempt,
                         max_design_attempts,
+                        "NOVELTY_VERDICT, REJECTION_REASON, SECTIONS_AT_ISSUE",
                         _response_summary(
                             text=novelty_response.text,
                             raw_response=novelty_response.raw_response,
                             usage=novelty_response.usage,
                         ),
-                        _single_line(novelty_response.text),
+                        _parse_failure_diagnostics(novelty_text),
                         error_msg,
                     )
                     raise
@@ -1614,11 +1743,13 @@ class CandidateGenerator(BaseLlmGenerator):
                 compatibility_request_entry["error_msg"] = error_msg
                 compatibility_response_entry["status"] = "failed"
                 compatibility_response_entry["error_msg"] = error_msg
+                compatibility_response_entry["error_kind"] = "provider_failure"
                 write_json(llm_request_path, llm_request_payload)
                 write_json(llm_response_path, llm_response_payload)
                 _announce(f"organism {organism_id} compatibility_check stage failed (route={route_id}): {error_msg}")
                 raise
 
+            compatibility_text = _structured_response_text(compatibility_response)
             compatibility_request_entry.update(
                 {
                     "provider": compatibility_response.provider,
@@ -1633,6 +1764,7 @@ class CandidateGenerator(BaseLlmGenerator):
                     "provider": compatibility_response.provider,
                     "provider_model_id": compatibility_response.provider_model_id,
                     "text": compatibility_response.text,
+                    **_structured_response_fields(compatibility_text),
                     "response": compatibility_response.raw_response,
                     "usage": compatibility_response.usage,
                     "started_at": compatibility_response.started_at,
@@ -1650,11 +1782,12 @@ class CandidateGenerator(BaseLlmGenerator):
 
             try:
                 compatibility_judgment = parse_compatibility_judgment(
-                    compatibility_response.text,
+                    compatibility_text.parse_text,
                     expected_section_names=self.expected_core_gene_sections,
                 )
             except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
+                compatibility_response_entry["error_kind"] = "compatibility_judgment_parse_failed"
                 compatibility_request_entry["status"] = "failed"
                 compatibility_request_entry["error_msg"] = error_msg
                 compatibility_response_entry["status"] = "failed"
@@ -1662,17 +1795,20 @@ class CandidateGenerator(BaseLlmGenerator):
                 write_json(llm_request_path, llm_request_payload)
                 write_json(llm_response_path, llm_response_payload)
                 LOGGER.warning(
-                    "Compatibility judgment parse failed organism=%s route=%s design_attempt=%d/%d %s preview=%r error=%s",
+                    "Compatibility judgment parse failed organism=%s route=%s model=%s operator=%s design_attempt=%d/%d expected_contract=%s %s %s error=%s",
                     organism_id,
                     route_id,
+                    compatibility_response.provider_model_id,
+                    operator_kind,
                     attempt,
                     max_design_attempts,
+                    "COMPATIBILITY_VERDICT, REJECTION_REASON",
                     _response_summary(
                         text=compatibility_response.text,
                         raw_response=compatibility_response.raw_response,
                         usage=compatibility_response.usage,
                     ),
-                    _single_line(compatibility_response.text),
+                    _parse_failure_diagnostics(compatibility_text),
                     error_msg,
                 )
                 raise
@@ -1700,6 +1836,16 @@ class CandidateGenerator(BaseLlmGenerator):
             if pipeline_state_callback is not None:
                 pipeline_state_callback("creating")
             rejection_reason = compatibility_judgment.rejection_reason or "Compatibility check rejected the candidate."
+            LOGGER.info(
+                "Compatibility rejected organism=%s route=%s model=%s operator=%s design_attempt=%d/%d reason=%s",
+                organism_id,
+                route_id,
+                compatibility_response.provider_model_id,
+                operator_kind,
+                attempt,
+                max_design_attempts,
+                rejection_reason,
+            )
             _announce(
                 f"organism {organism_id} compatibility_check rejected design attempt "
                 f"{attempt}/{max_design_attempts} (route={route_id}): {rejection_reason}"
@@ -1776,11 +1922,13 @@ class CandidateGenerator(BaseLlmGenerator):
             llm_request_payload["implementation"]["error_msg"] = error_msg
             llm_response_payload["implementation"]["status"] = "failed"
             llm_response_payload["implementation"]["error_msg"] = error_msg
+            llm_response_payload["implementation"]["error_kind"] = "provider_failure"
             write_json(llm_request_path, llm_request_payload)
             write_json(llm_response_path, llm_response_payload)
             _announce(f"organism {organism_id} implementation stage failed (route={route_id}): {error_msg}")
             raise
 
+        implementation_text = _structured_response_text(implementation_response)
         llm_request_payload["implementation"] = {
             "route_id": route_id,
             "provider": implementation_response.provider,
@@ -1806,6 +1954,7 @@ class CandidateGenerator(BaseLlmGenerator):
             "provider": implementation_response.provider,
             "provider_model_id": implementation_response.provider_model_id,
             "text": implementation_response.text,
+            **_structured_response_fields(implementation_text),
             "response": implementation_response.raw_response,
             "usage": implementation_response.usage,
             "started_at": implementation_response.started_at,
@@ -1822,11 +1971,12 @@ class CandidateGenerator(BaseLlmGenerator):
 
         try:
             implementation_code = self._extract_implementation_stage_code(
-                implementation_response.text,
+                implementation_text.parse_text,
                 prepared=prepared_implementation,
             )
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
+            llm_response_payload["implementation"]["error_kind"] = "implementation_patch_parse_failed"
             llm_request_payload["implementation"]["status"] = "failed"
             llm_request_payload["implementation"]["error_msg"] = error_msg
             llm_response_payload["implementation"]["status"] = "failed"
@@ -1838,15 +1988,26 @@ class CandidateGenerator(BaseLlmGenerator):
                 f"(route={route_id}): {error_msg}"
             )
             LOGGER.warning(
-                "Implementation extraction failed organism=%s route=%s %s preview=%r error=%s",
+                "Implementation extraction failed organism=%s route=%s expected_mode=%s expected_regions=%s first_non_empty_line=%r %s %s error=%s",
                 organism_id,
                 route_id,
+                (
+                    prepared_implementation.compilation_plan.compilation_mode
+                    if prepared_implementation.compilation_plan is not None
+                    else "legacy_full_source"
+                ),
+                (
+                    list(prepared_implementation.compilation_plan.changed_sections)
+                    if prepared_implementation.compilation_plan is not None
+                    else None
+                ),
+                _first_non_empty_line(implementation_text.parse_text),
                 _response_summary(
                     text=implementation_response.text,
                     raw_response=implementation_response.raw_response,
                     usage=implementation_response.usage,
                 ),
-                _single_line(implementation_response.text),
+                _parse_failure_diagnostics(implementation_text),
                 error_msg,
             )
             raise
