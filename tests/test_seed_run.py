@@ -109,7 +109,7 @@ PY
                 printf '{"status":"success"}\\n'
                 ;;
               */api/chat)
-                printf '200'
+                printf '%s' "${OLLAMA_CHAT_STATUS:-200}"
                 ;;
               *)
                 echo "unexpected curl url: $url" >&2
@@ -422,6 +422,58 @@ def test_seed_population_shell_wrapper_auto_starts_multiple_local_ollama_servers
     curl_calls = curl_calls_path.read_text(encoding="utf-8").splitlines()
     assert any("http://127.0.0.1:11434/api/pull" in line for line in curl_calls)
     assert any("http://127.0.0.1:11435/api/pull" in line for line in curl_calls)
+
+
+def test_seed_population_shell_wrapper_fails_when_ollama_warmup_never_gets_chat_ready(tmp_path: Path) -> None:
+    script = ROOT / "scripts" / "seed_population.sh"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    calls_path = tmp_path / "python_calls.log"
+    curl_calls_path = tmp_path / "curl_calls.log"
+    ollama_calls_path = tmp_path / "ollama_calls.log"
+    runtime_root = tmp_path / "runtime"
+
+    fake_python = fake_bin / "python"
+    _write_fake_python(
+        fake_python,
+        ollama_routes=[
+            ("ollama_qwen35_122b", "http://127.0.0.1:11434/api", "qwen3.5:122b", "0,1,2"),
+        ],
+    )
+    _write_fake_local_ollama_commands(fake_bin)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["PYTHON_CALLS_FILE"] = str(calls_path)
+    env["CURL_CALLS_FILE"] = str(curl_calls_path)
+    env["OLLAMA_CALLS_FILE"] = str(ollama_calls_path)
+    env["OLLAMA_STATE_DIR"] = str(tmp_path / "ollama_state")
+    env["OLLAMA_MODELS_DIR"] = str(tmp_path / "ollama_models")
+    env["API_PLATFORM_RUNTIME_ROOT"] = str(runtime_root)
+    env["OLLAMA_CHAT_STATUS"] = "503"
+    env["NEW_OPTIMIZER_OLLAMA_WARMUP_MAX_WAIT_SEC"] = "1"
+    env["NEW_OPTIMIZER_OLLAMA_WARMUP_RETRY_SEC"] = "0.01"
+
+    completed = subprocess.run(
+        [str(script), "--config-name", "config_circle_packing_shinka"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        env=env,
+    )
+
+    assert completed.returncode == 1
+    assert "warmup did not get HTTP 200 within 1s" in completed.stderr
+    assert "/api/chat never became ready" in completed.stderr
+    assert "Refusing to proceed into evolution" in completed.stderr
+    assert "failed to warm up Ollama model qwen3.5:122b" in completed.stderr
+    module_calls = [
+        line
+        for line in calls_path.read_text(encoding="utf-8").splitlines()
+        if line.startswith("-m ")
+    ]
+    assert module_calls == []
 
 
 def test_seed_population_shell_wrapper_rejects_conflicting_local_ollama_gpu_assignments(tmp_path: Path) -> None:

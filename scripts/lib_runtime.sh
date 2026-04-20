@@ -958,10 +958,23 @@ _ollama_chat_url() {
 _warmup_ollama_model() {
   local base_url="$1"
   local model="$2"
-  local chat_url max_wait_sec attempt status_code
+  local runtime_root="${3:-}"
+  local chat_url max_wait_sec retry_sleep_sec attempt status_code
+  local log_name stdout_log stderr_log pid_file pid
 
   chat_url="$(_ollama_chat_url "$base_url")"
-  max_wait_sec=300
+  max_wait_sec="${NEW_OPTIMIZER_OLLAMA_WARMUP_MAX_WAIT_SEC:-300}"
+  retry_sleep_sec="${NEW_OPTIMIZER_OLLAMA_WARMUP_RETRY_SEC:-2}"
+  if ! [[ "$max_wait_sec" =~ ^[0-9]+$ ]] || [[ "$max_wait_sec" -lt 1 ]]; then
+    max_wait_sec=300
+  fi
+  if ! [[ "$retry_sleep_sec" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    retry_sleep_sec=2
+  fi
+  log_name="$(_ollama_log_name "$base_url")"
+  stdout_log="${runtime_root}/ollama/serve.${log_name}.stdout.log"
+  stderr_log="${runtime_root}/ollama/serve.${log_name}.stderr.log"
+  pid_file="$(_ollama_pid_file "$runtime_root" "$base_url")"
 
   echo "Warming up model ${model} at ${base_url} (forcing GPU load)..."
   local start_ts
@@ -983,17 +996,42 @@ _warmup_ollama_model() {
     fi
 
     if [[ "$status_code" == "500" || "$status_code" == "503" || "$status_code" == "000" ]]; then
-      sleep 2
+      sleep "$retry_sleep_sec"
       continue
     fi
 
-    echo "  warmup got HTTP ${status_code}, retrying in 2s..."
-    sleep 2
+    echo "  warmup got HTTP ${status_code}, retrying in ${retry_sleep_sec}s..."
+    sleep "$retry_sleep_sec"
   done
 
-  echo "Warning: model ${model} warmup did not get HTTP 200 within ${max_wait_sec}s (last status=${status_code})." >&2
-  echo "  Proceeding anyway — first real requests may be slow or fail if the model is still loading." >&2
-  return 0
+  if [[ "${NEW_OPTIMIZER_ALLOW_OLLAMA_WARMUP_FAILURE:-0}" == "1" ]]; then
+    echo "Warning: model ${model} warmup did not get HTTP 200 within ${max_wait_sec}s (last status=${status_code})." >&2
+    echo "  Continuing because NEW_OPTIMIZER_ALLOW_OLLAMA_WARMUP_FAILURE=1." >&2
+    return 0
+  fi
+
+  echo "Error: model ${model} warmup did not get HTTP 200 within ${max_wait_sec}s (last status=${status_code})." >&2
+  if _ollama_healthcheck "$base_url"; then
+    echo "  Ollama is reachable at ${base_url}, but /api/chat never became ready." >&2
+  else
+    echo "  Ollama is no longer reachable at ${base_url}." >&2
+  fi
+  if [[ -f "$pid_file" ]]; then
+    pid="$(tr -d '[:space:]' < "$pid_file")"
+    if [[ -n "$pid" ]]; then
+      if _pid_exists "$pid"; then
+        echo "  Recorded ollama serve pid=${pid} is still running." >&2
+      else
+        echo "  Recorded ollama serve pid=${pid} has already exited." >&2
+      fi
+    fi
+  fi
+  if [[ -f "$stderr_log" || -f "$stdout_log" ]]; then
+    echo "  Inspect logs: ${stdout_log} and ${stderr_log}" >&2
+  fi
+  echo "  Refusing to proceed into evolution because real organism requests would likely fail immediately." >&2
+  echo "  Override: set NEW_OPTIMIZER_ALLOW_OLLAMA_WARMUP_FAILURE=1 to continue anyway." >&2
+  return 1
 }
 
 ensure_ollama_runtime() {
@@ -1080,6 +1118,9 @@ ensure_ollama_runtime() {
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
     IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
-    _warmup_ollama_model "$base_url" "$model"
+    _warmup_ollama_model "$base_url" "$model" "$OLLAMA_RUNTIME_ROOT" || {
+      echo "Error: failed to warm up Ollama model ${model} for route ${route_id}." >&2
+      return 1
+    }
   done
 }

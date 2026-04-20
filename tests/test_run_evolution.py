@@ -124,7 +124,7 @@ PY
                 printf '{"status":"success"}\\n'
                 ;;
               */api/chat)
-                printf '200'
+                printf '%s' "${OLLAMA_CHAT_STATUS:-200}"
                 ;;
               *)
                 echo "unexpected curl url: $url" >&2
