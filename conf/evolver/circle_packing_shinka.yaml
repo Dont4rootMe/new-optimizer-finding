@@ -4,7 +4,7 @@ max_retries_per_eval: 0
 
 creation:
   max_attempts_to_create_organism: 1
-  max_attempts_to_repair_organism_after_error: 1
+  max_attempts_to_repair_organism_after_error: 3
   max_attempts_to_regenerate_organism_after_novelty_rejection: 1
   max_attempts_to_regenerate_organism_after_compatibility_rejection: 1
   max_parallel_organisms: 20
