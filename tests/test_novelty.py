@@ -54,6 +54,28 @@ def test_parse_section_aware_novelty_judgment_accepts_none_sections() -> None:
     assert judgment.sections_at_issue == ()
 
 
+def test_parse_section_aware_novelty_judgment_accepts_compact_accepted_triplet() -> None:
+    judgment = parse_novelty_judgment(
+        "NOVELTY_ACCEPTED N/A NONE",
+        expected_section_names=SECTION_NAMES,
+    )
+
+    assert judgment.is_accepted is True
+    assert judgment.rejection_reason is None
+    assert judgment.sections_at_issue == ()
+
+
+def test_parse_section_aware_novelty_judgment_accepts_compact_accepted_without_sections_field() -> None:
+    judgment = parse_novelty_judgment(
+        "NOVELTY_ACCEPTED N/A",
+        expected_section_names=SECTION_NAMES,
+    )
+
+    assert judgment.is_accepted is True
+    assert judgment.rejection_reason is None
+    assert judgment.sections_at_issue == ()
+
+
 def test_parse_section_aware_novelty_judgment_rejected_with_one_section() -> None:
     judgment = parse_novelty_judgment(
         (
@@ -86,6 +108,65 @@ def test_parse_section_aware_novelty_judgment_rejected_with_multiple_sections() 
     )
 
     assert judgment.sections_at_issue == ("CONFLICT_MODEL", "REPAIR_POLICY")
+
+
+def test_parse_section_aware_novelty_judgment_accepts_inline_section_headers() -> None:
+    judgment = parse_novelty_judgment(
+        (
+            "## NOVELTY_VERDICT NOVELTY_REJECTED "
+            "## REJECTION_REASON The claimed repair novelty is unsupported. "
+            "## SECTIONS_AT_ISSUE REPAIR_POLICY, CONFLICT_MODEL"
+        ),
+        expected_section_names=SECTION_NAMES,
+    )
+
+    assert judgment.is_accepted is False
+    assert judgment.rejection_reason == "The claimed repair novelty is unsupported."
+    assert judgment.sections_at_issue == ("CONFLICT_MODEL", "REPAIR_POLICY")
+
+
+def test_parse_section_aware_novelty_judgment_accepts_bare_field_names_after_compact_prefix() -> None:
+    judgment = parse_novelty_judgment(
+        (
+            "NOVELTY_ACCEPTED N/A NONE "
+            "NOVELTY_VERDICT NOVELTY_ACCEPTED "
+            "REJECTION_REASON N/A "
+            "SECTIONS_AT_ISSUE NONE"
+        ),
+        expected_section_names=SECTION_NAMES,
+    )
+
+    assert judgment.is_accepted is True
+    assert judgment.rejection_reason is None
+    assert judgment.sections_at_issue == ()
+
+
+def test_parse_section_aware_novelty_judgment_uses_last_compact_verdict_when_output_conflicts() -> None:
+    judgment = parse_novelty_judgment(
+        (
+            "NOVELTY_ACCEPTED N/A NONE "
+            "NOVELTY_REJECTED The child remains substantively identical to the parent."
+        ),
+        expected_section_names=SECTION_NAMES,
+    )
+
+    assert judgment.is_accepted is False
+    assert judgment.rejection_reason == "The child remains substantively identical to the parent."
+    assert judgment.sections_at_issue == ()
+
+
+def test_parse_section_aware_novelty_judgment_accepts_bare_rejection_reason_without_sections() -> None:
+    judgment = parse_novelty_judgment(
+        (
+            "NOVELTY_REJECTED REJECTION_REASON "
+            "The candidate child is essentially identical to the parent."
+        ),
+        expected_section_names=SECTION_NAMES,
+    )
+
+    assert judgment.is_accepted is False
+    assert judgment.rejection_reason == "The candidate child is essentially identical to the parent."
+    assert judgment.sections_at_issue == ()
 
 
 def test_parse_novelty_judgment_requires_rejection_reason() -> None:

@@ -53,6 +53,10 @@ def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
     assert "=== COMPILATION MODE ===" in bundle.implementation_user
     assert "## COMPILATION_MODE" in bundle.implementation_system
     assert "=== ERROR HISTORY ===" in bundle.repair_user
+    assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.repair_user
+    assert "Repair is a full-file rewrite, not a diff." in bundle.repair_system
+    assert "Assign every local variable before first use" in bundle.repair_system
+    assert "Execution-order discipline" in bundle.implementation_system
     assert "child-side draft already selected by evolution" in bundle.mutation_user
     assert "selected recombination is already coherent" in bundle.crossover_user
     assert "valid source of novelty" in bundle.mutation_novelty_user
@@ -104,6 +108,10 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
         assert "## CHANGE_DESCRIPTION" in prompt
     assert "## NOVELTY_VERDICT" in bundle.crossover_novelty_system
     assert "CURRENT IMPLEMENTATION.PY" in bundle.repair_user
+    assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.repair_user
+    assert "Robust circle-packing repair pattern" in bundle.repair_system
+    assert "Execution-order discipline" in bundle.implementation_system
+    assert "feasibility safety pass" in bundle.implementation_user
     assert "keep it essentially intact" in bundle.mutation_system
     assert "keep it mostly intact" in bundle.crossover_user
     assert "valid source of novelty" in bundle.mutation_novelty_user

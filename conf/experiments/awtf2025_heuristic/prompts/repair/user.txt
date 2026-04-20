@@ -31,6 +31,12 @@ Constraints:
 === CURRENT IMPLEMENTATION.PY ===
 {current_implementation}
 
+=== CANONICAL IMPLEMENTATION SCAFFOLD ===
+Use this as the structural reference if the current file is too broken to preserve.
+Return a full Python file, not a region patch.
+
+{implementation_template}
+
 === FAILING PHASE ===
 {phase}
 
@@ -40,5 +46,5 @@ Constraints:
 === ERROR HISTORY ===
 {error_history}
 
-Fix the error while staying faithful to the genetic code.
+Fix the error while staying faithful to the genetic code. If the error history shows syntax, name, parsing, malformed-output, or operation-limit failures, prefer a short stable rewrite over a minimal textual edit.
 Return ONLY the corrected full `implementation.py` text. No markdown fences, no commentary.

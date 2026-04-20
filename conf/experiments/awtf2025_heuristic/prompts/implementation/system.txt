@@ -29,11 +29,26 @@ Patch discipline:
 - no region may contain a hidden full heuristic implementation
 - `OPTIONAL_CODE_SKETCH` may contain localized procedural code, but it must remain local
 
+Execution-order discipline:
+- region bodies execute top-to-bottom in the scaffold order, exactly as written
+- `PARAMETERS` and `OPTIONAL_CODE_SKETCH` occur late in the scaffold, after the main heuristic regions
+- do not put variables in `PARAMETERS` if any earlier region needs them
+- every variable must be assigned before first use in the same region or an earlier region
+- if a numeric constant is needed early, define it early or use a literal; do not reference a later parameter name
+- use short ASCII identifiers only, and avoid names that can be confused with numbers or units
+- keep FULL-mode implementations compact; long search procedures are more likely to be truncated or invalid
+
 All scaffold regions live inside `solve_case(...)`.
 Therefore, code emitted for a region body must be valid as inserted directly between that region's markers in the final file.
 Every non-empty Python code line inside an awtf2025 heuristic region must start with four spaces, because the body is inserted inside `solve_case()`.
 Prefer simple straight-line code over nested helper functions or classes.
 If you define a helper anyway, every helper line must still be indented correctly inside `solve_case()`.
+
+Heuristic validity discipline:
+- validity beats ambition; a legal low-scoring output is better than an invalid one
+- preserve the scaffold's default legal output unless a region has a clearly safe improvement
+- keep operation generation bounded by `K * N * N`
+- do not introduce file I/O, subprocesses, network calls, or random behavior
 
 ## Output format
 

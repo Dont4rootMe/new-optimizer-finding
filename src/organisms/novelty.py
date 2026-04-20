@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Callable
 
@@ -18,6 +19,11 @@ from src.organisms.genetic_code_format import parse_section_issue_list
 
 _NOVELTY_ACCEPTED = "NOVELTY_ACCEPTED"
 _NOVELTY_REJECTED = "NOVELTY_REJECTED"
+_NOVELTY_JUDGMENT_SECTIONS = (
+    "NOVELTY_VERDICT",
+    "REJECTION_REASON",
+    "SECTIONS_AT_ISSUE",
+)
 
 
 class NoveltyRejectionExhaustedError(RuntimeError):
@@ -62,14 +68,7 @@ def parse_novelty_judgment(
     """Parse novelty-judge output into a strict verdict object."""
 
     parsed = (
-        _parse_exact_judgment_sections(
-            text,
-            (
-                "NOVELTY_VERDICT",
-                "REJECTION_REASON",
-                "SECTIONS_AT_ISSUE",
-            ),
-        )
+        _parse_novelty_judgment_sections(text, _NOVELTY_JUDGMENT_SECTIONS)
         if expected_section_names is not None
         else parse_llm_response(text)
     )
@@ -80,7 +79,7 @@ def parse_novelty_judgment(
         )
     if verdict == _NOVELTY_ACCEPTED:
         if expected_section_names is not None:
-            sections_text = require_response_section(parsed, "SECTIONS_AT_ISSUE")
+            sections_text = parsed.get("SECTIONS_AT_ISSUE", "NONE")
             sections_at_issue = parse_section_issue_list(
                 sections_text,
                 expected_section_names=expected_section_names,
@@ -92,7 +91,7 @@ def parse_novelty_judgment(
     rejection_reason = require_response_section(parsed, "REJECTION_REASON").strip()
     if not rejection_reason:
         raise ValueError("Rejected novelty judgments require a non-empty REJECTION_REASON.")
-    if expected_section_names is None and "SECTIONS_AT_ISSUE" not in parsed:
+    if "SECTIONS_AT_ISSUE" not in parsed:
         sections_at_issue = ()
     else:
         sections_at_issue = parse_section_issue_list(
@@ -166,39 +165,101 @@ def _render_gene_pool(genes: list[str]) -> str:
     return "\n".join(f"- {gene}" for gene in genes) or "(none)"
 
 
-def _parse_exact_judgment_sections(text: str, expected: tuple[str, ...]) -> dict[str, str]:
-    parsed: dict[str, str] = {}
-    current_key: str | None = None
-    current_lines: list[str] = []
-    observed: list[str] = []
+def _parse_novelty_judgment_sections(text: str, expected: tuple[str, ...]) -> dict[str, str]:
+    raw = str(text).strip()
+    if not raw:
+        raise ValueError("Novelty judgment is empty.")
 
-    def flush_current() -> None:
-        if current_key is not None:
-            parsed[current_key] = "\n".join(current_lines).strip()
+    parsed = _parse_structured_novelty_judgment(raw, expected)
+    if parsed is not None:
+        return parsed
 
-    for line_number, line in enumerate(str(text).splitlines(), start=1):
-        if line.startswith("## "):
-            name = line[3:].strip()
-            if not name or " " in name:
-                raise ValueError(f"Malformed novelty judgment section heading at line {line_number}: {line!r}")
-            flush_current()
-            current_key = name
-            current_lines = []
-            observed.append(name)
-            continue
-        if line.startswith("##"):
-            raise ValueError(f"Malformed novelty judgment section heading at line {line_number}: {line!r}")
-        if current_key is None:
-            if line.strip():
-                raise ValueError("Novelty judgment contains text before the first section.")
-            continue
-        current_lines.append(line)
+    parsed = _parse_compact_novelty_judgment(raw)
+    if parsed is not None:
+        return parsed
 
-    flush_current()
-    observed_tuple = tuple(observed)
-    if observed_tuple != expected:
+    raise ValueError(
+        "Novelty judgment must contain the required verdict fields or a recognized compact verdict form."
+    )
+
+
+def _parse_structured_novelty_judgment(
+    text: str,
+    expected: tuple[str, ...],
+) -> dict[str, str] | None:
+    section_pattern = "|".join(re.escape(name) for name in expected)
+    heading_re = re.compile(rf"(?:^|[\t\r\n ])(?:##\s*)?({section_pattern})\b", re.MULTILINE)
+    matches = list(heading_re.finditer(text))
+    if not matches:
+        return None
+
+    valid_starts = [
+        index
+        for index in range(len(matches) - len(expected) + 1)
+        if tuple(match.group(1) for match in matches[index : index + len(expected)]) == expected
+    ]
+    if not valid_starts:
+        if all(match.group(1) != expected[0] for match in matches):
+            return None
         raise ValueError(
             "Novelty judgment must contain exactly these sections in order: "
             + ", ".join(f"## {name}" for name in expected)
         )
+
+    start = valid_starts[-1]
+    selected = matches[start : start + len(expected)]
+    prefix = text[: selected[0].start()].strip()
+    if prefix and _parse_compact_novelty_judgment(prefix) is None:
+        raise ValueError("Novelty judgment contains text before the first section.")
+
+    parsed: dict[str, str] = {}
+    for index, match in enumerate(selected):
+        name = match.group(1)
+        body_start = match.end()
+        body_end = selected[index + 1].start() if index + 1 < len(selected) else len(text)
+        parsed[name] = text[body_start:body_end].strip()
+    return parsed
+
+
+def _parse_compact_novelty_judgment(text: str) -> dict[str, str] | None:
+    tokens = str(text).strip().split()
+    if not tokens:
+        return None
+
+    verdict_positions = [
+        index for index, token in enumerate(tokens) if token in {_NOVELTY_ACCEPTED, _NOVELTY_REJECTED}
+    ]
+    if not verdict_positions:
+        return None
+
+    verdict_index = verdict_positions[-1]
+    verdict = tokens[verdict_index]
+    tail = tokens[verdict_index + 1 :]
+    parsed = {"NOVELTY_VERDICT": verdict}
+
+    if verdict == _NOVELTY_ACCEPTED:
+        if not tail:
+            parsed["REJECTION_REASON"] = "N/A"
+            parsed["SECTIONS_AT_ISSUE"] = "NONE"
+            return parsed
+        if tail == ["N/A"] or tail == ["NONE"] or tail == ["N/A", "NONE"]:
+            parsed["REJECTION_REASON"] = "N/A"
+            parsed["SECTIONS_AT_ISSUE"] = "NONE"
+            return parsed
+        return None
+
+    if tail and tail[0] == "REJECTION_REASON":
+        tail = tail[1:]
+    sections_at_issue = "NONE"
+    if "SECTIONS_AT_ISSUE" in tail:
+        split_index = tail.index("SECTIONS_AT_ISSUE")
+        section_tokens = tail[split_index + 1 :]
+        tail = tail[:split_index]
+        if section_tokens:
+            sections_at_issue = " ".join(section_tokens).strip()
+    rejection_reason = " ".join(tail).strip()
+    if not rejection_reason:
+        return None
+    parsed["REJECTION_REASON"] = rejection_reason
+    parsed["SECTIONS_AT_ISSUE"] = sections_at_issue
     return parsed

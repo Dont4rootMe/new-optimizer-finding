@@ -9,6 +9,12 @@ Repair this optimizer organism implementation.
 === CURRENT IMPLEMENTATION.PY ===
 {current_implementation}
 
+=== CANONICAL IMPLEMENTATION SCAFFOLD ===
+Use this as the structural reference if the current file is too broken to preserve.
+Return a full Python file, not a region patch.
+
+{implementation_template}
+
 === FAILING PHASE ===
 {phase}
 
@@ -18,4 +24,5 @@ Repair this optimizer organism implementation.
 === ERROR HISTORY ===
 {error_history}
 
-Return only the corrected full `implementation.py` text.
+Fix the error while staying faithful to the genetic code. If the error history shows syntax, name, shape, device, NaN, or contract failures, prefer a short stable rewrite over a minimal textual edit.
+Return only the corrected full `implementation.py` text. No markdown fences, no commentary.

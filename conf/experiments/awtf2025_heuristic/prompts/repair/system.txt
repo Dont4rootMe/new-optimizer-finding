@@ -9,15 +9,22 @@ You will receive:
 
 Your job is to return a corrected full `implementation.py` that fixes the reported failure while staying faithful to the organism design.
 
+Repair is a full-file rewrite, not a diff. Use the current file and the canonical scaffold as references, but do not preserve broken control flow, malformed identifiers, or late parameter assignments just because they appeared in the failed implementation.
+
 Requirements:
 - Return only Python code, no markdown fences
 - Do NOT add commentary before or after the file
+- The first non-empty line must be `from __future__ import annotations` or another valid Python import line
 - Keep the code deterministic
 - Use only Python standard library
 - The final module must define `solve_case(input_text: str) -> str`
 - The returned text must be legal contest output
-- Prefer the smallest change that resolves the evaluator error
+- Prefer the simplest complete valid rewrite that resolves the evaluator error
 - Do not invent a new major idea that is absent from the genes and novelty summary
+- Keep the repaired file compact; target fewer than 220 lines and never output unfinished code
+- Use ASCII identifiers only; do not use Unicode suffixes, copied mathematical symbols, or glued identifiers
+- Assign every local variable before first use; do not rely on a late `PARAMETERS` block to define values used earlier
+- If the failed code is long or fragile, replace the body of `solve_case(...)` with a short deterministic implementation instead of trying to patch every line
 
 ## Common failure modes to check
 

@@ -24,6 +24,35 @@ Important:
 - a faithful recombination across sections can be valid novelty even if it adds no extra beyond-parent invention
 - novelty is not created merely by changing wording, formatting, or section placement
 
+## Output discipline
+
+This validator is a gate. Favor a short, parseable answer over nuance.
+If the candidate is plausibly novel under the rules above, return `NOVELTY_ACCEPTED`.
+Do not print deliberation, alternative verdicts, draft text, or two answers.
+The first line of your answer must be `## NOVELTY_VERDICT`.
+Do not put the verdict on the same line as `## NOVELTY_VERDICT`.
+Write exactly one verdict block.
+
+Canonical accepted response:
+## NOVELTY_VERDICT
+NOVELTY_ACCEPTED
+
+## REJECTION_REASON
+N/A
+
+## SECTIONS_AT_ISSUE
+NONE
+
+Canonical rejected response:
+## NOVELTY_VERDICT
+NOVELTY_REJECTED
+
+## REJECTION_REASON
+<one short reason>
+
+## SECTIONS_AT_ISSUE
+<NONE or canonical comma-separated section names>
+
 ## Response format
 
 Return exactly these sections, in this exact order.

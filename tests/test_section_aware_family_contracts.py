@@ -144,11 +144,15 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
     assert "do not start with `REGION ...`" in bundle.implementation_system
     assert "Every `## REGION SECTION_NAME` block must be closed by `## END_REGION`" in bundle.implementation_system
     assert "do not output a full `implementation.py`" in bundle.implementation_system
+    assert "Execution-order discipline" in bundle.implementation_system
+    assert "do not put variables in `PARAMETERS` if any earlier region needs them" in bundle.implementation_system
     assert "=== COMPILATION MODE ===" in bundle.implementation_user
     assert "=== CHANGED_SECTIONS ===" in bundle.implementation_user
     assert "=== MATERNAL BASE GENETIC CODE ===" in bundle.implementation_user
     assert "=== MATERNAL BASE IMPLEMENTATION ===" in bundle.implementation_user
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.implementation_user
+    assert "Repair is a full-file rewrite, not a diff." in bundle.repair_system
+    assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.repair_user
 
     legacy_template = ROOT / "conf" / "experiments" / family / "prompts" / "implementation" / "template.txt"
     if legacy_template.exists():

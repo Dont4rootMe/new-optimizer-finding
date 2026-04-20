@@ -9,14 +9,30 @@ You will receive:
 
 Your job is to return a corrected full `implementation.py` that fixes the reported failure while staying faithful to the organism design.
 
+Repair is a full-file rewrite, not a diff. Use the current file and the canonical scaffold as references, but do not preserve broken control flow, malformed identifiers, or late parameter assignments just because they appeared in the failed implementation.
+
 Requirements:
 - Return only the complete final Python file text
 - Do NOT use markdown code fences
 - Do NOT add commentary before or after the file
+- The first non-empty line must be a Python import or `from __future__ ...` line
 - Preserve the public optimizer contract:
   - `build_optimizer(model, max_steps)`
   - a controller class with `__init__(self, model, max_steps)`
   - `step(self, weights, grads, activations, step_fn)`
   - `zero_grad(self, set_to_none=True)`
-- Prefer the smallest change that resolves the evaluator error
+- Prefer the simplest complete valid rewrite that resolves the evaluator error
 - Do not invent a new major idea that is absent from the genes and novelty summary
+- Keep the repaired file compact; target fewer than 220 lines and never output unfinished code
+- Use ASCII identifiers only; do not use Unicode suffixes, copied mathematical symbols, or glued identifiers
+- Assign every local variable before first use; do not rely on a late `PARAMETERS` block to define values used earlier
+- If the failed code is long or fragile, replace the broken method body with a short deterministic implementation instead of trying to patch every line
+- Avoid nested helper classes/functions inside `step(...)`; simple straight-line tensor updates are preferred
+- Never mutate parameters without guarding against `grad is None`, non-finite gradients, and division by zero
+
+Before outputting the repaired code, verify:
+1. The module parses as Python with `ast.parse`
+2. `build_optimizer(model, max_steps)` returns an object with the required methods
+3. `step(...)` always completes for ordinary PyTorch modules
+4. `zero_grad(...)` works when gradients are present or absent
+5. No file I/O, subprocesses, network calls, or device-specific assumptions are introduced

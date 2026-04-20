@@ -367,6 +367,7 @@ def build_repair_prompt(
         organism_genetic_code=format_genetic_code(genetic_code),
         change_description=change_description,
         current_implementation=format_implementation_code(current_implementation),
+        implementation_template=prompts.implementation_template,
         phase=str(phase),
         experiment_name=str(experiment_name),
         error_history=format_error_history(errors),

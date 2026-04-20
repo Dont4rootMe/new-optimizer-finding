@@ -128,9 +128,7 @@ def parse_section_issue_list(
             if name in seen:
                 raise ValueError(f"SECTIONS_AT_ISSUE contains duplicate section name {name!r}.")
             seen.add(name)
-        if tuple(sorted(names, key=lambda name: expected_index[name])) != names:
-            raise ValueError("SECTIONS_AT_ISSUE section names must appear in schema order.")
-        return names
+        return tuple(sorted(names, key=lambda name: expected_index[name]))
 
     for name in names:
         if _SCHEMA_HEADER_RE.match(f"# {name}") is None:

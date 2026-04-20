@@ -265,6 +265,9 @@ def test_circle_packing_validation_prompts_are_section_schema_aware() -> None:
         assert "## REJECTION_REASON" in prompt
         assert "## SECTIONS_AT_ISSUE" in prompt
         assert "Do not propose edits" in prompt
+        assert "The first line of your answer must be `## NOVELTY_VERDICT`." in prompt
+        assert "Do not put the verdict on the same line as `## NOVELTY_VERDICT`." in prompt
+        assert "Canonical accepted response:" in prompt
 
     compatibility_prompts = (
         bundle.compatibility_seed_system,
