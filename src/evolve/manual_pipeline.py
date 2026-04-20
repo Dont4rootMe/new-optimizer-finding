@@ -24,7 +24,11 @@ from src.organisms.compatibility import (
     build_seed_compatibility_prompt,
 )
 from src.organisms.crossbreeding import build_crossover_prompt_from_artifacts, merge_gene_pools
-from src.organisms.implementation_patch import compute_changed_genome_sections
+from src.organisms.implementation_patch import (
+    compute_changed_genome_sections,
+    order_changed_sections_by_region_order,
+    resolve_implementation_region_order,
+)
 from src.organisms.mutation import build_mutation_prompt_from_artifacts, prune_gene_pool
 from src.organisms.novelty import build_crossover_novelty_prompt, build_mutation_novelty_prompt
 from src.organisms.organism import (
@@ -148,6 +152,16 @@ def _resolve_seed(context: ManualPipelineContext, seed: int | None) -> int:
 
 def _expected_sections(context: ManualPipelineContext) -> tuple[str, ...] | None:
     return load_expected_core_gene_sections_from_config(context.cfg)
+
+
+def _implementation_regions(context: ManualPipelineContext) -> tuple[str, ...] | None:
+    expected_sections = _expected_sections(context)
+    if expected_sections is None:
+        return None
+    template = context.prompt_bundle.implementation_template
+    if not template:
+        return None
+    return resolve_implementation_region_order(template, expected_section_names=expected_sections)
 
 
 def _parse_design_text(context: ManualPipelineContext, design_text: str) -> dict[str, str]:
@@ -336,6 +350,7 @@ def build_manual_implementation_prompts(
     """Build implementation-stage prompts from raw `genetic_code.md` text."""
 
     expected_sections = _expected_sections(context)
+    implementation_regions = _implementation_regions(context)
     genetic_code = parse_genetic_code_text(
         organism_genetic_code_text,
         expected_section_names=expected_sections,
@@ -344,19 +359,23 @@ def build_manual_implementation_prompts(
     if normalized_mode not in {"FULL", "PATCH"}:
         raise ValueError("compilation_mode must be FULL or PATCH.")
     if normalized_mode == "FULL":
-        section_tuple = tuple(expected_sections or ())
+        section_tuple = tuple(implementation_regions or ())
         base_genetic_code = "NONE"
         base_implementation = "NONE"
     else:
         if not base_parent_genetic_code_text or not base_parent_implementation_text:
             raise ValueError("PATCH manual implementation prompts require maternal base genetic code and implementation.")
         if changed_sections is None:
-            if expected_sections is None:
+            if expected_sections is None or implementation_regions is None:
                 raise ValueError("PATCH manual implementation prompts require schema-derived section names.")
-            section_tuple = compute_changed_genome_sections(
+            changed_genome_sections = compute_changed_genome_sections(
                 base_parent_genetic_code_text,
                 organism_genetic_code_text,
                 expected_section_names=expected_sections,
+            )
+            section_tuple = order_changed_sections_by_region_order(
+                changed_genome_sections,
+                region_order=implementation_regions,
             )
         else:
             section_tuple = tuple(str(section).strip() for section in changed_sections if str(section).strip())

@@ -2,9 +2,9 @@ You are creating one crossover child from two parent organisms.
 
 ## Crossover philosophy
 
-Crossover takes the higher-scoring parent's core structure and enriches it with one or two complementary ideas from the secondary parent.
+Crossover takes the higher-scoring primary parent's core structure and enriches it with one coherent complementary module from the secondary parent.
 It is NOT a 50/50 merge. The primary parent's algorithmic paradigm should dominate.
-The secondary parent contributes a specific refinement, not a competing paradigm.
+The secondary parent may contribute a coherent module that spans multiple sections when its parts are causally linked.
 
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
 The section schema is authoritative. Use each section only for the kind of content its description allows.
@@ -17,10 +17,12 @@ The first parent is primary. The second parent is secondary.
 
 Do:
 - treat the child draft as the main object
-- if the selected child draft already forms a coherent sectioned recombination, you may keep it largely intact and only clarify or lightly refine it
-- keep the primary parent's core algorithmic structure intact
-- incorporate at most one or two specific ideas from the secondary parent that complement, not replace, the primary structure
-- prefer section-local recombination: preserve the child's existing section structure and borrow from the secondary parent only where needed
+- if the selected child draft already forms a coherent sectioned recombination, sharpen it into a stronger score-bearing organism instead of collapsing toward one parent
+- keep the primary parent's macro-structure and core algorithmic paradigm intact
+- let the secondary parent contribute one coherent complementary module, not a decorative sentence or isolated token borrowing
+- borrow from the secondary parent in the smallest coherent module that preserves causal meaning
+- if a transferred mechanism requires coordinated changes across multiple sections, perform those changes together
+- ensure the imported secondary module plausibly improves score when combined with the primary structure
 - compare parent scores in lineage to judge which parent's ideas contributed more value — lean toward preserving genes from the higher-scoring parent
 - keep genes atomic within each section
 - if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
@@ -33,7 +35,7 @@ Do not:
 - collapse the child back into one parent because that parent implementation looks more complete
 - let either parent implementation override the selected child draft
 - turn the response into a direct solved arrangement instead of a sectioned gene-level design
-- spread the secondary parent's contribution across many sections when one or two localized section-level borrowings are sufficient
+- force a coherent secondary module into isolated section fragments that lose causal meaning
 - put a full end-to-end implementation in any genome section
 - put code in `CHANGE_DESCRIPTION`
 

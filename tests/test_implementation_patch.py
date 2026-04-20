@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = (ROOT / "conf" / "experiments" / "circle_packing_shinka" / "prompts" / "shared" / "template.txt").read_text(
     encoding="utf-8"
 )
-REGIONS = (
+GENOME_SECTIONS = (
     "INIT_GEOMETRY",
     "RADIUS_POLICY",
     "EXPANSION_POLICY",
@@ -27,6 +27,16 @@ REGIONS = (
     "REPAIR_POLICY",
     "CONTROL_POLICY",
     "PARAMETERS",
+    "OPTIONAL_CODE_SKETCH",
+)
+REGIONS = (
+    "PARAMETERS",
+    "INIT_GEOMETRY",
+    "RADIUS_POLICY",
+    "CONFLICT_MODEL",
+    "REPAIR_POLICY",
+    "EXPANSION_POLICY",
+    "CONTROL_POLICY",
     "OPTIONAL_CODE_SKETCH",
 )
 OPTIMIZER_TEMPLATE = (
@@ -70,7 +80,7 @@ def _genetic_code(**overrides: str) -> str:
         "OPTIONAL_CODE_SKETCH": "None.",
     }
     entries.update(overrides)
-    core = "\n\n".join(f"### {name}\n- {entries[name]}" for name in REGIONS)
+    core = "\n\n".join(f"### {name}\n- {entries[name]}" for name in GENOME_SECTIONS)
     return (
         "## CORE_GENES\n"
         f"{core}\n\n"
@@ -87,7 +97,7 @@ def test_parse_implementation_scaffold_accepts_canonical_template() -> None:
     regions = parse_implementation_scaffold(TEMPLATE, expected_region_names=REGIONS)
 
     assert tuple(region.name for region in regions) == REGIONS
-    assert regions[0].start_marker == "# === REGION: INIT_GEOMETRY ==="
+    assert regions[0].start_marker == "# === REGION: PARAMETERS ==="
     assert regions[-1].end_marker == "# === END_REGION: OPTIONAL_CODE_SKETCH ==="
 
 
@@ -167,14 +177,14 @@ def test_extract_region_bodies_rejects_missing_marker() -> None:
 def test_compute_changed_genome_sections_identical_genomes_yields_empty_tuple() -> None:
     genome = _genetic_code()
 
-    assert compute_changed_genome_sections(genome, genome, expected_section_names=REGIONS) == ()
+    assert compute_changed_genome_sections(genome, genome, expected_section_names=GENOME_SECTIONS) == ()
 
 
 def test_compute_changed_genome_sections_single_change() -> None:
     changed = compute_changed_genome_sections(
         _genetic_code(),
         _genetic_code(RADIUS_POLICY="Use non-uniform role-dependent radii."),
-        expected_section_names=REGIONS,
+        expected_section_names=GENOME_SECTIONS,
     )
 
     assert changed == ("RADIUS_POLICY",)
@@ -184,7 +194,7 @@ def test_compute_changed_genome_sections_multiple_changes_preserve_order() -> No
     changed = compute_changed_genome_sections(
         _genetic_code(),
         _genetic_code(REPAIR_POLICY="Use shrinking repair.", PARAMETERS="Use radius 0.035."),
-        expected_section_names=REGIONS,
+        expected_section_names=GENOME_SECTIONS,
     )
 
     assert changed == ("REPAIR_POLICY", "PARAMETERS")
@@ -194,14 +204,14 @@ def test_compute_changed_genome_sections_normalizes_trailing_whitespace_only() -
     maternal = _genetic_code(REPAIR_POLICY="Use deterministic local shifts.")
     child = _genetic_code(REPAIR_POLICY="Use deterministic local shifts.   ")
 
-    assert compute_changed_genome_sections(maternal, child, expected_section_names=REGIONS) == ()
+    assert compute_changed_genome_sections(maternal, child, expected_section_names=GENOME_SECTIONS) == ()
 
 
 def test_compute_changed_genome_sections_does_not_use_fuzzy_equivalence() -> None:
     changed = compute_changed_genome_sections(
         _genetic_code(INIT_GEOMETRY="Use a triangular lattice."),
         _genetic_code(INIT_GEOMETRY="Use a triangular grid."),
-        expected_section_names=REGIONS,
+        expected_section_names=GENOME_SECTIONS,
     )
 
     assert changed == ("INIT_GEOMETRY",)
@@ -211,7 +221,7 @@ def test_compute_changed_genome_sections_is_relative_to_maternal_base() -> None:
     mother = _genetic_code(RADIUS_POLICY="Use uniform radii.")
     child = _genetic_code(RADIUS_POLICY="Use father-style non-uniform radii.")
 
-    assert compute_changed_genome_sections(mother, child, expected_section_names=REGIONS) == ("RADIUS_POLICY",)
+    assert compute_changed_genome_sections(mother, child, expected_section_names=GENOME_SECTIONS) == ("RADIUS_POLICY",)
 
 
 def test_parse_implementation_patch_response_accepts_full_response() -> None:

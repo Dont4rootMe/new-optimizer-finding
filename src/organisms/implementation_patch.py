@@ -68,6 +68,36 @@ def parse_implementation_scaffold(
     )
 
 
+def resolve_implementation_region_order(
+    text: str,
+    *,
+    expected_section_names: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return scaffold region order while validating it matches the expected section set."""
+
+    spans = _parse_region_spans(text)
+    actual_names = tuple(span.name for span in spans)
+    _validate_region_name_set(actual_names, expected_section_names)
+    return actual_names
+
+
+def order_changed_sections_by_region_order(
+    changed_sections: tuple[str, ...],
+    *,
+    region_order: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Reorder changed section names to match scaffold region order."""
+
+    changed_set = set(changed_sections)
+    unknown = sorted(changed_set.difference(region_order))
+    if unknown:
+        raise ValueError(
+            "Changed sections contain names not present in the implementation scaffold: "
+            + ", ".join(unknown)
+        )
+    return tuple(name for name in region_order if name in changed_set)
+
+
 def extract_region_bodies_from_source(
     source_text: str,
     *,
@@ -252,15 +282,35 @@ def _parse_region_spans(text: str) -> tuple[_RegionSpan, ...]:
 
 def _validate_region_order(spans: tuple[_RegionSpan, ...], expected_region_names: tuple[str, ...]) -> None:
     actual_names = tuple(span.name for span in spans)
-    if len(set(actual_names)) != len(actual_names):
-        duplicates = sorted({name for name in actual_names if actual_names.count(name) > 1})
-        raise ValueError(f"Duplicate implementation region(s): {', '.join(duplicates)}.")
+    _validate_region_name_set(actual_names, expected_region_names)
     if actual_names != expected_region_names:
         expected = ", ".join(expected_region_names)
         actual = ", ".join(actual_names)
         raise ValueError(
             "Implementation scaffold regions must match the expected regions exactly "
             f"in name, count, and order; expected [{expected}], got [{actual}]."
+        )
+
+
+def _validate_region_name_set(actual_names: tuple[str, ...], expected_section_names: tuple[str, ...]) -> None:
+    if len(set(actual_names)) != len(actual_names):
+        duplicates = sorted({name for name in actual_names if actual_names.count(name) > 1})
+        raise ValueError(f"Duplicate implementation region(s): {', '.join(duplicates)}.")
+
+    actual_set = set(actual_names)
+    expected_set = set(expected_section_names)
+    if actual_set != expected_set or len(actual_names) != len(expected_section_names):
+        missing = sorted(expected_set.difference(actual_set))
+        unexpected = sorted(actual_set.difference(expected_set))
+        details: list[str] = []
+        if missing:
+            details.append("missing: " + ", ".join(missing))
+        if unexpected:
+            details.append("unexpected: " + ", ".join(unexpected))
+        detail_text = "; ".join(details) if details else "region name mismatch"
+        raise ValueError(
+            "Implementation scaffold regions must match the expected canonical section names exactly; "
+            + detail_text
         )
 
 

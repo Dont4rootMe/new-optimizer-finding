@@ -27,7 +27,7 @@ from src.organisms.implementation_patch import (
 from src.organisms.novelty import NoveltyCheckContext, NoveltyRejectionExhaustedError
 from src.organisms.organism import save_organism_artifacts
 
-CIRCLE_REGIONS = (
+CIRCLE_CORE_SECTIONS = (
     "INIT_GEOMETRY",
     "RADIUS_POLICY",
     "EXPANSION_POLICY",
@@ -35,6 +35,16 @@ CIRCLE_REGIONS = (
     "REPAIR_POLICY",
     "CONTROL_POLICY",
     "PARAMETERS",
+    "OPTIONAL_CODE_SKETCH",
+)
+CIRCLE_IMPLEMENTATION_REGIONS = (
+    "PARAMETERS",
+    "INIT_GEOMETRY",
+    "RADIUS_POLICY",
+    "CONFLICT_MODEL",
+    "REPAIR_POLICY",
+    "EXPANSION_POLICY",
+    "CONTROL_POLICY",
     "OPTIONAL_CODE_SKETCH",
 )
 OPTIMIZER_REGIONS = (
@@ -146,7 +156,7 @@ def _circle_genetic_code(*, radius_policy: str = "Use uniform radii.") -> dict[s
     return {
         "core_gene_sections": [
             {"name": name, "entries": [entries[name]]}
-            for name in CIRCLE_REGIONS
+            for name in CIRCLE_CORE_SECTIONS
         ],
         "interaction_notes": "Sections are coherent.",
         "compute_notes": "Deterministic constructive code.",
@@ -202,9 +212,9 @@ def _circle_base_source() -> str:
         scaffold_text=_circle_scaffold_template(),
         patch=ParsedImplementationPatch(
             compilation_mode="FULL",
-            region_bodies=tuple((region, _circle_region_body(region)) for region in CIRCLE_REGIONS),
+            region_bodies=tuple((region, _circle_region_body(region)) for region in CIRCLE_IMPLEMENTATION_REGIONS),
         ),
-        expected_region_names=CIRCLE_REGIONS,
+        expected_region_names=CIRCLE_IMPLEMENTATION_REGIONS,
     )
 
 
@@ -695,9 +705,9 @@ def test_circle_seed_implementation_stage_uses_full_patch_compilation(
             return _llm_response(request.stage, _circle_design_text())
         assert request.stage == "implementation"
         assert "=== COMPILATION MODE ===\nFULL" in request.user_prompt
-        assert "=== CHANGED_SECTIONS ===\n" + "\n".join(CIRCLE_REGIONS) in request.user_prompt
+        assert "=== CHANGED_SECTIONS ===\n" + "\n".join(CIRCLE_IMPLEMENTATION_REGIONS) in request.user_prompt
         assert "=== MATERNAL BASE GENETIC CODE ===\nNONE" in request.user_prompt
-        return _llm_response(request.stage, _circle_patch_response("FULL", CIRCLE_REGIONS))
+        return _llm_response(request.stage, _circle_patch_response("FULL", CIRCLE_IMPLEMENTATION_REGIONS))
 
     monkeypatch.setattr(generator.registry, "generate", fake_generate)
     try:
@@ -718,7 +728,7 @@ def test_circle_seed_implementation_stage_uses_full_patch_compilation(
     llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
     llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
     assert llm_request["implementation"]["compilation_mode"] == "FULL"
-    assert llm_request["implementation"]["changed_sections"] == list(CIRCLE_REGIONS)
+    assert llm_request["implementation"]["changed_sections"] == list(CIRCLE_IMPLEMENTATION_REGIONS)
     assert llm_response["implementation"]["text"] == result.implementation_code
 
 
@@ -757,12 +767,17 @@ def test_circle_mutation_implementation_stage_uses_patch_and_preserves_maternal_
     finally:
         generator.close()
 
-    base_bodies = dict(extract_region_bodies_from_source(base_source, expected_region_names=CIRCLE_REGIONS))
+    base_bodies = dict(
+        extract_region_bodies_from_source(base_source, expected_region_names=CIRCLE_IMPLEMENTATION_REGIONS)
+    )
     final_bodies = dict(
-        extract_region_bodies_from_source(result.implementation_code, expected_region_names=CIRCLE_REGIONS)
+        extract_region_bodies_from_source(
+            result.implementation_code,
+            expected_region_names=CIRCLE_IMPLEMENTATION_REGIONS,
+        )
     )
     assert final_bodies["RADIUS_POLICY"] == _circle_region_body("RADIUS_POLICY", patched=True)
-    for region in CIRCLE_REGIONS:
+    for region in CIRCLE_IMPLEMENTATION_REGIONS:
         if region != "RADIUS_POLICY":
             assert final_bodies[region] == base_bodies[region]
     llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
@@ -921,7 +936,7 @@ def test_section_patch_extraction_returns_assembled_source_without_stripping(tmp
             compilation_mode="PATCH",
             region_bodies=(("RADIUS_POLICY", _circle_region_body("RADIUS_POLICY", patched=True)),),
         ),
-        expected_region_names=CIRCLE_REGIONS,
+        expected_region_names=CIRCLE_IMPLEMENTATION_REGIONS,
         base_source_text=base_source,
     )
     assert final_source.startswith("\n")

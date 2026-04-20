@@ -1,4 +1,4 @@
-You are repairing an existing circle-packing organism by rewriting its full `implementation.py`.
+You are repairing an existing circle-packing organism by returning a corrected full `implementation.py`.
 
 You will receive:
 - the organism's canonical genetic code
@@ -9,7 +9,9 @@ You will receive:
 
 Your job is to return a corrected full `implementation.py` that fixes the reported failure while staying faithful to the organism design.
 
-Repair is a full-file rewrite, not a diff. Use the current file and the canonical scaffold as references, but do not preserve broken control flow, malformed identifiers, or late parameter assignments just because they appeared in the failed implementation.
+Use the current file and the canonical scaffold as structural references.
+Repair the smallest affected region set necessary to fix the reported failure while preserving the organism's score-bearing mechanism.
+Prefer to preserve unaffected scaffold regions byte-for-byte when practical; do not collapse the organism into a generic safe packing unless the implicated regions are unsalvageable and the genes truly support that fallback.
 
 Requirements:
 - Return only Python code, no markdown fences
@@ -20,12 +22,15 @@ Requirements:
 - The final module must define `run_packing()`
 - `run_packing()` must return `(centers, radii, reported_sum)`
 - `reported_sum` must equal `np.sum(radii)`
-- Prefer the simplest complete valid rewrite that resolves the evaluator error
+- Prefer the simplest repair that keeps the organism faithful, valid, and score-seeking
 - Do not invent a new major idea that is absent from the genes and novelty summary
-- Keep the repaired file compact; target fewer than 180 lines and never output unfinished code
+- Keep the repaired file compact; target fewer than 220 lines and never output unfinished code
 - Use ASCII identifiers only; do not use Unicode suffixes, copied mathematical symbols, or glued identifiers such as `2deg`
-- Assign every local variable before first use; do not rely on a late `PARAMETERS` block to define values used earlier
-- If the failed code is long or fragile, replace the body of `run_packing()` with a short deterministic implementation instead of trying to patch every line
+- Assign every local variable before first use; use early parameter setup when shared values are needed
+- Focus first on the region or regions implicated by the error
+- Prefer repairing `CONTROL_POLICY`, `REPAIR_POLICY`, `CONFLICT_MODEL`, or `OPTIONAL_CODE_SKETCH` before rewriting geometry or radius logic
+- Preserve inherited behavior outside the affected regions whenever possible
+- Generic safety-only fallback is a last resort, not the default
 
 ## Common failure modes to check
 
@@ -39,12 +44,11 @@ Before outputting the repaired code, verify:
 7. No division by zero or NaN values can occur
 8. The code completes within 120 seconds
 
-## Robust circle-packing repair pattern
+## Region-preserving repair strategy
 
-For shape, outside-square, overlap, or name/syntax-related failures, a safe repair is better than preserving a clever broken search. It is acceptable to:
-- construct exactly 26 deterministic candidate centers
-- coerce centers to shape `(26, 2)` and finite float values
-- keep centers away from the boundary
-- compute each radius from available boundary distance and half of every pairwise center distance
-- shrink radii by a small safety factor before returning
-- compute `reported_sum = float(np.sum(radii))` only after the final radii are set
+When repair is needed:
+- identify the smallest affected region set consistent with the error history
+- fix local syntax, name, control-flow, or contract issues in place when possible
+- for shape, outside-square, overlap, or feasibility failures, prefer local corrections that preserve ambitious radii and geometry before shrinking
+- if shrinking or simplification is necessary, limit it to the minimal local change needed for validity
+- only replace the overall algorithm with a short generic packing if no local repair can make the current organism viable

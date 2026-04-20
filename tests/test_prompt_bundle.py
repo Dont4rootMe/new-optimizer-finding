@@ -109,14 +109,17 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
     assert "## NOVELTY_VERDICT" in bundle.crossover_novelty_system
     assert "CURRENT IMPLEMENTATION.PY" in bundle.repair_user
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.repair_user
-    assert "Robust circle-packing repair pattern" in bundle.repair_system
+    assert "Region-preserving repair strategy" in bundle.repair_system
     assert "Execution-order discipline" in bundle.implementation_system
-    assert "feasibility safety pass" in bundle.implementation_user
-    assert "keep it essentially intact" in bundle.mutation_system
-    assert "keep it mostly intact" in bundle.crossover_user
+    assert "Validity preservation note" in bundle.implementation_user
+    assert "smallest coherent module" in bundle.mutation_system
+    assert "primary-parent-dominant organism" in bundle.crossover_user
     assert "valid source of novelty" in bundle.mutation_novelty_user
     assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
     assert "## COMPATIBILITY_VERDICT" in bundle.compatibility_seed_system
+    assert "validity beats score" not in bundle.implementation_system
+    assert "feasibility safety pass" not in bundle.implementation_user
+    assert "Repair is a full-file rewrite, not a diff." not in bundle.repair_system
 
 
 def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:

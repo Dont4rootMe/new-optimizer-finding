@@ -47,8 +47,10 @@ from src.organisms.implementation_patch import (
     ImplementationCompilationPlan,
     assemble_implementation_from_patch,
     compute_changed_genome_sections,
+    order_changed_sections_by_region_order,
     parse_implementation_scaffold,
     parse_implementation_patch_response,
+    resolve_implementation_region_order,
 )
 from src.organisms.novelty import (
     NoveltyCheckContext,
@@ -220,6 +222,23 @@ class CandidateGenerator(BaseLlmGenerator):
         super().__init__(cfg, registry)
         self.prompt_bundle = load_prompt_bundle(cfg)
         self.expected_core_gene_sections = load_expected_core_gene_sections_from_config(cfg)
+        self._implementation_region_order_error: ValueError | None = None
+        self.expected_implementation_regions = self._load_expected_implementation_regions()
+
+    def _load_expected_implementation_regions(self) -> tuple[str, ...] | None:
+        expected_sections = self.expected_core_gene_sections
+        if not expected_sections:
+            return None
+        if not self.prompt_bundle.implementation_template:
+            return None
+        try:
+            return resolve_implementation_region_order(
+                self.prompt_bundle.implementation_template,
+                expected_section_names=expected_sections,
+            )
+        except ValueError as exc:
+            self._implementation_region_order_error = exc
+            return None
 
     def close(self) -> None:
         if self._owns_llm_registry:
@@ -336,6 +355,13 @@ class CandidateGenerator(BaseLlmGenerator):
             return False
         if not self.expected_core_gene_sections:
             raise ValueError("Section-aware implementation compilation requires a parseable genome schema.")
+        if self._implementation_region_order_error is not None:
+            raise ValueError(
+                "Section-aware implementation scaffold is invalid: "
+                f"{self._implementation_region_order_error}"
+            ) from self._implementation_region_order_error
+        if not self.expected_implementation_regions:
+            raise ValueError("Section-aware implementation compilation requires a parseable implementation scaffold.")
         if "## COMPILATION_MODE" not in self.prompt_bundle.implementation_system:
             raise ValueError(
                 "Section-aware implementation compilation requires an implementation system prompt "
@@ -344,7 +370,7 @@ class CandidateGenerator(BaseLlmGenerator):
         try:
             parse_implementation_scaffold(
                 self.prompt_bundle.implementation_template,
-                expected_region_names=self.expected_core_gene_sections,
+                expected_region_names=self.expected_implementation_regions,
             )
         except ValueError as exc:
             raise ValueError(f"Section-aware implementation scaffold is invalid: {exc}") from exc
@@ -370,7 +396,8 @@ class CandidateGenerator(BaseLlmGenerator):
             )
 
         expected_sections = self.expected_core_gene_sections
-        if expected_sections is None:
+        implementation_regions = self.expected_implementation_regions
+        if expected_sections is None or implementation_regions is None:
             raise ValueError("Section patch compilation requires expected CORE_GENES sections.")
 
         child_genetic_code = build_genetic_code_from_design_response(
@@ -384,7 +411,7 @@ class CandidateGenerator(BaseLlmGenerator):
 
         if implementation_base_parent is None:
             compilation_mode = "FULL"
-            changed_sections = expected_sections
+            changed_sections = implementation_regions
             base_parent_genetic_code = "NONE"
             base_parent_implementation = "NONE"
             base_source_text = None
@@ -400,10 +427,14 @@ class CandidateGenerator(BaseLlmGenerator):
             base_parent_genetic_code = base_genetic_code_path.read_text(encoding="utf-8")
             base_source_text = base_implementation_path.read_text(encoding="utf-8")
             base_parent_implementation = base_source_text
-            changed_sections = compute_changed_genome_sections(
+            changed_genome_sections = compute_changed_genome_sections(
                 base_parent_genetic_code,
                 child_genetic_code_text,
                 expected_section_names=expected_sections,
+            )
+            changed_sections = order_changed_sections_by_region_order(
+                changed_genome_sections,
+                region_order=implementation_regions,
             )
             maternal_base_required = True
 
@@ -436,7 +467,7 @@ class CandidateGenerator(BaseLlmGenerator):
         if prepared.compilation_plan is None:
             return self._extract_python(response_text)
 
-        expected_sections = self.expected_core_gene_sections
+        expected_sections = self.expected_implementation_regions
         if expected_sections is None:
             raise ValueError("Section patch compilation requires expected CORE_GENES sections.")
         plan = prepared.compilation_plan

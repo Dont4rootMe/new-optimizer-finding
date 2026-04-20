@@ -35,6 +35,16 @@ SECTION_HEADINGS = (
     "### PARAMETERS",
     "### OPTIONAL_CODE_SKETCH",
 )
+IMPLEMENTATION_REGION_ORDER = (
+    "PARAMETERS",
+    "INIT_GEOMETRY",
+    "RADIUS_POLICY",
+    "CONFLICT_MODEL",
+    "REPAIR_POLICY",
+    "EXPANSION_POLICY",
+    "CONTROL_POLICY",
+    "OPTIONAL_CODE_SKETCH",
+)
 
 
 def _sectioned_core_genes_body() -> str:
@@ -113,15 +123,16 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     bundle = load_prompt_bundle(cfg)
 
     assert "primary object is the organism's genetic code" in bundle.project_context
+    assert "maximize score subject to validity" in bundle.project_context
     assert "# INIT_GEOMETRY" in bundle.genome_schema
     assert "do not invent new major ideas at implementation time" in bundle.implementation_system
     assert "child genetic code draft" in bundle.mutation_system.lower()
     assert "child draft" in bundle.crossover_system.lower()
-    assert "keep it essentially intact" in bundle.mutation_system
+    assert "smallest coherent module" in bundle.mutation_system
     assert "valid source of novelty" in bundle.mutation_novelty_user
     assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
     assert "## COMPATIBILITY_VERDICT" in bundle.compatibility_seed_system
-    assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system
+    assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system.lower()
 
 
 def test_circle_packing_generation_prompt_files_are_section_schema_aware() -> None:
@@ -299,8 +310,8 @@ def test_circle_packing_validation_prompts_are_section_schema_aware() -> None:
         assert "Canonical accepted response:" in prompt
         assert "Do not propose edits" in prompt
         assert "full end-to-end implementation" in prompt or "full algorithm implementation" in prompt
-    assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system
-    assert "compatibility is not the same as novelty" in bundle.compatibility_crossover_system
+    assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system.lower()
+    assert "compatibility is not the same as novelty" in bundle.compatibility_crossover_system.lower()
     assert "{candidate_genetic_code}" in bundle.compatibility_seed_user
     assert "{candidate_change_description}" in bundle.compatibility_seed_user
     for placeholder in (
@@ -352,6 +363,12 @@ def test_circle_packing_implementation_prompt_uses_patch_artifact_contract() -> 
         assert f"## REGION {region}" in bundle.implementation_system
         assert f"# === REGION: {region} ===" in bundle.implementation_template
         assert f"# === END_REGION: {region} ===" in bundle.implementation_template
+    positions = [bundle.implementation_template.index(f"# === REGION: {region} ===") for region in IMPLEMENTATION_REGION_ORDER]
+    assert positions == sorted(positions)
+    assert "validity beats score" not in combined_prompt
+    assert "feasibility safety pass" not in combined_prompt
+    assert "final safety pass" not in combined_prompt
+    assert "PARAMETERS occurs late" not in combined_prompt
 
 
 def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> None:
@@ -374,7 +391,8 @@ def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) 
     assert "=== EXCLUDED IDEAS ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
     assert "REFERENCE ONLY" in user_prompt
-    assert "keep it mostly intact rather than rebuilding the parent" in user_prompt
+    assert "coherent score-seeking hypothesis change" in user_prompt
+    assert "Do not preserve the child draft merely because it is coherent" in user_prompt
     assert "IMPLEMENTATION CODE" not in user_prompt
     assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
         "=== PARENT GENETIC CODE (REFERENCE ONLY) ==="
@@ -401,11 +419,39 @@ def test_circle_packing_crossover_prompt_prioritizes_child_draft(tmp_path: Path)
     assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
     assert "REFERENCE ONLY" in user_prompt
-    assert "keep it mostly intact instead of rebuilding one parent" in user_prompt
+    assert "primary-parent-dominant organism" in user_prompt
+    assert "Do not preserve a weak recombination merely because it is coherent." in user_prompt
     assert "IMPLEMENTATION CODE" not in user_prompt
     assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
         "=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ==="
     )
+
+
+def test_circle_packing_prompt_surface_removes_safe_local_search_bias() -> None:
+    bundle = load_prompt_bundle(_compose_cfg())
+    combined = "\n".join(
+        (
+            bundle.mutation_system,
+            bundle.crossover_system,
+            bundle.compatibility_seed_system,
+            bundle.compatibility_mutation_system,
+            bundle.compatibility_crossover_system,
+            bundle.implementation_system,
+            bundle.implementation_user,
+            bundle.repair_system,
+            bundle.repair_user,
+        )
+    )
+
+    assert "ONE targeted improvement" not in combined
+    assert "smallest number of sections" not in combined
+    assert "one or two specific ideas" not in combined
+    assert "Accept unless you find a blocking contradiction" not in combined
+    assert "validity beats score" not in combined
+    assert "feasibility safety pass" not in combined
+    assert "Repair is a full-file rewrite, not a diff." not in combined
+    assert "maximize score subject to hard validity constraints" in bundle.implementation_system
+    assert "Repair the smallest affected region set necessary" in bundle.repair_system
 
 
 def test_circle_packing_mutation_prompt_renders_novelty_feedback(tmp_path: Path) -> None:

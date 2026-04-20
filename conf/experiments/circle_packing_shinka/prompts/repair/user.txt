@@ -41,5 +41,7 @@ Return a full Python file, not a region patch.
 === ERROR HISTORY ===
 {error_history}
 
-Fix the error while staying faithful to the genetic code. If the error history shows syntax, name, shape, outside-square, or overlap failures, prefer a short stable rewrite over a minimal textual edit.
+Fix the error while staying faithful to the genetic code.
+Repair the smallest affected region set consistent with the error history and preserve the current algorithm outside those regions whenever possible.
+Do not replace the whole algorithm with a short generic packing unless no local repair is viable.
 Return ONLY the corrected full `implementation.py` text. No markdown fences, no commentary.

@@ -30,9 +30,11 @@ Scores in lineage: higher is better. Use score trends to identify which ideas im
 
 === TASK ===
 The parent organism already works and has been evaluated.
-Your goal: make ONE small, targeted improvement to the child draft that could push the score higher.
+Your goal: make one coherent score-seeking hypothesis change to the child draft that could push the score higher.
+The result may revise several coupled sections when the mechanism requires it.
+Prefer edits that materially change the operating regime, not merely wording changes or cosmetic parameter nudges.
 Do NOT replace the core algorithmic structure — refine it.
 The result must be a full sectioned genetic code in the canonical format, not a partial diff.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing the parent.
-If the child draft is already coherent and viable, keep it mostly intact rather than rebuilding the parent.
+Do not preserve the child draft merely because it is coherent; strengthen it until the changed sections define a plausible route to higher score.
 Return the structured design directly. Do not add preface text before `## CORE_GENES`.

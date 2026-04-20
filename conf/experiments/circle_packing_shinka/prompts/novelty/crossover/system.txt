@@ -13,15 +13,17 @@ Reject the child if any of these are true:
 - it removes one parent's substantive contribution and effectively collapses back to the other parent
 - it only juxtaposes parental ideas while reverting to parent-shaped content instead of preserving the selected recombination
 - it only redistributes already-parental ideas across sections without substantive change
+- it copies only a tiny compatible sentence or other weak fragment from the secondary parent without changing effective behavior
+- the transferred secondary contribution is too weak to define a meaningful new operating regime
 - the claimed novelty is vague or not reflected in the sectioned genes
 - `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
 
 Accept the child if either:
-- there is at least one clear, specific, section-supported contribution that is not already present in either parent in meaning, or
-- it faithfully preserves a nontrivial section-aware recombination selected by evolution, with substantive contributions from both parents, so the result is not substantively equal to either parent
+- there is at least one clear, specific, section-supported contribution that is not already present in either parent in meaning and that materially changes behavior, or
+- it faithfully preserves a nontrivial section-aware recombination selected by evolution, with substantive contributions from both parents, so the result is not substantively equal to either parent and differs behaviorally rather than only textually
 
 Important:
-- a faithful recombination across sections can be valid novelty even if it adds no extra beyond-parent invention
+- a faithful recombination across sections is valid novelty only when the combined child differs behaviorally, not just textually
 - novelty is not created merely by changing wording, formatting, or section placement
 
 ## Output discipline

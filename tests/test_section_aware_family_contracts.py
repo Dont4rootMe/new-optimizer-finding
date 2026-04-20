@@ -28,6 +28,16 @@ FAMILIES = {
             "PARAMETERS",
             "OPTIONAL_CODE_SKETCH",
         ),
+        "implementation_regions": (
+            "PARAMETERS",
+            "INIT_GEOMETRY",
+            "RADIUS_POLICY",
+            "CONFLICT_MODEL",
+            "REPAIR_POLICY",
+            "EXPANSION_POLICY",
+            "CONTROL_POLICY",
+            "OPTIONAL_CODE_SKETCH",
+        ),
     },
     "optimization_survey": {
         "config": "config_optimization_survey",
@@ -92,6 +102,7 @@ def test_family_config_exposes_section_aware_surface(family: str) -> None:
 def test_family_schema_prompts_and_templates_are_section_aligned(family: str) -> None:
     spec = FAMILIES[family]
     expected_sections = tuple(spec["sections"])
+    expected_regions = tuple(spec.get("implementation_regions", spec["sections"]))
     cfg = _compose(str(spec["config"]))
     bundle = load_prompt_bundle(cfg)
 
@@ -100,9 +111,9 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
 
     template_regions = parse_implementation_scaffold(
         bundle.implementation_template,
-        expected_region_names=expected_sections,
+        expected_region_names=expected_regions,
     )
-    assert tuple(region.name for region in template_regions) == expected_sections
+    assert tuple(region.name for region in template_regions) == expected_regions
 
     raw_prompt_values = cfg.evolver.prompts
     generation_user_keys = ("seed_user", "mutation_user", "crossover_user")
@@ -145,20 +156,19 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
     assert "Every `## REGION SECTION_NAME` block must be closed by `## END_REGION`" in bundle.implementation_system
     assert "do not output a full `implementation.py`" in bundle.implementation_system
     assert "Execution-order discipline" in bundle.implementation_system
-    assert "do not put variables in `PARAMETERS` if any earlier region needs them" in bundle.implementation_system
     assert "=== COMPILATION MODE ===" in bundle.implementation_user
     assert "=== CHANGED_SECTIONS ===" in bundle.implementation_user
     assert "=== MATERNAL BASE GENETIC CODE ===" in bundle.implementation_user
     assert "=== MATERNAL BASE IMPLEMENTATION ===" in bundle.implementation_user
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.implementation_user
-    assert "Repair is a full-file rewrite, not a diff." in bundle.repair_system
+    assert "Do NOT add commentary before or after the file" in bundle.repair_system
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.repair_user
 
     legacy_template = ROOT / "conf" / "experiments" / family / "prompts" / "implementation" / "template.txt"
     if legacy_template.exists():
         legacy_text = legacy_template.read_text(encoding="utf-8")
         assert "EDITABLE:" not in legacy_text
-        parse_implementation_scaffold(legacy_text, expected_region_names=expected_sections)
+        parse_implementation_scaffold(legacy_text, expected_region_names=expected_regions)
 
 
 @pytest.mark.parametrize("family", sorted(FAMILIES))

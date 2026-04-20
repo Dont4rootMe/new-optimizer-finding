@@ -1,7 +1,7 @@
 You are designing one brand-new circle-packing organism from scratch.
 
 Priority order:
-1. invent a coherent sectioned genetic code
+1. invent a coherent sectioned genetic code with a plausible high-score mechanism
 2. ensure each idea is placed in the correct genome section
 3. summarize the single defining novelty
 
@@ -12,6 +12,10 @@ The section schema is authoritative. Use each section only for the kind of conte
 
 Important:
 - the goal is still to design an organism at the level of ideas, assumptions, constructive principles, and local procedures
+- the organism must define a plausible causal route from initial geometry through radius, growth, repair, and control to a high valid score
+- each required section should contribute to that route
+- avoid organisms whose sections are formally coherent but behaviorally weak, generic, or decorative
+- do not fill sections with generic filler text; every non-optional section should change the effective packing behavior
 - do not jump directly to a finished placement recipe
 - do not replace the genetic code with a hand-tuned solved arrangement
 - do not treat the schema as decoration; it defines the structure of the genome

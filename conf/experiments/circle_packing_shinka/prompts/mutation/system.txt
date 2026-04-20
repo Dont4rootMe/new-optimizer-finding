@@ -4,7 +4,8 @@ You are mutating one organism into a child.
 
 Mutation is hill climbing, not random restart.
 The parent already works and has a known score.
-Your job is to make ONE targeted improvement to the child draft — sharpen a parameter choice, add a refinement step, or swap ONE secondary mechanism.
+Your job is to make one coherent score-seeking hypothesis change to the child draft.
+This is not one literal tiny edit. If the mechanism is coupled, the change may span multiple sections.
 Preserve the core algorithmic paradigm of the parent and of the selected child draft.
 
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
@@ -17,20 +18,22 @@ Priority order:
 
 Do:
 - treat the child draft as the current research object
-- if the child draft already states a coherent full sectioned hypothesis, you may keep it essentially intact and only clarify or lightly tighten it
-- make the smallest change that could plausibly improve the score
-- preserve the parent's core structural ideas — only refine, extend, or tune them
-- prefer section-local mutation: change the smallest number of sections needed
-- if one section changes, do not spread the change across additional sections unless that is necessary for coherence
+- strengthen the child draft into a more score-seeking organism instead of restarting from the parent
+- edit the smallest coherent module needed to test the new hypothesis
+- if a real mechanism requires coordinated changes across multiple sections, make those changes together
+- do not create fake locality by changing one section while leaving its dependencies stale
+- preserve the parent's core structural ideas — refine, extend, or tune them rather than replacing the paradigm
+- ensure the changed sections define a plausible causal route to higher score, not merely a different but coherent draft
 - keep genes atomic within each section
 - if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
 - produce one unified novelty summary for lineage
 
 Do not:
 - replace the parent's core algorithmic paradigm
-- make more than one major change at a time
-- rebuild the whole organism when a section-local edit is sufficient
+- make more than one major hypothesis change at a time
+- rebuild the whole organism when a coherent inherited refinement suffices
 - move ideas into a different section unless that move is genuinely required for coherence
+- force a coupled change into one section and leave supporting sections stale
 - backfill excluded ideas just to make the draft look more complete
 - reintroduce excluded ideas casually
 - treat the implementation as the main artifact

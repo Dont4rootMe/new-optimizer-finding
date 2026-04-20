@@ -16,39 +16,45 @@ Important:
 - do not rewrite the scaffold
 - do not output any text outside the required patch artifact
 - do not invent new major ideas at implementation time
-- if the design is ambiguous, choose the most conservative implementation that still matches the supplied genes
-- if there is any tradeoff between ambition and validity, prefer the simplest fully valid deterministic implementation
-- the scaffold markers beginning with `# ===` are not output markers; never copy any `# === REGION` or `# === END_REGION` line into your answer
+- if the design is ambiguous, choose the strongest deterministic interpretation that remains faithful to the supplied genes and valid at return time
+- maximize score subject to hard validity constraints
+- prefer the simplest implementation that preserves the score-bearing mechanism encoded in the genes
+- do not collapse an ambitious but feasible design into a trivial safe layout
 
 Patch discipline:
 - in FULL mode, produce region bodies for all eight canonical regions
 - in PATCH mode, produce region bodies only for the listed changed sections
 - in PATCH mode, assume the repository will preserve every untouched maternal region byte-for-byte
+- in PATCH mode, preserve maternal algorithmic behavior outside the changed sections unless the changed sections themselves require a coordinated local adjustment
 - do not try to compensate for unchanged regions by rewriting behavior elsewhere
 - keep each region body faithful to its matching genome section
 - no region may contain a hidden full end-to-end implementation
 - `OPTIONAL_CODE_SKETCH` may contain localized procedural code, but it must remain local
+- do not neutralize inherited score-bearing behavior by inserting generic safety logic in late regions
+- do not use `CONTROL_POLICY` or `OPTIONAL_CODE_SKETCH` as a hidden global override
 
 Execution-order discipline:
 - region bodies execute top-to-bottom in the scaffold order, exactly as written
-- `PARAMETERS` and `OPTIONAL_CODE_SKETCH` occur late in the scaffold, after the main construction and repair regions
-- do not put variables in `PARAMETERS` if any earlier region needs them
+- the scaffold order is `PARAMETERS`, `INIT_GEOMETRY`, `RADIUS_POLICY`, `CONFLICT_MODEL`, `REPAIR_POLICY`, `EXPANSION_POLICY`, `CONTROL_POLICY`, `OPTIONAL_CODE_SKETCH`
+- `PARAMETERS` executes early and is the real source of shared constants, schedules, thresholds, and coefficients
+- region bodies may depend on values established in earlier sections
 - every variable must be assigned before first use in the same region or an earlier region
-- if a numeric constant is needed early, define it early or use a literal; do not reference a later parameter name
 - use short ASCII identifiers only, and avoid names that can be confused with numbers or units
-- keep FULL-mode implementations compact; long multi-phase searches are more likely to be truncated or invalid
+- in FULL mode, build the strongest deterministic implementation you can that faithfully realizes the genes
+- do not intentionally under-realize `EXPANSION_POLICY`, `REPAIR_POLICY`, or `RADIUS_POLICY` just to make validity easier
 
 All scaffold regions live inside `run_packing()`.
-Therefore, code emitted for a region body must be valid as inserted directly between that region’s markers in the final file.
+Therefore, code emitted for a region body must be valid as inserted directly between that region's markers in the final file.
 Every non-empty Python code line inside a circle-packing region must start with four spaces, because the body is inserted inside `run_packing()`.
 Prefer simple straight-line code over nested helper functions or classes.
 If you define a helper anyway, every helper line must still be indented correctly inside `run_packing()`.
 
 Circle-packing validity discipline:
-- validity beats score; a lower-score valid packing is better than an ambitious invalid one
+- the returned packing must be valid at return time
 - by the end of FULL mode, `centers` must be a finite `(26, 2)` array and `radii` a finite `(26,)` array
-- include a final safety pass in a late region that shrinks radii to boundary and pairwise-distance limits
-- after the final safety pass, do not expand radii again
+- if correction is needed, prefer minimal local correction that preserves geometry and large feasible radii whenever possible
+- use shrink only as a last resort
+- never apply a generic global shrink pass unless the organism's actual genes specifically call for it
 
 ## Output format
 
@@ -65,6 +71,13 @@ Write exactly one of:
 - FULL
 - PATCH
 
+## REGION PARAMETERS
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and PARAMETERS is listed in CHANGED_SECTIONS
+
+## END_REGION
+
 ## REGION INIT_GEOMETRY
 Write the code body for this region if and only if:
 - mode is FULL, or
@@ -76,13 +89,6 @@ Write the code body for this region if and only if:
 Write the code body for this region if and only if:
 - mode is FULL, or
 - mode is PATCH and RADIUS_POLICY is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-## REGION EXPANSION_POLICY
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and EXPANSION_POLICY is listed in CHANGED_SECTIONS
 
 ## END_REGION
 
@@ -100,17 +106,17 @@ Write the code body for this region if and only if:
 
 ## END_REGION
 
+## REGION EXPANSION_POLICY
+Write the code body for this region if and only if:
+- mode is FULL, or
+- mode is PATCH and EXPANSION_POLICY is listed in CHANGED_SECTIONS
+
+## END_REGION
+
 ## REGION CONTROL_POLICY
 Write the code body for this region if and only if:
 - mode is FULL, or
 - mode is PATCH and CONTROL_POLICY is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-## REGION PARAMETERS
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and PARAMETERS is listed in CHANGED_SECTIONS
 
 ## END_REGION
 

@@ -14,15 +14,17 @@ Reject the child if any of these are true:
 - it only moves ideas between sections without a substantive change in meaning
 - the claimed novelty is vague or not reflected in the actual sectioned genes
 - `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
+- it only changes wording, section placement, or cosmetic parameter values without changing the effective behavior or operating regime
+- a parameter change is too weak to materially change how the mechanism would run
 - after accounting for the excluded ideas and the sectioned structure, the child is still substantively the same as the parent
 
 Accept the child if either:
-- there is at least one clear, specific, section-supported idea that is not already present in the parent in meaning, or
-- it faithfully preserves the evolved sectioned child draft in a way that keeps the result substantively distinct from the parent and respects the mutation exclusions
+- there is at least one clear, specific, section-supported idea that is not already present in the parent in meaning and that plausibly changes effective packing behavior, or
+- it faithfully preserves the evolved sectioned child draft in a way that keeps the result substantively distinct from the parent, respects the mutation exclusions, and changes the organism's operating regime in a meaningful way
 
 Important:
-- a localized change inside one section can be sufficient for novelty if it is a real idea-level change
-- a parameter or local procedural change can count as novelty if it is genuinely different in meaning and is reflected in the sectioned genes
+- a localized change inside one section can be sufficient for novelty if it is a real idea-level change that materially affects behavior
+- a parameter or local procedural change counts only if it materially changes how the mechanism would run
 - novelty is not created merely by changing section placement, wording, or formatting
 
 ## Output discipline

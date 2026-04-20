@@ -57,6 +57,12 @@ Score:
 - raw sum of radii
 - higher is better
 
+Optimization principle:
+- maximize score subject to validity
+- validity is a hard constraint, not the optimization target by itself
+- do not prefer a safe low-score construction over a feasible high-score construction merely because it is simpler
+- implementations and repairs should preserve large feasible radii whenever possible
+
 ## Hard constraints
 
 - Use only `numpy` and Python standard library
@@ -80,6 +86,13 @@ Do not skip idea formation and jump straight to coordinates.
 The section schema is authoritative about what kind of content belongs in each section.
 If a section allows only plain language, mathematical descriptions, or pseudocode-like descriptions, obey that restriction.
 If a section allows localized procedural detail, numeric parameterization, or a narrow local code-like sketch, keep that content local to the section and local to the mechanism it describes.
+
+One coherent hypothesis may require coordinated edits across multiple sections.
+Section boundaries organize the genome; they do not force every good change to stay one-section-local.
+If a score-bearing mechanism couples multiple sections, keep those sections coordinated.
+
+Each organism should define a plausible causal path from its sectioned ideas to a higher packing score.
+Decorative section changes that do not alter the effective search or packing behavior are not enough.
 
 `CHANGE_DESCRIPTION` remains a plain-language idea-level artifact:
 - it must summarize the single main novelty of the new organism

@@ -20,14 +20,10 @@ Constraints enforced by the evaluator:
 
 Score = sum of radii. Higher is better.
 
-Practical implementation guardrail:
-In FULL mode, finish with a feasibility safety pass before the scaffold return:
-  - coerce `centers` to exactly `(26, 2)`
-  - coerce `radii` to exactly `(26,)`
-  - clip or construct centers so boundary distance is non-negative
-  - shrink radii to be no larger than both boundary distance and half of every pairwise center distance
-  - recompute `reported_sum` only through the fixed scaffold return, not manually
-This safety pass should live in `CONTROL_POLICY` or `OPTIONAL_CODE_SKETCH`, because those regions execute late.
+Validity preservation note:
+  - The final returned packing must satisfy the evaluator constraints
+  - If local correction is needed, preserve large feasible radii and existing feasible geometry whenever possible
+  - Do not perform a generic end-stage global shrink pass unless the genes themselves call for that behavior
 
 === COMPILATION MODE ===
 {compilation_mode}
@@ -60,6 +56,7 @@ If COMPILATION_MODE is PATCH:
 - compile only the listed CHANGED_SECTIONS
 - do not compile any unchanged section
 - the repository will preserve unchanged maternal regions byte-for-byte
+- preserve the maternal organism's effective packing behavior outside the changed sections
 
 Be faithful to the supplied sectioned genes and the change description.
 Do not output a full `implementation.py`.

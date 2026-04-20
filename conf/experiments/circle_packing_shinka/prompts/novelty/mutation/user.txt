@@ -23,5 +23,5 @@ These ideas were explicitly removed during mutation sampling.
 === TASK ===
 The evolved child draft itself is a valid source of novelty.
 Accept a candidate that stays faithful to that selected sectioned child draft, even if it does not add one more post-sampling idea, as long as it does not collapse back to the parent in substance.
-Reject a candidate that mainly restores excluded ideas, reconstructs the parent, only rephrases parent ideas, or only reshuffles ideas across sections without substantive change.
+Reject a candidate that mainly restores excluded ideas, reconstructs the parent, only rephrases parent ideas, only reshuffles ideas across sections without substantive change, or is too weak to change the organism's effective behavior.
 If `CHANGE_DESCRIPTION` overclaims novelty that the sectioned genes do not support, reject it.
