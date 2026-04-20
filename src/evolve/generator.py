@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 import logging
 import sys
 import time
 from pathlib import Path
 from dataclasses import dataclass
+from typing import Callable
 
 from omegaconf import DictConfig
 
@@ -120,6 +122,21 @@ def _format_parsed_design_as_genetic_code_markdown(parsed_design: dict[str, str]
     if missing:
         raise ValueError(f"Design response is missing required section(s): {', '.join(missing)}")
     return "\n\n".join(f"## {name}\n{str(parsed_design[name]).strip()}" for name in section_names) + "\n"
+
+
+def _validate_assembled_python_source(source_text: str) -> str:
+    """Validate already-assembled Python without altering its bytes."""
+
+    if not str(source_text).strip():
+        raise ValueError("Assembled implementation source is empty.")
+    try:
+        ast.parse(source_text)
+    except SyntaxError as exc:
+        LOGGER.warning("Assembled implementation has syntax error: %s (line %s)", exc.msg, exc.lineno)
+        raise ValueError(
+            f"Assembled implementation is syntactically invalid Python: {exc.msg} at line {exc.lineno}"
+        ) from exc
+    return source_text
 
 
 class CandidateGenerator(BaseLlmGenerator):
@@ -238,15 +255,27 @@ class CandidateGenerator(BaseLlmGenerator):
     def uses_section_patch_compilation(self) -> bool:
         """Return true when this prompt bundle uses the section-aligned scaffold contract."""
 
-        if not self.expected_core_gene_sections or "## COMPILATION_MODE" not in self.prompt_bundle.implementation_system:
+        migrated = bool(
+            self.prompt_bundle.genome_schema
+            or self.expected_core_gene_sections
+            or "## COMPILATION_MODE" in self.prompt_bundle.implementation_system
+        )
+        if not migrated:
             return False
+        if not self.expected_core_gene_sections:
+            raise ValueError("Section-aware implementation compilation requires a parseable genome schema.")
+        if "## COMPILATION_MODE" not in self.prompt_bundle.implementation_system:
+            raise ValueError(
+                "Section-aware implementation compilation requires an implementation system prompt "
+                "with the patch-artifact contract."
+            )
         try:
             parse_implementation_scaffold(
                 self.prompt_bundle.implementation_template,
                 expected_region_names=self.expected_core_gene_sections,
             )
-        except ValueError:
-            return False
+        except ValueError as exc:
+            raise ValueError(f"Section-aware implementation scaffold is invalid: {exc}") from exc
         return True
 
     def _prepare_implementation_stage(
@@ -355,7 +384,7 @@ class CandidateGenerator(BaseLlmGenerator):
             expected_region_names=expected_sections,
             base_source_text=prepared.base_source_text,
         )
-        return self._extract_python(assembled)
+        return _validate_assembled_python_source(assembled)
 
     def _run_standard_creation_stages(
         self,
@@ -366,6 +395,7 @@ class CandidateGenerator(BaseLlmGenerator):
         organism_id: str,
         generation: int,
         implementation_base_parent: OrganismMeta | None = None,
+        pipeline_state_callback: Callable[[str], None] | None = None,
     ) -> CreationStageResult:
         """Run the canonical two-stage design -> implementation exchange."""
 
@@ -645,6 +675,7 @@ class CandidateGenerator(BaseLlmGenerator):
         organism_id: str,
         generation: int,
         implementation_base_parent: OrganismMeta | None = None,
+        pipeline_state_callback: Callable[[str], None] | None = None,
     ) -> CreationStageResult:
         """Run design -> novelty-check loop -> implementation for non-seed operators."""
 
@@ -1160,6 +1191,7 @@ class CandidateGenerator(BaseLlmGenerator):
         organism_id: str,
         generation: int,
         implementation_base_parent: OrganismMeta | None = None,
+        pipeline_state_callback: Callable[[str], None] | None = None,
     ) -> CreationStageResult:
         """Run design -> optional novelty -> compatibility -> implementation."""
 
@@ -1221,6 +1253,8 @@ class CandidateGenerator(BaseLlmGenerator):
         attempt = 0
         while attempt < max_design_attempts:
             attempt += 1
+            if pipeline_state_callback is not None:
+                pipeline_state_callback("creating")
             if attempt == 1:
                 current_design_system_prompt = design_system_prompt
                 current_design_user_prompt = design_user_prompt
@@ -1555,6 +1589,8 @@ class CandidateGenerator(BaseLlmGenerator):
             write_json(llm_request_path, llm_request_payload)
             write_json(llm_response_path, llm_response_payload)
 
+            if pipeline_state_callback is not None:
+                pipeline_state_callback("compatibility_check")
             _announce(
                 f"organism {organism_id} -> route {route_id}: calling compatibility_check stage "
                 f"(design_attempt={attempt}, operator={operator_kind})"
@@ -1650,6 +1686,8 @@ class CandidateGenerator(BaseLlmGenerator):
             write_json(llm_response_path, llm_response_payload)
 
             if compatibility_judgment.is_accepted:
+                if pipeline_state_callback is not None:
+                    pipeline_state_callback("creating")
                 _announce(
                     f"organism {organism_id} compatibility_check accepted "
                     f"(route={route_id}, design_attempt={attempt})"
@@ -1659,6 +1697,8 @@ class CandidateGenerator(BaseLlmGenerator):
                 break
 
             compatibility_rejections.append(compatibility_judgment)
+            if pipeline_state_callback is not None:
+                pipeline_state_callback("creating")
             rejection_reason = compatibility_judgment.rejection_reason or "Compatibility check rejected the candidate."
             _announce(
                 f"organism {organism_id} compatibility_check rejected design attempt "
@@ -1835,6 +1875,7 @@ class CandidateGenerator(BaseLlmGenerator):
         novelty_context: NoveltyCheckContext | None = None,
         compatibility_context: CompatibilityValidationContext | None = None,
         implementation_base_parent: OrganismMeta | None = None,
+        pipeline_state_callback: Callable[[str], None] | None = None,
     ) -> CreationStageResult:
         """Run creation stages, optionally inserting design-validation loops."""
 
@@ -1846,6 +1887,7 @@ class CandidateGenerator(BaseLlmGenerator):
                 organism_id=organism_id,
                 generation=generation,
                 implementation_base_parent=implementation_base_parent,
+                pipeline_state_callback=pipeline_state_callback,
             )
         if compatibility_context is not None:
             return self._run_creation_stages_with_validation(
@@ -1857,6 +1899,7 @@ class CandidateGenerator(BaseLlmGenerator):
                 organism_id=organism_id,
                 generation=generation,
                 implementation_base_parent=implementation_base_parent,
+                pipeline_state_callback=pipeline_state_callback,
             )
         return self._run_creation_stages_with_novelty(
             design_system_prompt=design_system_prompt,
@@ -1866,6 +1909,7 @@ class CandidateGenerator(BaseLlmGenerator):
             organism_id=organism_id,
             generation=generation,
             implementation_base_parent=implementation_base_parent,
+            pipeline_state_callback=pipeline_state_callback,
         )
 
     @staticmethod
@@ -1889,6 +1933,7 @@ class CandidateGenerator(BaseLlmGenerator):
         novelty_context: NoveltyCheckContext | None = None,
         compatibility_context: CompatibilityValidationContext | None = None,
         implementation_base_parent: OrganismMeta | None = None,
+        pipeline_state_callback: Callable[[str], None] | None = None,
     ) -> CreationStageResult:
         """Retry a full organism-creation exchange on provider or parse failure."""
 
@@ -1905,6 +1950,7 @@ class CandidateGenerator(BaseLlmGenerator):
                     novelty_context=novelty_context,
                     compatibility_context=compatibility_context,
                     implementation_base_parent=implementation_base_parent,
+                    pipeline_state_callback=pipeline_state_callback,
                 )
             except (NoveltyRejectionExhaustedError, CompatibilityRejectionExhaustedError):
                 raise
@@ -2115,6 +2161,7 @@ class CandidateGenerator(BaseLlmGenerator):
         organism_id: str,
         generation: int,
         organism_dir: Path,
+        pipeline_state_callback: Callable[[str], None] | None = None,
     ) -> OrganismMeta:
         """Generate one seed organism for a configured island."""
 
@@ -2142,6 +2189,7 @@ class CandidateGenerator(BaseLlmGenerator):
             organism_id=organism_id,
             generation=generation,
             compatibility_context=compatibility_context,
+            pipeline_state_callback=pipeline_state_callback,
         )
         return build_organism_from_response(
             parsed=creation.parsed_design,

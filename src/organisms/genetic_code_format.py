@@ -162,9 +162,7 @@ def parse_genetic_code_text(
     format_kind = detect_genetic_code_format(source)
     top_sections = _parse_top_level_sections(source)
 
-    required = ("CORE_GENES", "INTERACTION_NOTES", "COMPUTE_NOTES")
-    if format_kind == "sectioned":
-        required = TOP_LEVEL_SECTION_NAMES
+    required = TOP_LEVEL_SECTION_NAMES
     missing = [name for name in required if name not in top_sections]
     if missing:
         joined = ", ".join(missing)
@@ -181,7 +179,7 @@ def parse_genetic_code_text(
             legacy_core_genes=None,
             interaction_notes=top_sections["INTERACTION_NOTES"],
             compute_notes=top_sections["COMPUTE_NOTES"],
-            change_description=top_sections.get("CHANGE_DESCRIPTION", ""),
+            change_description=top_sections["CHANGE_DESCRIPTION"],
         )
 
     # Legacy flat CORE_GENES support is transitional until prompt migration is
@@ -192,7 +190,7 @@ def parse_genetic_code_text(
         legacy_core_genes=_parse_legacy_core_genes(top_sections["CORE_GENES"]),
         interaction_notes=top_sections["INTERACTION_NOTES"],
         compute_notes=top_sections["COMPUTE_NOTES"],
-        change_description=top_sections.get("CHANGE_DESCRIPTION", ""),
+        change_description=top_sections["CHANGE_DESCRIPTION"],
     )
 
 
@@ -374,9 +372,11 @@ def _parse_legacy_core_genes(core_text: str) -> tuple[str, ...]:
             genes.append(text)
         current_entry_lines = None
 
-    for line in core_text.splitlines():
+    for line_number, line in enumerate(core_text.splitlines(), start=1):
         if not line.strip():
             continue
+        if line.startswith("#"):
+            raise ValueError(f"Legacy CORE_GENES contains a malformed heading at line {line_number}: {line!r}")
         if line.startswith("- "):
             flush_entry()
             current_entry_lines = [line[2:].strip()]
@@ -384,8 +384,7 @@ def _parse_legacy_core_genes(core_text: str) -> tuple[str, ...]:
         if line.startswith("  ") and current_entry_lines is not None:
             current_entry_lines.append(line[2:].rstrip())
             continue
-        flush_entry()
-        current_entry_lines = [line.strip()]
+        raise ValueError(f"Legacy CORE_GENES contains non-bullet text at line {line_number}: {line!r}")
 
     flush_entry()
     if not genes:

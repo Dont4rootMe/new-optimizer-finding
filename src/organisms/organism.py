@@ -218,7 +218,29 @@ def _require_section(parsed: dict[str, str], key: str) -> str:
     return stripped
 
 
+def _validate_exact_design_response_sections(parsed: dict[str, str]) -> None:
+    actual = tuple(parsed.keys())
+    if actual == _REQUIRED_RESPONSE_SECTIONS:
+        return
+    missing = [name for name in _REQUIRED_RESPONSE_SECTIONS if name not in parsed]
+    unexpected = [name for name in actual if name not in _REQUIRED_RESPONSE_SECTIONS]
+    details: list[str] = []
+    if missing:
+        details.append(f"missing required section(s): {', '.join(missing)}")
+    if unexpected:
+        details.append(f"unexpected section(s): {', '.join(unexpected)}")
+    if not details:
+        details.append(
+            "sections are out of order; expected "
+            + ", ".join(_REQUIRED_RESPONSE_SECTIONS)
+            + "; got "
+            + ", ".join(actual)
+        )
+    raise ValueError("Canonical organism response must contain exactly the required top-level sections: " + "; ".join(details))
+
+
 def _design_response_genetic_code_text(parsed: dict[str, str]) -> str:
+    _validate_exact_design_response_sections(parsed)
     return "\n\n".join(f"## {key}\n{_require_section(parsed, key)}" for key in _REQUIRED_RESPONSE_SECTIONS)
 
 
@@ -376,9 +398,7 @@ def build_organism_from_response(
 ) -> OrganismMeta:
     """Build `OrganismMeta` from a canonical design response and raw implementation text."""
 
-    for key in _REQUIRED_RESPONSE_SECTIONS:
-        if key not in parsed:
-            raise ValueError(f"Canonical organism response is missing required section {key}.")
+    _validate_exact_design_response_sections(parsed)
 
     genetic_code = build_genetic_code_from_design_response(
         parsed,

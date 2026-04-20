@@ -139,6 +139,7 @@ class CrossbreedingOperator:
         generation: int,
         org_dir: Path,
         generator: Any,
+        pipeline_state_callback: Any = None,
     ) -> OrganismMeta:
         """Create a child organism via crossbreeding."""
 
@@ -218,6 +219,8 @@ class CrossbreedingOperator:
             creation_kwargs["compatibility_context"] = compatibility_context
         if getattr(generator, "uses_section_patch_compilation", lambda: False)():
             creation_kwargs["implementation_base_parent"] = mother
+        if pipeline_state_callback is not None:
+            creation_kwargs["pipeline_state_callback"] = pipeline_state_callback
         creation = run_creation(**creation_kwargs)
         mother_lineage = read_organism_lineage(mother)
         ancestor_ids = list(mother.ancestor_ids)

@@ -141,6 +141,14 @@ def test_build_organism_rejects_missing_sections(tmp_path: Path) -> None:
         _build(tmp_path, parsed)
 
 
+def test_build_organism_rejects_unexpected_top_level_section(tmp_path: Path) -> None:
+    parsed = _base_parsed()
+    parsed["DEBUG"] = "This top-level section must not be silently discarded."
+
+    with pytest.raises(ValueError, match="unexpected section"):
+        _build(tmp_path, parsed)
+
+
 def test_build_organism_rejects_empty_implementation(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="non-empty implementation.py"):
         _build(tmp_path, _base_parsed(), implementation_code="   \n")

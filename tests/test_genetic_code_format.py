@@ -154,6 +154,50 @@ def test_legacy_parser_preserves_flat_gene_entries() -> None:
     )
 
 
+def test_legacy_parser_rejects_missing_change_description() -> None:
+    text = LEGACY_GENETIC_CODE.replace(
+        "\n## CHANGE_DESCRIPTION\nAdded a stable legacy flat gene list.\n",
+        "",
+    )
+
+    with pytest.raises(ValueError, match="CHANGE_DESCRIPTION"):
+        parse_genetic_code_text(text)
+
+
+@pytest.mark.parametrize(
+    "bad_entry",
+    [
+        "Bare prose without a bullet.",
+        "* Star bullet is not canonical.",
+        "1. Numbered item is not canonical.",
+    ],
+)
+def test_legacy_parser_rejects_non_dash_bullet_gene_text(bad_entry: str) -> None:
+    text = LEGACY_GENETIC_CODE.replace(
+        "- Adaptive first-moment tracking for noisy gradients",
+        bad_entry,
+    )
+
+    with pytest.raises(ValueError, match="non-bullet text"):
+        parse_genetic_code_text(text)
+
+
+def test_legacy_parser_accepts_dash_bullets_with_continuation_lines() -> None:
+    text = LEGACY_GENETIC_CODE.replace(
+        "- Adaptive first-moment tracking for noisy gradients",
+        "- Adaptive first-moment tracking for noisy gradients:\n"
+        "  keep one accumulator per parameter tensor",
+    )
+
+    parsed = parse_genetic_code_text(text)
+
+    assert parsed.legacy_core_genes is not None
+    assert parsed.legacy_core_genes[0] == (
+        "Adaptive first-moment tracking for noisy gradients:\n"
+        "keep one accumulator per parameter tensor"
+    )
+
+
 def test_sectioned_parser_attaches_continuation_lines_to_previous_bullet() -> None:
     text = SECTIONED_GENETIC_CODE.replace(
         "- Resolve the worst conflict first by local deterministic center shifts.",

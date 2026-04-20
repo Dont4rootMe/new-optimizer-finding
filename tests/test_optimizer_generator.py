@@ -11,6 +11,7 @@ from omegaconf import OmegaConf
 from api_platforms import LlmResponse
 import src.evolve.operators as canonical_seed_operators
 from src.evolve.generator import CandidateGenerator
+from src.evolve.template_parser import parse_llm_response
 from src.evolve.types import Island, OrganismMeta
 from src.organisms.compatibility import (
     CompatibilityCheckContext,
@@ -563,6 +564,48 @@ def test_run_creation_stages_persists_design_exchange_before_parse_failure(
     assert "implementation" not in llm_response
 
 
+def test_run_creation_stages_rejects_raw_design_with_extra_top_level_section(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = CandidateGenerator(_cfg())
+    organism_dir = tmp_path / "org_extra_section"
+    organism_dir.mkdir(parents=True, exist_ok=True)
+    calls: list[str] = []
+
+    def fake_generate(request):
+        calls.append(request.stage)
+        return LlmResponse(
+            text=_design_text("Candidate with extra section.") + "\n## DEBUG\nThis must fail.\n",
+            route_id="mock",
+            provider="mock",
+            provider_model_id="mock-model",
+            raw_request={"stage": request.stage},
+            raw_response={"stage": request.stage},
+            usage={},
+            started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z",
+        )
+
+    monkeypatch.setattr(generator.registry, "generate", fake_generate)
+
+    try:
+        with pytest.raises(ValueError, match="unexpected section"):
+            generator.run_creation_stages(
+                design_system_prompt="design system",
+                design_user_prompt="design user",
+                org_dir=organism_dir,
+                organism_id="org_extra_section",
+                generation=0,
+            )
+    finally:
+        generator.close()
+
+    assert calls == ["design"]
+    llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
+    assert "implementation" not in llm_request
+
+
 def test_run_creation_stages_persists_raw_implementation_exchange_before_extract_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -762,6 +805,118 @@ def test_circle_patch_compilation_fails_instead_of_full_fallback_for_non_scaffol
     llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
     assert llm_request["implementation"]["compilation_mode"] == "PATCH"
     assert llm_request["implementation"]["status"] == "failed"
+
+
+def test_migrated_family_malformed_scaffold_fails_instead_of_legacy_fallback(
+    tmp_path: Path,
+) -> None:
+    malformed_template = tmp_path / "malformed_template.txt"
+    malformed_template.write_text("# no section markers here\n", encoding="utf-8")
+    cfg = _circle_cfg()
+    cfg.evolver.prompts.implementation_template = str(malformed_template)
+    generator = CandidateGenerator(cfg)
+
+    try:
+        with pytest.raises(ValueError, match="Section-aware implementation scaffold is invalid"):
+            generator.uses_section_patch_compilation()
+    finally:
+        generator.close()
+
+
+def test_migrated_family_missing_patch_prompt_contract_fails_instead_of_legacy_fallback(
+    tmp_path: Path,
+) -> None:
+    old_system = tmp_path / "old_implementation_system.txt"
+    old_system.write_text("Return ONLY valid Python source code.\n", encoding="utf-8")
+    cfg = _circle_cfg()
+    cfg.evolver.prompts.implementation_system = str(old_system)
+    generator = CandidateGenerator(cfg)
+
+    try:
+        with pytest.raises(ValueError, match="patch-artifact contract"):
+            generator.uses_section_patch_compilation()
+    finally:
+        generator.close()
+
+
+def test_non_migrated_family_can_still_report_legacy_implementation_mode(
+    tmp_path: Path,
+) -> None:
+    old_system = tmp_path / "old_implementation_system.txt"
+    old_user = tmp_path / "old_implementation_user.txt"
+    old_template = tmp_path / "old_implementation_template.txt"
+    old_system.write_text("Return ONLY valid Python source code.\n", encoding="utf-8")
+    old_user.write_text("{organism_genetic_code}\n{change_description}\n{implementation_template}\n", encoding="utf-8")
+    old_template.write_text("# old template\n", encoding="utf-8")
+    cfg = _circle_cfg()
+    del cfg.evolver.prompts.genome_schema
+    cfg.evolver.prompts.implementation_system = str(old_system)
+    cfg.evolver.prompts.implementation_user = str(old_user)
+    cfg.evolver.prompts.implementation_template = str(old_template)
+    generator = CandidateGenerator(cfg)
+
+    try:
+        assert generator.expected_core_gene_sections is None
+        assert generator.uses_section_patch_compilation() is False
+    finally:
+        generator.close()
+
+
+def test_migrated_family_missing_scaffold_fails_during_prompt_loading(tmp_path: Path) -> None:
+    cfg = _circle_cfg()
+    cfg.evolver.prompts.implementation_template = str(tmp_path / "missing_template.txt")
+
+    with pytest.raises(FileNotFoundError, match="implementation_template"):
+        CandidateGenerator(cfg)
+
+
+def test_circle_patch_compilation_requires_maternal_base_files(tmp_path: Path) -> None:
+    generator = CandidateGenerator(_circle_cfg())
+    parent = _make_circle_parent(tmp_path)
+    Path(parent.implementation_path).unlink()
+
+    try:
+        with pytest.raises(FileNotFoundError, match="Maternal base implementation"):
+            generator._prepare_implementation_stage(  # noqa: SLF001
+                parse_llm_response(_circle_design_text(radius_policy="Use role-dependent non-uniform radii.")),
+                implementation_base_parent=parent,
+            )
+    finally:
+        generator.close()
+
+
+def test_section_patch_extraction_returns_assembled_source_without_stripping(tmp_path: Path) -> None:
+    generator = CandidateGenerator(_circle_cfg())
+    parent = _make_circle_parent(tmp_path)
+    base_source = "\n" + Path(parent.implementation_path).read_text(encoding="utf-8") + "\n"
+    prepared = generator._prepare_implementation_stage(  # noqa: SLF001
+        parse_llm_response(_circle_design_text(radius_policy="Use role-dependent non-uniform radii.")),
+        implementation_base_parent=parent,
+    )
+    prepared = type(prepared)(
+        system_prompt=prepared.system_prompt,
+        user_prompt=prepared.user_prompt,
+        compilation_plan=prepared.compilation_plan,
+        base_source_text=base_source,
+    )
+    response_text = _circle_patch_response("PATCH", ("RADIUS_POLICY",), patched=True)
+
+    try:
+        final_source = generator._extract_implementation_stage_code(response_text, prepared=prepared)  # noqa: SLF001
+    finally:
+        generator.close()
+
+    expected_source = assemble_implementation_from_patch(
+        scaffold_text=generator.prompt_bundle.implementation_template,
+        patch=ParsedImplementationPatch(
+            compilation_mode="PATCH",
+            region_bodies=(("RADIUS_POLICY", _circle_region_body("RADIUS_POLICY", patched=True)),),
+        ),
+        expected_region_names=CIRCLE_REGIONS,
+        base_source_text=base_source,
+    )
+    assert final_source.startswith("\n")
+    assert final_source == expected_source
 
 
 def test_run_creation_stages_persists_pending_design_exchange_before_transport_failure(
@@ -1105,6 +1260,7 @@ def test_run_creation_stages_seed_runs_compatibility_before_implementation(
     organism_dir = tmp_path / "org_seed_compatibility"
     organism_dir.mkdir(parents=True, exist_ok=True)
     calls: list[str] = []
+    pipeline_states: list[str] = []
 
     def fake_generate(request):
         calls.append(request.stage)
@@ -1144,11 +1300,13 @@ def test_run_creation_stages_seed_runs_compatibility_before_implementation(
             org_dir=organism_dir,
             organism_id="org_seed_compatibility",
             generation=0,
+            pipeline_state_callback=pipeline_states.append,
         )
     finally:
         generator.close()
 
     assert calls == ["design", "compatibility_check", "implementation"]
+    assert "compatibility_check" in pipeline_states
     assert result.parsed_design["CHANGE_DESCRIPTION"] == "Seed candidate."
     llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
     assert "novelty_checks" not in llm_request
@@ -1163,6 +1321,7 @@ def test_run_creation_stages_mutation_runs_novelty_before_compatibility(
     organism_dir = tmp_path / "org_mutation_validation"
     organism_dir.mkdir(parents=True, exist_ok=True)
     calls: list[str] = []
+    pipeline_states: list[str] = []
 
     def fake_generate(request):
         calls.append(request.stage)
@@ -1212,11 +1371,13 @@ def test_run_creation_stages_mutation_runs_novelty_before_compatibility(
             org_dir=organism_dir,
             organism_id="org_mutation_validation",
             generation=0,
+            pipeline_state_callback=pipeline_states.append,
         )
     finally:
         generator.close()
 
     assert calls == ["design", "novelty_check", "compatibility_check", "implementation"]
+    assert "compatibility_check" in pipeline_states
 
 
 def test_run_creation_stages_crossover_runs_novelty_before_compatibility(
@@ -1227,6 +1388,7 @@ def test_run_creation_stages_crossover_runs_novelty_before_compatibility(
     organism_dir = tmp_path / "org_crossover_validation"
     organism_dir.mkdir(parents=True, exist_ok=True)
     calls: list[str] = []
+    pipeline_states: list[str] = []
 
     def fake_generate(request):
         calls.append(request.stage)
@@ -1276,11 +1438,13 @@ def test_run_creation_stages_crossover_runs_novelty_before_compatibility(
             org_dir=organism_dir,
             organism_id="org_crossover_validation",
             generation=0,
+            pipeline_state_callback=pipeline_states.append,
         )
     finally:
         generator.close()
 
     assert calls == ["design", "novelty_check", "compatibility_check", "implementation"]
+    assert "compatibility_check" in pipeline_states
 
 
 def test_run_creation_stages_skips_compatibility_when_novelty_rejects(

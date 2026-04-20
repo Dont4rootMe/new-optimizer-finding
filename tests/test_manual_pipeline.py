@@ -7,9 +7,15 @@ from pathlib import Path
 import pytest
 
 from src.evolve.manual_pipeline import (
+    build_manual_crossover_compatibility_prompts,
+    build_manual_crossover_novelty_prompts,
     build_manual_crossover_prompts,
     build_manual_implementation_prompts,
+    build_manual_mutation_compatibility_prompts,
+    build_manual_mutation_novelty_prompts,
     build_manual_mutation_prompts,
+    build_manual_seed_compatibility_prompts,
+    build_manual_seed_prompts,
     load_manual_pipeline_context,
     run_manual_simple_evaluation,
 )
@@ -27,6 +33,44 @@ The moment and normalization signals should be coordinated.
 
 ## COMPUTE_NOTES
 Only low-overhead tensor state is allowed.
+
+## CHANGE_DESCRIPTION
+Legacy flat manual optimizer notes.
+"""
+
+_SECTIONED_OPTIMIZER_CODE = """## CORE_GENES
+### STATE_REPRESENTATION
+- Store one compact state accumulator per parameter tensor.
+
+### GRADIENT_PROCESSING
+- Normalize raw gradients by a running magnitude estimate.
+
+### UPDATE_RULE
+- Apply a damped first-order update using the processed gradient.
+
+### PARAMETER_GROUP_POLICY
+- Treat all trainable tensors uniformly unless their gradient norm is zero.
+
+### STEP_CONTROL_POLICY
+- Use a short warmup followed by gradual decay.
+
+### STABILITY_POLICY
+- Clip unusually large processed updates before application.
+
+### PARAMETERS
+- Use conservative default coefficients for decay and clipping.
+
+### OPTIONAL_CODE_SKETCH
+- None.
+
+## INTERACTION_NOTES
+The state, gradient processing, and update rule form one optimizer.
+
+## COMPUTE_NOTES
+The optimizer uses low-overhead tensor operations.
+
+## CHANGE_DESCRIPTION
+This optimizer tests compact normalized first-order updates with conservative stability controls.
 """
 
 _LINEAGE = """[
@@ -114,6 +158,75 @@ def test_manual_prompt_helpers_build_expected_sections() -> None:
     assert "=== ORGANISM CHANGE_DESCRIPTION ===" in implementation["user_prompt"]
     assert "=== COMPILATION MODE ===\nFULL" in implementation["user_prompt"]
     assert "Combined stable normalization" in implementation["user_prompt"]
+
+
+def test_manual_section_aware_prompt_helpers_render_validation_and_patch_contexts() -> None:
+    context = load_manual_pipeline_context(
+        config_name="config_optimization_survey",
+        experiment_name="xor_mlp",
+    )
+    changed_child = _SECTIONED_OPTIMIZER_CODE.replace(
+        "Normalize raw gradients by a running magnitude estimate.",
+        "Clip and normalize raw gradients by a running magnitude estimate.",
+    )
+
+    seed = build_manual_seed_prompts(context, island_id="gradient_methods")
+    mutation_novelty = build_manual_mutation_novelty_prompts(
+        context,
+        inherited_genes=["Normalize raw gradients by a running magnitude estimate."],
+        removed_genes=["Use an unstable jump update."],
+        parent_genetic_code_text=_SECTIONED_OPTIMIZER_CODE,
+        candidate_design_text=changed_child,
+    )
+    crossover_novelty = build_manual_crossover_novelty_prompts(
+        context,
+        inherited_genes=["Normalize raw gradients by a running magnitude estimate."],
+        mother_genetic_code_text=_SECTIONED_OPTIMIZER_CODE,
+        father_genetic_code_text=changed_child,
+        candidate_design_text=changed_child,
+    )
+    seed_compatibility = build_manual_seed_compatibility_prompts(
+        context,
+        candidate_design_text=_SECTIONED_OPTIMIZER_CODE,
+    )
+    mutation_compatibility = build_manual_mutation_compatibility_prompts(
+        context,
+        inherited_genes=["Normalize raw gradients by a running magnitude estimate."],
+        removed_genes=[],
+        parent_genetic_code_text=_SECTIONED_OPTIMIZER_CODE,
+        candidate_design_text=changed_child,
+    )
+    crossover_compatibility = build_manual_crossover_compatibility_prompts(
+        context,
+        inherited_genes=["Normalize raw gradients by a running magnitude estimate."],
+        mother_genetic_code_text=_SECTIONED_OPTIMIZER_CODE,
+        father_genetic_code_text=changed_child,
+        candidate_design_text=changed_child,
+    )
+    full_implementation = build_manual_implementation_prompts(
+        context,
+        organism_genetic_code_text=_SECTIONED_OPTIMIZER_CODE,
+        novelty_summary="Manual full compilation.",
+    )
+    patch_implementation = build_manual_implementation_prompts(
+        context,
+        organism_genetic_code_text=changed_child,
+        novelty_summary="Manual patch compilation.",
+        compilation_mode="PATCH",
+        base_parent_genetic_code_text=_SECTIONED_OPTIMIZER_CODE,
+        base_parent_implementation_text="base implementation text",
+    )
+
+    assert "=== GENOME SECTION SCHEMA ===" in seed["user_prompt"]
+    assert "## NOVELTY_VERDICT" in mutation_novelty["system_prompt"]
+    assert "## NOVELTY_VERDICT" in crossover_novelty["system_prompt"]
+    assert "## COMPATIBILITY_VERDICT" in seed_compatibility["system_prompt"]
+    assert "## COMPATIBILITY_VERDICT" in mutation_compatibility["system_prompt"]
+    assert "## COMPATIBILITY_VERDICT" in crossover_compatibility["system_prompt"]
+    assert "=== COMPILATION MODE ===\nFULL" in full_implementation["user_prompt"]
+    assert "=== COMPILATION MODE ===\nPATCH" in patch_implementation["user_prompt"]
+    assert "=== CHANGED_SECTIONS ===\nGRADIENT_PROCESSING" in patch_implementation["user_prompt"]
+    assert "=== MATERNAL BASE IMPLEMENTATION ===\nbase implementation text" in patch_implementation["user_prompt"]
 
 
 def test_manual_simple_evaluation_runs_circle_packing_candidate(tmp_path: Path) -> None:

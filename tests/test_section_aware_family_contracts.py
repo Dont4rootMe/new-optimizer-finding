@@ -144,6 +144,12 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
     assert "=== MATERNAL BASE IMPLEMENTATION ===" in bundle.implementation_user
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.implementation_user
 
+    legacy_template = ROOT / "conf" / "experiments" / family / "prompts" / "implementation" / "template.txt"
+    if legacy_template.exists():
+        legacy_text = legacy_template.read_text(encoding="utf-8")
+        assert "EDITABLE:" not in legacy_text
+        parse_implementation_scaffold(legacy_text, expected_region_names=expected_sections)
+
 
 @pytest.mark.parametrize("family", sorted(FAMILIES))
 def test_manual_pipeline_loads_section_aware_prompt_bundle_for_each_family(family: str) -> None:

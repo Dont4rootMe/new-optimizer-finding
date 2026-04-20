@@ -568,6 +568,7 @@ class EvolutionLoop:
         organism_id: str,
         org_dir: Path,
         operator_seed: int,
+        pipeline_state_callback: Any | None = None,
     ) -> OrganismMeta:
         mutation_operator = MutationOperator(
             q=self.mutation_gene_removal_probability,
@@ -579,6 +580,7 @@ class EvolutionLoop:
             generation=self.generation,
             org_dir=org_dir,
             generator=self.generator,
+            pipeline_state_callback=pipeline_state_callback,
         )
 
     def _create_within_island_crossover_offspring(
@@ -589,6 +591,7 @@ class EvolutionLoop:
         organism_id: str,
         org_dir: Path,
         operator_seed: int,
+        pipeline_state_callback: Any | None = None,
     ) -> OrganismMeta:
         crossover_operator = CrossbreedingOperator(
             p=self.crossover_primary_parent_gene_inheritance_probability,
@@ -601,6 +604,7 @@ class EvolutionLoop:
             generation=self.generation,
             org_dir=org_dir,
             generator=self.generator,
+            pipeline_state_callback=pipeline_state_callback,
         )
 
     def _create_inter_island_crossover_offspring(
@@ -611,6 +615,7 @@ class EvolutionLoop:
         organism_id: str,
         org_dir: Path,
         operator_seed: int,
+        pipeline_state_callback: Any | None = None,
     ) -> OrganismMeta:
         crossover_operator = CrossbreedingOperator(
             p=self.crossover_primary_parent_gene_inheritance_probability,
@@ -623,6 +628,7 @@ class EvolutionLoop:
             generation=self.generation,
             org_dir=org_dir,
             generator=self.generator,
+            pipeline_state_callback=pipeline_state_callback,
         )
 
     def _simple_evaluation_request(
@@ -1117,6 +1123,7 @@ class EvolutionLoop:
         self,
         plan: PlannedOrganismCreation,
         active_by_id: dict[str, OrganismMeta],
+        pipeline_state_callback: Any | None = None,
     ) -> OrganismMeta:
         mother = self._resolve_parent_meta(
             parent_id=plan.mother_id,
@@ -1139,6 +1146,7 @@ class EvolutionLoop:
                 organism_id=plan.organism_id,
                 generation=plan.generation,
                 organism_dir=org_dir,
+                pipeline_state_callback=pipeline_state_callback,
             )
         elif plan.route == _ROUTE_MUTATION:
             if mother is None:
@@ -1148,6 +1156,7 @@ class EvolutionLoop:
                 organism_id=plan.organism_id,
                 org_dir=org_dir,
                 operator_seed=plan.operator_seed,
+                pipeline_state_callback=pipeline_state_callback,
             )
         elif plan.route == _ROUTE_WITHIN_ISLAND_CROSSOVER:
             if mother is None or father is None:
@@ -1158,6 +1167,7 @@ class EvolutionLoop:
                 organism_id=plan.organism_id,
                 org_dir=org_dir,
                 operator_seed=plan.operator_seed,
+                pipeline_state_callback=pipeline_state_callback,
             )
         elif plan.route == _ROUTE_INTER_ISLAND_CROSSOVER:
             if mother is None or father is None:
@@ -1168,6 +1178,7 @@ class EvolutionLoop:
                 organism_id=plan.organism_id,
                 org_dir=org_dir,
                 operator_seed=plan.operator_seed,
+                pipeline_state_callback=pipeline_state_callback,
             )
         else:
             raise ValueError(f"Unsupported reproduction route '{plan.route}'")
@@ -1397,9 +1408,12 @@ class EvolutionLoop:
 
         async def _run_creation(plan: PlannedOrganismCreation) -> tuple[str, OrganismMeta | None]:
             async with semaphore:
-                plan.pipeline_state = "creating"
-                self._write_planned_organism_stub(plan)
-                persist_state(planned_organisms)
+                def set_creation_pipeline_state(state: str) -> None:
+                    plan.pipeline_state = state
+                    self._write_planned_organism_stub(plan)
+                    persist_state(planned_organisms)
+
+                set_creation_pipeline_state("creating")
                 self._record_creation_event(
                     plan,
                     event="started",
@@ -1413,7 +1427,12 @@ class EvolutionLoop:
                     f"(route={plan.route}, island={plan.island_id}, generation={plan.generation})"
                 )
                 try:
-                    organism = await asyncio.to_thread(self._materialize_planned_organism, plan, active_by_id)
+                    organism = await asyncio.to_thread(
+                        self._materialize_planned_organism,
+                        plan,
+                        active_by_id,
+                        set_creation_pipeline_state,
+                    )
                 except Exception as exc:  # noqa: BLE001
                     LOGGER.exception(
                         "Organism creation failed for %s (generation=%d, island=%s, route=%s)",
