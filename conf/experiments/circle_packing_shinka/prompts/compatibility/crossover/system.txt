@@ -14,6 +14,8 @@ Reject the candidate if any of these are true:
 - the child clearly replaces the primary-parent structure instead of recombining with it
 - a secondary-parent contribution clearly requires support missing from the other sections
 - the imported secondary module is coherent on paper but too weak to matter behaviorally
+- the imported secondary module becomes too broad, too diffuse, or too richly described to preserve as one coherent inherited module
+- the child introduces many new role distinctions or support conditions without a clear compact mechanism that justifies them
 - the child is formally coherent but effectively score-inert, decorative, or causally unsupported
 - the genome contains a full end-to-end implementation instead of section-local design content
 

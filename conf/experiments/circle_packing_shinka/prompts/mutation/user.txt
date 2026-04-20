@@ -32,6 +32,8 @@ Scores in lineage: higher is better. Use score trends to identify which ideas im
 The parent organism already works and has been evaluated.
 Your goal: make one coherent score-seeking hypothesis change to the child draft that could push the score higher.
 The result may revise several coupled sections when the mechanism requires it.
+Keep the mutation small in causal scope even when it spans multiple sections.
+Do not solve uncertainty by adding extra support genes everywhere; only add the minimum support needed for the new mechanism to make sense.
 Prefer edits that materially change the operating regime, not merely wording changes or cosmetic parameter nudges.
 Do NOT replace the core algorithmic structure — refine it.
 The result must be a full sectioned genetic code in the canonical format, not a partial diff.

@@ -13,6 +13,8 @@ The section schema is authoritative. Use each section only for the kind of conte
 Important:
 - the goal is still to design an organism at the level of ideas, assumptions, constructive principles, and local procedures
 - the organism must define a plausible causal route from initial geometry through radius, growth, repair, and control to a high valid score
+- prefer a lean organism with one strong mechanism over a rich organism with many loosely coupled refinements
+- avoid introducing more than one main control idea, one main repair idea, and one main growth idea unless tighter coupling is essential
 - each required section should contribute to that route
 - section completeness alone is not enough; each required section should contribute to the effective packing behavior
 - avoid organisms whose sections are formally coherent but behaviorally weak, generic, or decorative
@@ -51,6 +53,8 @@ Rules for subsection bodies:
 - `INIT_GEOMETRY` through `PARAMETERS` must each contain at least one `- ` bullet
 - `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
 - `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
+- use the fewest bullets needed to define the mechanism cleanly
+- avoid filling a section with multiple near-duplicate bullets
 - if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
 - do not use nested headings inside subsection bodies
 

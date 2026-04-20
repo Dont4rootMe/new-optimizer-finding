@@ -125,21 +125,35 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     assert "primary object is the organism's genetic code" in bundle.project_context
     assert "maximize score subject to validity" in bundle.project_context
     assert "score-bearing mechanism" in bundle.project_context
+    assert "smallest set of genes that defines a real score-bearing mechanism" in bundle.project_context
+    assert "compact faithful deterministic implementation" in bundle.project_context
     assert "# INIT_GEOMETRY" in bundle.genome_schema
     assert "whether repaired regions can regrow" in bundle.genome_schema
+    assert "Prefer low-parameter geometric structure" in bundle.genome_schema
+    assert "Global terminal shrink-to-feasibility is normally not a repair policy" in bundle.genome_schema
+    assert "Prefer `- None.` unless a genuinely local executable sketch is necessary" in bundle.genome_schema
     assert "do not invent new major ideas at implementation time" in bundle.implementation_system
     assert "preserve inherited high-score maternal behavior" in bundle.implementation_system
+    assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system
     assert "child genetic code draft" in bundle.mutation_system.lower()
     assert "child draft" in bundle.crossover_system.lower()
     assert "smallest coherent module" in bundle.mutation_system
+    assert "alter at most one causal module" in bundle.mutation_system
     assert "one coherent imported secondary module" in bundle.crossover_system
+    assert "modify at most one major causal block" in bundle.crossover_system
     assert "valid source of novelty" in bundle.mutation_novelty_user
     assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
+    assert "supporting bullets around the same underlying mechanism" in bundle.mutation_novelty_system
     assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
     assert "## COMPATIBILITY_VERDICT" in bundle.compatibility_seed_system
     assert "score-inert" in bundle.compatibility_seed_system
+    assert "too many loosely coupled mechanisms or role taxonomies" in bundle.compatibility_seed_system
+    assert "mathematically ill-posed or too vague" in bundle.compatibility_seed_system
     assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system.lower()
+    assert "extra support machinery" in bundle.compatibility_mutation_system
+    assert "too structurally elaborate" in bundle.compatibility_crossover_user
     assert "full-file output contract is an interface requirement" in bundle.repair_system
+    assert "do not replace it with a short generic packing" in bundle.repair_system
 
 
 def test_circle_packing_generation_prompt_files_are_section_schema_aware() -> None:
@@ -352,22 +366,25 @@ def test_circle_packing_implementation_and_repair_prompts_do_not_require_genome_
     assert all("{genome_schema}" not in prompt for prompt in non_generation_prompts)
 
 
-def test_circle_packing_implementation_prompt_uses_patch_artifact_contract() -> None:
+def test_circle_packing_implementation_prompt_splits_full_and_patch_contracts() -> None:
     bundle = load_prompt_bundle(_compose_cfg())
     combined_prompt = "\n".join((bundle.implementation_system, bundle.implementation_user))
 
-    assert "do not output a full `implementation.py`" in bundle.implementation_system
     assert "## COMPILATION_MODE" in bundle.implementation_system
+    assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system
+    assert "PATCH mode output contract: return only the region patch artifact" in bundle.implementation_system
+    assert "close it immediately with `## END_REGION`" in bundle.implementation_system
     assert "do not invent new major ideas at implementation time" in combined_prompt
-    assert "Return ONLY valid Python source code" not in combined_prompt
+    assert "do not output a full `implementation.py`" not in bundle.implementation_system
     assert "=== COMPILATION MODE ===" in bundle.implementation_user
     assert "=== CHANGED_SECTIONS ===" in bundle.implementation_user
     assert "=== MATERNAL BASE GENETIC CODE ===" in bundle.implementation_user
     assert "=== MATERNAL BASE IMPLEMENTATION ===" in bundle.implementation_user
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.implementation_user
+    assert "return the final full Python file only" in bundle.implementation_user
+    assert "return only the patch artifact" in bundle.implementation_user
     assert "RUN_PACKING_BODY" not in bundle.implementation_template
     for region in tuple(heading[4:] for heading in SECTION_HEADINGS):
-        assert f"## REGION {region}" in bundle.implementation_system
         assert f"# === REGION: {region} ===" in bundle.implementation_template
         assert f"# === END_REGION: {region} ===" in bundle.implementation_template
     positions = [bundle.implementation_template.index(f"# === REGION: {region} ===") for region in IMPLEMENTATION_REGION_ORDER]
@@ -501,3 +518,8 @@ def test_circle_packing_prompts_avoid_solution_leading_lists() -> None:
         assert token not in bundle.crossover_system.lower()
         assert token not in symmetric_text.lower()
         assert token not in iterative_text.lower()
+
+    assert "smallest generative description" in symmetric_text
+    assert "compact approximate structure plus local correction is stronger" in symmetric_text
+    assert "How radii are preserved during repair whenever possible" in iterative_text
+    assert "prefer compact repair logic with clear priority rules" in iterative_text.lower()

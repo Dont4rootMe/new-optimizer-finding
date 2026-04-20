@@ -4,138 +4,43 @@ You will receive:
 - the function contract
 - the sectioned organism genetic code
 - the organism novelty summary
-- the canonical section-aligned implementation scaffold
+- the canonical implementation scaffold
 - the compilation mode: FULL or PATCH
 - the ordered list of changed genome sections
 - in PATCH mode, the maternal base implementation and maternal base genetic code
 
-Your task is to compile the organism by producing code bodies for scaffold regions.
+Your job is to realize the supplied genes faithfully in deterministic code.
 
-Important:
-- do not output a full `implementation.py`
-- do not rewrite the scaffold
-- do not output any text outside the required patch artifact
+Core rules:
 - do not invent new major ideas at implementation time
-- if the design is ambiguous, choose the strongest deterministic interpretation that remains faithful to the supplied genes and valid at return time
+- if the design is ambiguous, choose the strongest deterministic interpretation that remains faithful to the genes and valid at return time
 - maximize score subject to hard validity constraints
-- prefer the simplest implementation that preserves the score-bearing mechanism encoded in the genes
+- prefer the leanest implementation that preserves the real score-bearing mechanism
 - do not collapse an ambitious but feasible design into a trivial safe layout
-
-Patch discipline:
-- in FULL mode, produce region bodies for all eight canonical regions
-- in PATCH mode, produce region bodies only for the listed changed sections
-- in PATCH mode, assume the repository will preserve every untouched maternal region byte-for-byte
-- in PATCH mode, preserve maternal algorithmic behavior outside the changed sections unless the changed sections themselves require a coordinated local adjustment
-- in PATCH mode, preserve inherited high-score maternal behavior whenever the changed sections do not require altering it
-- do not try to compensate for unchanged regions by rewriting behavior elsewhere
-- keep each region body faithful to its matching genome section
-- no region may contain a hidden full end-to-end implementation
-- `OPTIONAL_CODE_SKETCH` may contain localized procedural code, but it must remain local
-- do not neutralize inherited score-bearing behavior by inserting generic safety logic in late regions
 - do not use `CONTROL_POLICY` or `OPTIONAL_CODE_SKETCH` as a hidden global override
 
-Execution-order discipline:
-- region bodies execute top-to-bottom in the scaffold order, exactly as written
+Scaffold discipline:
 - the scaffold order is `PARAMETERS`, `INIT_GEOMETRY`, `RADIUS_POLICY`, `CONFLICT_MODEL`, `REPAIR_POLICY`, `EXPANSION_POLICY`, `CONTROL_POLICY`, `OPTIONAL_CODE_SKETCH`
-- `PARAMETERS` executes early and is the real source of shared constants, schedules, thresholds, and coefficients
-- region bodies may depend on values established in earlier sections
-- every variable must be assigned before first use in the same region or an earlier region
-- use short ASCII identifiers only, and avoid names that can be confused with numbers or units
-- in FULL mode, build the strongest deterministic implementation you can that faithfully realizes the genes
-- do not intentionally under-realize `EXPANSION_POLICY`, `REPAIR_POLICY`, or `RADIUS_POLICY` just to make validity easier
+- `PARAMETERS` executes early; assign shared values before first use
+- `OPTIONAL_CODE_SKETCH` must stay local and must not override the whole algorithm
 
-All scaffold regions live inside `run_packing()`.
-Therefore, code emitted for a region body must be valid as inserted directly between that region's markers in the final file.
-Every non-empty Python code line inside a circle-packing region must start with four spaces, because the body is inserted inside `run_packing()`.
-Prefer simple straight-line code over nested helper functions or classes.
-If you define a helper anyway, every helper line must still be indented correctly inside `run_packing()`.
+PATCH inheritance rules:
+- in PATCH mode, preserve maternal algorithmic behavior outside the changed sections unless those sections themselves require a coordinated local adjustment
+- in PATCH mode, preserve inherited high-score maternal behavior whenever the changed sections do not require altering it
+- do not compensate for unchanged regions by rewriting behavior elsewhere
 
-Circle-packing validity discipline:
-- the returned packing must be valid at return time
-- by the end of FULL mode, `centers` must be a finite `(26, 2)` array and `radii` a finite `(26,)` array
-- if correction is needed, prefer minimal local correction that preserves geometry and large feasible radii whenever possible
-- use shrink only as a last resort
-- never apply a generic global shrink pass unless the organism's actual genes specifically call for it
-- never add a generic terminal correction that erases ambitious radii or resets the layout unless the genes explicitly require that behavior
+Mode-specific output contract:
+- FULL mode output contract: return the complete final `implementation.py` only
+- in FULL mode, use the scaffold as the file skeleton and return valid Python source code, not a patch artifact
+- in FULL mode, do not output `## COMPILATION_MODE`, `## REGION`, or `## END_REGION`
+- PATCH mode output contract: return only the region patch artifact
+- in PATCH mode, the first line of your answer must be `## COMPILATION_MODE`
+- in PATCH mode, include only the changed regions, in canonical order, using exact canonical section names
+- in PATCH mode, after writing one region body, close it immediately with `## END_REGION` before beginning the next region
 
-## Output format
-
-Return exactly these sections in this exact order.
-The first line of your answer must be `## COMPILATION_MODE`.
-Do not use markdown code fences.
-A valid artifact starts exactly with `## COMPILATION_MODE`, then `FULL` or `PATCH`, then one or more `## REGION SECTION_NAME` blocks ending with `## END_REGION`.
-Every `## REGION SECTION_NAME` block must be closed by `## END_REGION` before the next `## REGION SECTION_NAME` block begins.
-Never write `## REGION` or `## END_REGION` inside a region body except as the required artifact block delimiters.
-Close each region with exactly `## END_REGION`; do not write `## END_REGION: SECTION_NAME`.
-
-## COMPILATION_MODE
-Write exactly one of:
-- FULL
-- PATCH
-
-## REGION PARAMETERS
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and PARAMETERS is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-## REGION INIT_GEOMETRY
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and INIT_GEOMETRY is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-## REGION RADIUS_POLICY
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and RADIUS_POLICY is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-## REGION CONFLICT_MODEL
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and CONFLICT_MODEL is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-## REGION REPAIR_POLICY
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and REPAIR_POLICY is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-## REGION EXPANSION_POLICY
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and EXPANSION_POLICY is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-## REGION CONTROL_POLICY
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and CONTROL_POLICY is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-## REGION OPTIONAL_CODE_SKETCH
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and OPTIONAL_CODE_SKETCH is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-Rules:
-- in FULL mode, all eight regions must be present
-- in PATCH mode, include only the changed regions and omit the unchanged ones entirely
-- region headings must use the exact canonical names
-- region bodies must be raw Python lines exactly as they should appear between the scaffold markers
-- every non-empty raw Python line must already include the required indentation
-- do not start with `REGION ...`; region headings must start with `## REGION `
-- do not output text before `## COMPILATION_MODE`
-- do not repeat the scaffold markers inside a region body
+Minimal syntax discipline:
+- do not use markdown code fences
 - do not emit commentary, analysis, or prose
+- use ASCII identifiers only
+- PATCH region bodies must be raw Python lines exactly as they should appear between the scaffold markers
+- every non-empty PATCH region line must already include the required indentation inside `run_packing()`

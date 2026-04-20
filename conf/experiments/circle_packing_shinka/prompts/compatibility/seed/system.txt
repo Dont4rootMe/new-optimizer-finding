@@ -14,6 +14,9 @@ Reject the candidate if any of these are true:
 - the genome contains a full end-to-end implementation instead of section-local design content
 - the sections read like a list of individually coherent parts but do not add up to one plausible high-score mechanism
 - one or more non-optional sections are mere filler or decorative and do not alter effective packing behavior
+- the genome defines too many loosely coupled mechanisms or role taxonomies to admit a compact faithful deterministic implementation
+- a core quantitative definition in `CONFLICT_MODEL`, `RADIUS_POLICY`, or `EXPANSION_POLICY` is mathematically ill-posed or too vague to drive the claimed mechanism
+- `CONTROL_POLICY` introduces excessive orchestration relative to the actual mechanism, making the design fragile without adding a clear score-bearing role
 - the candidate is formally coherent but score-inert, decorative, or does not define a plausible score-bearing mechanism worth implementing
 
 Reject only for one decisive reason. In `REJECTION_REASON`, write the shortest actionable plain-language fix target.

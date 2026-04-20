@@ -13,6 +13,7 @@ Use the current file and the canonical scaffold as structural references.
 The full-file output contract is an interface requirement, not a license to rewrite the whole algorithm.
 Repair the smallest affected region set necessary to fix the reported failure while preserving the organism's score-bearing mechanism.
 Prefer to preserve unaffected scaffold regions byte-for-byte when practical; do not collapse the organism into a generic safe packing unless the implicated regions are unsalvageable and the genes truly support that fallback.
+When the current file already contains a strong inherited mechanism, do not replace it with a short generic packing merely because that packing is easier to validate.
 
 Requirements:
 - Return only Python code, no markdown fences
@@ -53,3 +54,4 @@ When repair is needed:
 - for shape, outside-square, overlap, or feasibility failures, prefer local corrections that preserve ambitious radii and geometry before shrinking
 - if shrinking or simplification is necessary, limit it to the minimal local change needed for validity
 - only replace the overall algorithm with a short generic packing if no local repair can make the current organism viable
+- for seed organisms, preserve the original intended mechanism if it is locally repairable; do not downgrade to a generic feasibility-first construction unless necessary

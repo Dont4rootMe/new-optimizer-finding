@@ -94,6 +94,15 @@ If a score-bearing mechanism couples multiple sections, keep those sections coor
 Each organism should define a plausible causal path from its sectioned ideas to a higher packing score.
 Decorative section changes that do not alter the effective search or packing behavior are not enough.
 
+Lean-genome principle:
+- a stronger organism is not the one with the most section content
+- prefer the smallest set of genes that defines a real score-bearing mechanism
+- avoid decorative elaboration, redundant restatements, and explanatory padding
+
+Implementation realism:
+- a good design should not only be coherent on paper, but should plausibly admit a compact faithful deterministic implementation
+- avoid designs whose success depends on too many loosely specified interacting mechanisms
+
 `CHANGE_DESCRIPTION` remains a plain-language idea-level artifact:
 - it must summarize the single main novelty of the new organism
 - it is later written into lineage

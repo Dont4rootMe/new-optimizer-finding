@@ -91,7 +91,11 @@ def test_family_config_exposes_section_aware_surface(family: str) -> None:
     assert cfg.evolver.prompts.compatibility_mutation_user.endswith("/compatibility/mutation/user.txt")
     assert cfg.evolver.prompts.compatibility_crossover_system.endswith("/compatibility/crossover/system.txt")
     assert cfg.evolver.prompts.compatibility_crossover_user.endswith("/compatibility/crossover/user.txt")
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
+    expected_compatibility_retries = 1 if family == "circle_packing_shinka" else 3
+    assert (
+        cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection
+        == expected_compatibility_retries
+    )
     assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
     assert cfg.evolver.reproduction.selection_score.normalize_weights is True
     assert cfg.evolver.reproduction.selection_score.weights.simple_score == 1.0
@@ -151,11 +155,17 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
         assert "Canonical accepted response:" in prompt
 
     assert "## COMPILATION_MODE" in bundle.implementation_system
-    assert "The first line of your answer must be `## COMPILATION_MODE`." in bundle.implementation_system
-    assert "do not start with `REGION ...`" in bundle.implementation_system
-    assert "Every `## REGION SECTION_NAME` block must be closed by `## END_REGION`" in bundle.implementation_system
-    assert "do not output a full `implementation.py`" in bundle.implementation_system
-    assert "Execution-order discipline" in bundle.implementation_system
+    if family == "circle_packing_shinka":
+        assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system
+        assert "PATCH mode output contract: return only the region patch artifact" in bundle.implementation_system
+        assert "close it immediately with `## END_REGION`" in bundle.implementation_system
+        assert "do not output a full `implementation.py`" not in bundle.implementation_system
+    else:
+        assert "The first line of your answer must be `## COMPILATION_MODE`." in bundle.implementation_system
+        assert "do not start with `REGION ...`" in bundle.implementation_system
+        assert "Every `## REGION SECTION_NAME` block must be closed by `## END_REGION`" in bundle.implementation_system
+        assert "do not output a full `implementation.py`" in bundle.implementation_system
+        assert "Execution-order discipline" in bundle.implementation_system
     assert "=== COMPILATION MODE ===" in bundle.implementation_user
     assert "=== CHANGED_SECTIONS ===" in bundle.implementation_user
     assert "=== MATERNAL BASE GENETIC CODE ===" in bundle.implementation_user

@@ -1,4 +1,4 @@
-Compile this circle-packing organism into scaffold region bodies.
+Compile this circle-packing organism into code.
 
 === FUNCTION CONTRACT ===
 You must implement exactly this function:
@@ -47,17 +47,19 @@ Validity preservation note:
 {implementation_template}
 
 === TASK ===
-Produce scaffold region bodies for this organism.
+Realize the supplied genes faithfully and preserve score-seeking behavior under the evaluator constraints.
 
 If COMPILATION_MODE is FULL:
-- compile all eight canonical regions from the scaffold
+- return the final full Python file only
+- use the canonical scaffold as the file skeleton
+- do not return a patch artifact
 
 If COMPILATION_MODE is PATCH:
+- return only the patch artifact in the required `## COMPILATION_MODE` / `## REGION` / `## END_REGION` format
 - compile only the listed CHANGED_SECTIONS
 - do not compile any unchanged section
 - the repository will preserve unchanged maternal regions byte-for-byte
 - preserve the maternal organism's effective packing behavior outside the changed sections, including inherited high-score behavior
 
 Be faithful to the supplied sectioned genes and the change description.
-Do not output a full `implementation.py`.
-Return only the patch artifact in the required format.
+Do not output markdown fences or commentary.

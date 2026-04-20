@@ -21,10 +21,13 @@ Do:
 - treat the child draft as the current research object
 - strengthen the child draft into a more score-seeking organism instead of restarting from the parent
 - edit the smallest coherent module needed to test the new hypothesis
+- the coherent change should usually alter at most one causal module; avoid appending extra support machinery unless it is strictly required
 - if a real mechanism requires coordinated changes across multiple sections, make those changes together
+- if the mutation touches more than four sections, that is usually too broad unless the draft itself already tightly couples those sections
 - do not create fake locality by changing one section while leaving its dependencies stale
 - preserve the parent's core structural ideas — refine, extend, or tune them rather than replacing the paradigm
 - ensure the changed sections define a plausible causal route to higher score, not merely a different but coherent draft
+- do not strengthen the child by adding explanatory redundancy or extra optional detail; strengthen it by sharpening the actual mechanism
 - keep genes atomic within each section
 - if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
 - produce one unified novelty summary for lineage
@@ -83,4 +86,5 @@ Include:
 (1) what hypothesis this mutation tests
 (2) why it should improve the score
 (3) what the expected failure mode is if it does not work
+`CHANGE_DESCRIPTION` should name one mechanism shift, not narrate every local edit.
 This must be plain-language only. No code, no code-like snippets, no implementation details.

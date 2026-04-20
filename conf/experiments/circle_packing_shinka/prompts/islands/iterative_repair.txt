@@ -23,6 +23,7 @@ This island explores organisms that treat an initial hypothesis as something to 
 - The 120-second timeout means iterative methods need efficient convergence, not unlimited iteration
 - Determinism is required — no random restarts unless seeded consistently with numpy
 - Repairing overlaps by shrinking radii is safe but reduces the score; repairing by shifting positions preserves radii but may cascade
+- Rich multi-stage repair stacks can become implementation-heavy and score-destructive; prefer compact repair logic with clear priority rules
 
 ## Design prompt
 
@@ -31,6 +32,7 @@ Good organisms on this island should specify:
 2. What defines a "conflict" or "violation" (overlap amount, boundary penetration)
 3. What the repair operator does to fix one conflict (shift, shrink, swap)
 4. What the termination criterion is (max iterations, no violations, convergence tolerance)
+5. How radii are preserved during repair whenever possible
 
 Do not treat this as a requirement to use any particular heuristic.
 The goal is a style of thinking, not a prescribed repair recipe.

@@ -74,9 +74,8 @@ def test_circle_packing_config_composes() -> None:
     assert set(cfg.experiments.keys()) == {"unit_square_26"}
     assert "safety" not in cfg
     assert set(cfg.api_platforms.keys()) == {
-        "ollama_qwen35_27b",
-        "ollama_gemma4_26b",
-        "ollama_nemotron_cascade_2_30b",
+        "ollama_qwen35_35b",
+        "ollama_gemma4_31b",
     }
     assert cfg.experiments.unit_square_26.need_cuda is False
     assert cfg.evolver.phases.simple.experiments == ["unit_square_26"]
@@ -96,6 +95,7 @@ def test_circle_packing_prompt_bundle_loads() -> None:
     assert "26 circles in the unit square" in bundle.project_context
     assert "patch artifact" in bundle.implementation_system
     assert "## COMPILATION_MODE" in bundle.implementation_system
+    assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system
     assert "# === REGION: INIT_GEOMETRY ===" in bundle.implementation_template
     assert "# === REGION: OPTIONAL_CODE_SKETCH ===" in bundle.implementation_template
     assert "RUN_PACKING_BODY" not in bundle.implementation_template

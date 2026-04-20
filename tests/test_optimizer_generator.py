@@ -690,7 +690,7 @@ def test_run_creation_stages_persists_raw_implementation_exchange_before_extract
     assert "syntactically invalid Python" in llm_response["implementation"]["error_msg"]
 
 
-def test_circle_seed_implementation_stage_uses_full_patch_compilation(
+def test_circle_seed_implementation_stage_uses_full_source_compilation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -704,10 +704,15 @@ def test_circle_seed_implementation_stage_uses_full_patch_compilation(
         if request.stage == "design":
             return _llm_response(request.stage, _circle_design_text())
         assert request.stage == "implementation"
+        assert (
+            "FULL mode output contract: return the complete final `implementation.py` only"
+            in request.system_prompt
+        )
         assert "=== COMPILATION MODE ===\nFULL" in request.user_prompt
         assert "=== CHANGED_SECTIONS ===\n" + "\n".join(CIRCLE_IMPLEMENTATION_REGIONS) in request.user_prompt
         assert "=== MATERNAL BASE GENETIC CODE ===\nNONE" in request.user_prompt
-        return _llm_response(request.stage, _circle_patch_response("FULL", CIRCLE_IMPLEMENTATION_REGIONS))
+        assert "return the final full Python file only" in request.user_prompt
+        return _llm_response(request.stage, _circle_base_source())
 
     monkeypatch.setattr(generator.registry, "generate", fake_generate)
     try:
@@ -730,6 +735,24 @@ def test_circle_seed_implementation_stage_uses_full_patch_compilation(
     assert llm_request["implementation"]["compilation_mode"] == "FULL"
     assert llm_request["implementation"]["changed_sections"] == list(CIRCLE_IMPLEMENTATION_REGIONS)
     assert llm_response["implementation"]["text"] == result.implementation_code
+
+
+def test_circle_full_source_extraction_rejects_full_patch_artifact(
+    tmp_path: Path,
+) -> None:
+    generator = CandidateGenerator(_circle_cfg())
+    prepared = generator._prepare_implementation_stage(  # noqa: SLF001
+        parse_llm_response(_circle_design_text()),
+    )
+
+    try:
+        with pytest.raises(ValueError, match="syntactically invalid Python"):
+            generator._extract_implementation_stage_code(  # noqa: SLF001
+                _circle_patch_response("FULL", CIRCLE_IMPLEMENTATION_REGIONS),
+                prepared=prepared,
+            )
+    finally:
+        generator.close()
 
 
 def test_circle_mutation_implementation_stage_uses_patch_and_preserves_maternal_regions(

@@ -28,6 +28,7 @@ def run_packing():
     # === REGION: CONTROL_POLICY ===
     # === END_REGION: CONTROL_POLICY ===
 
+    # Keep OPTIONAL_CODE_SKETCH local. It must not override the whole algorithm.
     # === REGION: OPTIONAL_CODE_SKETCH ===
     # === END_REGION: OPTIONAL_CODE_SKETCH ===
 

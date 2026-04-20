@@ -376,6 +376,12 @@ class CandidateGenerator(BaseLlmGenerator):
             raise ValueError(f"Section-aware implementation scaffold is invalid: {exc}") from exc
         return True
 
+    def _section_aware_full_mode_returns_full_source(self) -> bool:
+        """Return true when FULL mode expects a complete Python file instead of a patch artifact."""
+
+        sentinel = "FULL mode output contract: return the complete final `implementation.py` only"
+        return sentinel in self.prompt_bundle.implementation_system
+
     def _prepare_implementation_stage(
         self,
         parsed_design: dict[str, str],
@@ -471,6 +477,9 @@ class CandidateGenerator(BaseLlmGenerator):
         if expected_sections is None:
             raise ValueError("Section patch compilation requires expected CORE_GENES sections.")
         plan = prepared.compilation_plan
+        if plan.compilation_mode == "FULL" and self._section_aware_full_mode_returns_full_source():
+            return _validate_assembled_python_source(response_text)
+
         expected_patch_regions = (
             expected_sections
             if plan.compilation_mode == "FULL"

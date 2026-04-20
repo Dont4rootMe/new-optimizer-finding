@@ -34,6 +34,7 @@ Scores in lineage: higher is better. Use score trends to identify which ideas im
 Refine the child genetic code draft into one coherent organism.
 The result must be a full sectioned genetic code in the canonical format, internally consistent, and summarized by one unified novelty statement for lineage.
 Strengthen the child into a primary-parent-dominant organism with one coherent score-bearing imported module from the secondary parent if needed.
+If the child draft already contains too many partially merged ideas, simplify it toward one dominant primary structure plus one truly consequential secondary module.
 Do not preserve a weak recombination merely because it is coherent.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing one parent.
 Return the structured design directly. Do not add preface text before `## CORE_GENES`.

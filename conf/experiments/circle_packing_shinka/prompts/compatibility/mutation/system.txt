@@ -15,6 +15,8 @@ Reject the candidate if any of these are true:
 - the mutation is clearly a hidden full restart instead of a coherent inherited modification
 - the changed sections are too weak to plausibly alter packing behavior
 - one section changed but dependent sections were left stale, so the claimed mechanism lacks support
+- the mutation introduces extra support machinery that is not necessary for the claimed mechanism and mainly makes the child more verbose, not more causal
+- the changed sections do not make it clear how the mutation would actually alter packing behavior in implementation
 - the candidate is formally coherent but effectively score-inert, decorative, or causally unsupported
 - the genome contains a full end-to-end implementation instead of section-local design content
 

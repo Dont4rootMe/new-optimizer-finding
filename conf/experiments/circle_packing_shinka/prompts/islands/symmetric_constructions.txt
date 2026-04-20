@@ -24,6 +24,7 @@ This island explores organisms that begin from order, regularity, analytic const
 - Pure analytical approaches assuming uniform radius may leave space on the table compared to mixed-radius strategies
 - The unit square boundary breaks infinite-plane symmetry assumptions — boundary circles have less room
 - Compact generative logic is good, but over-constrained parametric families may miss better irregular packings
+- Overly rich role taxonomies, too many generator parameters, or too much symmetry bookkeeping can produce designs that are elegant on paper but fragile to implement faithfully
 
 ## Design prompt
 
@@ -32,6 +33,9 @@ Good organisms on this island should specify:
 2. How radii are determined given positions (uniform, Voronoi-based, analytically maximized)
 3. How boundary effects are handled (shrink boundary circles, inset lattice, special boundary ring)
 4. Whether the approach uses uniform or variable radii and why
+5. Prefer the smallest generative description that still leaves room for score-improving irregularity
+
+Do not overfit the organism to exact symmetry or exact analytic formulas when a compact approximate structure plus local correction is stronger.
 
 Do not treat this as a requirement to use any particular template.
 The goal is a style of thinking, not a prescribed layout family.

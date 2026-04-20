@@ -44,5 +44,6 @@ Return a full Python file, not a region patch.
 Fix the error while staying faithful to the genetic code.
 The full-file output format is only the repair interface contract; preserve unaffected scaffold regions and the inherited mechanism whenever possible.
 Repair the smallest affected region set consistent with the error history and preserve the current algorithm outside those regions whenever possible.
+If the current implementation already realizes a strong mechanism imperfectly, repair it locally instead of replacing it with a weaker but safer generic algorithm.
 Do not replace the whole algorithm with a short generic packing unless no local repair is viable.
 Return ONLY the corrected full `implementation.py` text. No markdown fences, no commentary.

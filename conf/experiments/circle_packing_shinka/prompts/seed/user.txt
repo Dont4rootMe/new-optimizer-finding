@@ -13,6 +13,7 @@ The schema below is authoritative for the structure and meaning of CORE_GENES.
 Your task is to generate an idea set first.
 Do not optimize the wording toward a ready-made solution.
 Produce a full sectioned genetic code whose content obeys the schema and whose sections all appear in the required order.
+Prefer compact, implementable section content over ambitious but over-specified multi-part designs.
 Prefer an organism whose sectioned hypothesis creates a plausible high-score packing mechanism, not just a formally complete genome.
 
 The final organism will later be implemented as code that must return a valid packing of 26 circles in the unit square.

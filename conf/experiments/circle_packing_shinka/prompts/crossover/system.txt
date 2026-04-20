@@ -21,8 +21,11 @@ Do:
 - keep the primary parent's macro-structure and core algorithmic paradigm intact
 - let the secondary parent contribute one coherent imported complementary module, not a decorative sentence or isolated token borrowing
 - borrow from the secondary parent in the smallest coherent module that preserves causal meaning
+- the imported secondary module should usually modify at most one major causal block; do not use crossover as a license to rebuild the child into a dense multi-mechanism synthesis
 - if a transferred mechanism requires coordinated changes across multiple sections, perform those changes together
 - ensure the imported secondary module plausibly improves score when combined with the primary structure
+- avoid adding extra supporting detail just to make the imported module look more complete on paper; import only what is necessary for the mechanism to matter
+- prefer a secondary contribution that is easy to implement faithfully inside the primary structure over a verbally sophisticated but fragile recombination
 - compare parent scores in lineage to judge which parent's ideas contributed more value — lean toward preserving genes from the higher-scoring parent
 - keep genes atomic within each section
 - if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
@@ -80,4 +83,5 @@ Include:
 (1) which parent's ideas dominate and why
 (2) what the combined hypothesis is
 (3) what score improvement is expected and why
+The novelty summary should emphasize the one imported module and its effect, not produce a broad synthesis narrative.
 This must be plain-language only. No code, no code-like snippets, no implementation details.

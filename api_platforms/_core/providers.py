@@ -161,6 +161,12 @@ def _extract_template_region_names(text: str) -> tuple[str, ...]:
     return tuple(re.findall(r"# === REGION: ([A-Z][A-Z0-9_]*) ===", text))
 
 
+def _extract_prompt_block(text: str, heading: str) -> str:
+    pattern = rf"=== {re.escape(heading)} ===\n(.+?)(?:\n\n=== |\Z)"
+    match = re.search(pattern, text, flags=re.DOTALL)
+    return match.group(1).rstrip() if match else ""
+
+
 def _render_mock_sectioned_design(prompt: str) -> str | None:
     section_names = _extract_schema_sections_from_prompt(prompt)
     if not section_names:
@@ -212,10 +218,8 @@ def _mock_region_body(region_name: str, prompt: str) -> str:
 
 def _render_mock_region_patch(user_prompt: str) -> str:
     template_regions = _extract_template_region_names(user_prompt)
-    mode_match = re.search(r"=== COMPILATION MODE ===\n(.+?)(?:\n\n|$)", user_prompt, flags=re.DOTALL)
-    mode = mode_match.group(1).strip() if mode_match else "FULL"
-    changed_match = re.search(r"=== CHANGED_SECTIONS ===\n(.+?)(?:\n\n=== |$)", user_prompt, flags=re.DOTALL)
-    changed_text = changed_match.group(1).strip() if changed_match else ""
+    mode = _extract_prompt_block(user_prompt, "COMPILATION MODE").strip() or "FULL"
+    changed_text = _extract_prompt_block(user_prompt, "CHANGED_SECTIONS").strip()
     if mode == "PATCH":
         regions = tuple(line.strip() for line in changed_text.splitlines() if line.strip() and line.strip() != "NONE")
     else:
@@ -231,6 +235,21 @@ def _render_mock_region_patch(user_prompt: str) -> str:
             )
         )
     return "\n".join(pieces).rstrip() + "\n"
+
+
+def _render_mock_full_source(user_prompt: str) -> str:
+    template = _extract_prompt_block(user_prompt, "CANONICAL IMPLEMENTATION SCAFFOLD")
+    if not template:
+        return _render_mock_region_patch(user_prompt)
+
+    rendered = template
+    for region_name in _extract_template_region_names(template):
+        pattern = rf"(?ms)(^[ \t]*# === REGION: {region_name} ===\n)(.*?)(^[ \t]*# === END_REGION: {region_name} ===)"
+        body = _mock_region_body(region_name, user_prompt)
+        rendered, count = re.subn(pattern, rf"\1{body}\3", rendered, count=1)
+        if count != 1:
+            raise ValueError(f"Mock scaffold is missing canonical region markers for {region_name}.")
+    return rendered.rstrip() + "\n"
 
 
 def build_mock_text(request: LlmRequest) -> str:
@@ -255,6 +274,13 @@ def build_mock_text(request: LlmRequest) -> str:
         if sectioned_design is not None:
             return sectioned_design
     if request.stage == "implementation" and "compilation mode" in joined_prompt:
+        mode = _extract_prompt_block(request.user_prompt, "COMPILATION MODE").strip() or "FULL"
+        full_source_contract = (
+            "full mode output contract: return the complete final `implementation.py` only"
+            in joined_prompt
+        )
+        if mode == "FULL" and full_source_contract:
+            return _render_mock_full_source(request.user_prompt)
         return _render_mock_region_patch(request.user_prompt)
     if "circle-packing" in joined_prompt or "circle packing" in joined_prompt or "run_packing" in joined_prompt:
         if request.stage == "design":

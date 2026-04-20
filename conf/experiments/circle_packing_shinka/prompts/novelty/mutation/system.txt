@@ -17,6 +17,7 @@ Reject the child if any of these are true:
 - it only changes wording, section placement, or cosmetic parameter values without changing the effective behavior or operating regime
 - it only makes tiny inert parameter nudges or similarly cosmetic changes that do not alter the operating regime
 - a parameter change is too weak to materially change how the mechanism would run
+- it adds many words or supporting bullets around the same underlying mechanism without materially changing the mechanism itself
 - after accounting for the excluded ideas and the sectioned structure, the child is still substantively the same as the parent
 
 Accept the child if either:
