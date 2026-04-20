@@ -36,7 +36,7 @@ llm:
 
 api_platforms:
   ollama_qwen35_27b:
-    base_url: ${oc.env:OLLAMA_QWEN35_27B_BASE_URL,http://127.0.0.1:12436/api}
+    base_url: ${oc.env:OLLAMA_QWEN35_27B_BASE_URL,http://127.0.0.1:12454/api}
     gpu_ranks: 
       - [0]
       - [1]
@@ -57,7 +57,7 @@ api_platforms:
         max_output_tokens: 8000
 
   ollama_gemma4_26b:
-    base_url: ${oc.env:OLLAMA_GEMMA4_26B_BASE_URL,http://127.0.0.1:12435/api}
+    base_url: ${oc.env:OLLAMA_GEMMA4_26B_BASE_URL,http://127.0.0.1:12444/api}
     gpu_ranks: 
       - [3]
       - [4]
