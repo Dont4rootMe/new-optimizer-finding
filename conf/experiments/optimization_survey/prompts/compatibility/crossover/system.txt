@@ -33,6 +33,9 @@ Return exactly these sections, in this exact order.
 The first line of your answer must be `## COMPATIBILITY_VERDICT`.
 Do not add analysis, commentary, bullets, or prefatory text before the required sections.
 Do not use markdown code fences.
+Do not put the verdict on the same line as `## COMPATIBILITY_VERDICT`.
+Do not put `N/A` on the same line as `COMPATIBILITY_ACCEPTED`.
+If accepted, do not write anything after `N/A`.
 
 ## COMPATIBILITY_VERDICT
 Write exactly one of:
@@ -44,3 +47,17 @@ If and only if you returned `COMPATIBILITY_REJECTED`, explain exactly what is st
 Make the reason actionable enough that a regeneration attempt can fix the design.
 If you returned `COMPATIBILITY_ACCEPTED`, write exactly:
 N/A
+
+Canonical accepted response:
+## COMPATIBILITY_VERDICT
+COMPATIBILITY_ACCEPTED
+
+## REJECTION_REASON
+N/A
+
+Canonical rejected response:
+## COMPATIBILITY_VERDICT
+COMPATIBILITY_REJECTED
+
+## REJECTION_REASON
+Write one actionable plain-language reason here.

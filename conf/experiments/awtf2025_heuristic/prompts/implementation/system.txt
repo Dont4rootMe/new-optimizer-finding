@@ -37,6 +37,8 @@ Return exactly these sections in this exact order.
 The first line of your answer must be `## COMPILATION_MODE`.
 Do not use markdown code fences.
 A valid artifact starts exactly with `## COMPILATION_MODE`, then `FULL` or `PATCH`, then one or more `## REGION SECTION_NAME` blocks ending with `## END_REGION`.
+Every `## REGION SECTION_NAME` block must be closed by `## END_REGION` before the next `## REGION SECTION_NAME` block begins.
+Never write `## REGION` or `## END_REGION` inside a region body except as the required artifact block delimiters.
 
 ## COMPILATION_MODE
 Write exactly one of:

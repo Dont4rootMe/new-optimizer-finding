@@ -136,10 +136,13 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
         assert "## REJECTION_REASON" in prompt
         assert "## SECTIONS_AT_ISSUE" not in prompt
         assert "The first line of your answer must be `## COMPATIBILITY_VERDICT`." in prompt
+        assert "Do not put the verdict on the same line as `## COMPATIBILITY_VERDICT`." in prompt
+        assert "Canonical accepted response:" in prompt
 
     assert "## COMPILATION_MODE" in bundle.implementation_system
     assert "The first line of your answer must be `## COMPILATION_MODE`." in bundle.implementation_system
     assert "do not start with `REGION ...`" in bundle.implementation_system
+    assert "Every `## REGION SECTION_NAME` block must be closed by `## END_REGION`" in bundle.implementation_system
     assert "do not output a full `implementation.py`" in bundle.implementation_system
     assert "=== COMPILATION MODE ===" in bundle.implementation_user
     assert "=== CHANGED_SECTIONS ===" in bundle.implementation_user

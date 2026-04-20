@@ -57,7 +57,10 @@ def parse_compatibility_judgment(
     """Parse compatibility-judge output into a strict verdict object."""
 
     _ = expected_section_names
-    parsed = _parse_exact_judgment_sections(text, _COMPATIBILITY_SECTIONS)
+    try:
+        parsed = _parse_exact_judgment_sections(text, _COMPATIBILITY_SECTIONS)
+    except ValueError as exact_error:
+        return _parse_compact_compatibility_judgment(text, exact_error=exact_error)
     verdict = require_response_section(parsed, "COMPATIBILITY_VERDICT").strip()
     if verdict not in {_COMPATIBILITY_ACCEPTED, _COMPATIBILITY_REJECTED}:
         raise ValueError(
@@ -67,7 +70,7 @@ def parse_compatibility_judgment(
 
     rejection_reason = require_response_section(parsed, "REJECTION_REASON").strip()
     if verdict == _COMPATIBILITY_ACCEPTED:
-        if rejection_reason != "N/A":
+        if _first_nonempty_line(rejection_reason) != "N/A":
             raise ValueError("Accepted compatibility judgments must use exactly N/A in ## REJECTION_REASON.")
         return CompatibilityJudgment(
             verdict=_COMPATIBILITY_ACCEPTED,
@@ -82,6 +85,61 @@ def parse_compatibility_judgment(
         rejection_reason=rejection_reason,
         sections_at_issue=(),
     )
+
+
+def _parse_compact_compatibility_judgment(text: str, *, exact_error: ValueError) -> CompatibilityJudgment:
+    """Accept common Ollama compactions that still start with the required heading.
+
+    This is intentionally narrow: compact replies without the required markdown
+    heading remain invalid, but models that collapse the verdict/reason onto the
+    heading line no longer burn a full regeneration attempt.
+    """
+
+    lines = [line.strip() for line in str(text).splitlines() if line.strip()]
+    if not lines:
+        raise exact_error
+
+    first = lines[0]
+    if first == "## COMPATIBILITY_VERDICT":
+        tail_parts = lines[1:]
+    elif first.startswith("## COMPATIBILITY_VERDICT "):
+        tail_parts = [first.removeprefix("## COMPATIBILITY_VERDICT ").strip(), *lines[1:]]
+    else:
+        raise exact_error
+
+    compact_text = "\n".join(tail_parts).strip()
+    for verdict in (_COMPATIBILITY_ACCEPTED, _COMPATIBILITY_REJECTED):
+        if compact_text == verdict or compact_text.startswith(verdict + "\n") or compact_text.startswith(verdict + " "):
+            remainder = compact_text[len(verdict) :].strip()
+            if remainder.startswith("## REJECTION_REASON"):
+                remainder = remainder.removeprefix("## REJECTION_REASON").strip()
+            if verdict == _COMPATIBILITY_ACCEPTED:
+                if remainder and _first_nonempty_line(remainder) != "N/A":
+                    raise ValueError(
+                        "Accepted compatibility judgments must use N/A or no reason after COMPATIBILITY_ACCEPTED."
+                    )
+                return CompatibilityJudgment(
+                    verdict=_COMPATIBILITY_ACCEPTED,
+                    rejection_reason=None,
+                    sections_at_issue=(),
+                )
+            if not remainder or _first_nonempty_line(remainder) == "N/A":
+                raise ValueError("Rejected compatibility judgments require a non-empty REJECTION_REASON.")
+            return CompatibilityJudgment(
+                verdict=_COMPATIBILITY_REJECTED,
+                rejection_reason=remainder,
+                sections_at_issue=(),
+            )
+
+    raise exact_error
+
+
+def _first_nonempty_line(text: str) -> str:
+    for line in str(text).splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return ""
 
 
 def format_compatibility_rejection_feedback(

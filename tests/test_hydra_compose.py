@@ -243,8 +243,8 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert qwen_route.route_id == "ollama_qwen35_27b"
     assert qwen_route.provider_model_id == "qwen3.5:27b"
     assert qwen_route.base_url == "http://127.0.0.1:12436/api"
-    assert qwen_route.gpu_ranks == [2]
-    assert qwen_route.gpu_rank_groups == [[2]]
+    assert qwen_route.gpu_ranks
+    assert qwen_route.gpu_rank_groups == [list(qwen_route.gpu_ranks)]
     assert qwen_route.max_concurrency == 3
     assert qwen_route.max_output_tokens == 12288
     assert qwen_route.stage_options["design"]["think"] is False

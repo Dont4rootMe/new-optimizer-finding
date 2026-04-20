@@ -81,8 +81,40 @@ def test_parse_compatibility_judgment_rejects_malformed_verdict() -> None:
 
 
 def test_parse_compatibility_judgment_rejects_missing_section() -> None:
-    with pytest.raises(ValueError, match="exactly these sections"):
-        parse_compatibility_judgment("## COMPATIBILITY_VERDICT\nCOMPATIBILITY_ACCEPTED\n")
+    with pytest.raises(ValueError, match="before the first section"):
+        parse_compatibility_judgment("COMPATIBILITY_ACCEPTED\nN/A\n")
+
+
+def test_parse_compatibility_judgment_accepts_compacted_accepted_with_required_heading() -> None:
+    judgment = parse_compatibility_judgment("## COMPATIBILITY_VERDICT COMPATIBILITY_ACCEPTED N/A\n")
+
+    assert judgment.is_accepted is True
+    assert judgment.rejection_reason is None
+    assert judgment.sections_at_issue == ()
+
+
+def test_parse_compatibility_judgment_accepts_compacted_accepted_without_reason() -> None:
+    judgment = parse_compatibility_judgment("## COMPATIBILITY_VERDICT\nCOMPATIBILITY_ACCEPTED\n")
+
+    assert judgment.is_accepted is True
+    assert judgment.rejection_reason is None
+    assert judgment.sections_at_issue == ()
+
+
+def test_parse_compatibility_judgment_accepts_accepted_with_extra_commentary_after_na() -> None:
+    judgment = parse_compatibility_judgment(
+        (
+            "## COMPATIBILITY_VERDICT\n"
+            "COMPATIBILITY_ACCEPTED\n\n"
+            "## REJECTION_REASON\n"
+            "N/A\n"
+            "The design appears internally coherent.\n"
+        )
+    )
+
+    assert judgment.is_accepted is True
+    assert judgment.rejection_reason is None
+    assert judgment.sections_at_issue == ()
 
 
 def test_parse_compatibility_judgment_rejects_accepted_reason_other_than_na() -> None:
