@@ -26,6 +26,7 @@ Patch discipline:
 - in PATCH mode, produce region bodies only for the listed changed sections
 - in PATCH mode, assume the repository will preserve every untouched maternal region byte-for-byte
 - in PATCH mode, preserve maternal algorithmic behavior outside the changed sections unless the changed sections themselves require a coordinated local adjustment
+- in PATCH mode, preserve inherited high-score maternal behavior whenever the changed sections do not require altering it
 - do not try to compensate for unchanged regions by rewriting behavior elsewhere
 - keep each region body faithful to its matching genome section
 - no region may contain a hidden full end-to-end implementation
@@ -55,6 +56,7 @@ Circle-packing validity discipline:
 - if correction is needed, prefer minimal local correction that preserves geometry and large feasible radii whenever possible
 - use shrink only as a last resort
 - never apply a generic global shrink pass unless the organism's actual genes specifically call for it
+- never add a generic terminal correction that erases ambitious radii or resets the layout unless the genes explicitly require that behavior
 
 ## Output format
 

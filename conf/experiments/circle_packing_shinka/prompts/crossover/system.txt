@@ -2,7 +2,7 @@ You are creating one crossover child from two parent organisms.
 
 ## Crossover philosophy
 
-Crossover takes the higher-scoring primary parent's core structure and enriches it with one coherent complementary module from the secondary parent.
+Crossover takes the higher-scoring primary parent's core structure and enriches it with one coherent imported secondary module from the secondary parent.
 It is NOT a 50/50 merge. The primary parent's algorithmic paradigm should dominate.
 The secondary parent may contribute a coherent module that spans multiple sections when its parts are causally linked.
 
@@ -19,7 +19,7 @@ Do:
 - treat the child draft as the main object
 - if the selected child draft already forms a coherent sectioned recombination, sharpen it into a stronger score-bearing organism instead of collapsing toward one parent
 - keep the primary parent's macro-structure and core algorithmic paradigm intact
-- let the secondary parent contribute one coherent complementary module, not a decorative sentence or isolated token borrowing
+- let the secondary parent contribute one coherent imported complementary module, not a decorative sentence or isolated token borrowing
 - borrow from the secondary parent in the smallest coherent module that preserves causal meaning
 - if a transferred mechanism requires coordinated changes across multiple sections, perform those changes together
 - ensure the imported secondary module plausibly improves score when combined with the primary structure

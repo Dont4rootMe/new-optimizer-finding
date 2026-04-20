@@ -56,7 +56,7 @@ If COMPILATION_MODE is PATCH:
 - compile only the listed CHANGED_SECTIONS
 - do not compile any unchanged section
 - the repository will preserve unchanged maternal regions byte-for-byte
-- preserve the maternal organism's effective packing behavior outside the changed sections
+- preserve the maternal organism's effective packing behavior outside the changed sections, including inherited high-score behavior
 
 Be faithful to the supplied sectioned genes and the change description.
 Do not output a full `implementation.py`.

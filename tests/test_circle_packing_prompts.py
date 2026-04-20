@@ -124,15 +124,22 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
 
     assert "primary object is the organism's genetic code" in bundle.project_context
     assert "maximize score subject to validity" in bundle.project_context
+    assert "score-bearing mechanism" in bundle.project_context
     assert "# INIT_GEOMETRY" in bundle.genome_schema
+    assert "whether repaired regions can regrow" in bundle.genome_schema
     assert "do not invent new major ideas at implementation time" in bundle.implementation_system
+    assert "preserve inherited high-score maternal behavior" in bundle.implementation_system
     assert "child genetic code draft" in bundle.mutation_system.lower()
     assert "child draft" in bundle.crossover_system.lower()
     assert "smallest coherent module" in bundle.mutation_system
+    assert "one coherent imported secondary module" in bundle.crossover_system
     assert "valid source of novelty" in bundle.mutation_novelty_user
+    assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
     assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
     assert "## COMPATIBILITY_VERDICT" in bundle.compatibility_seed_system
+    assert "score-inert" in bundle.compatibility_seed_system
     assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system.lower()
+    assert "full-file output contract is an interface requirement" in bundle.repair_system
 
 
 def test_circle_packing_generation_prompt_files_are_section_schema_aware() -> None:
@@ -433,6 +440,8 @@ def test_circle_packing_prompt_surface_removes_safe_local_search_bias() -> None:
         (
             bundle.mutation_system,
             bundle.crossover_system,
+            bundle.mutation_novelty_system,
+            bundle.crossover_novelty_system,
             bundle.compatibility_seed_system,
             bundle.compatibility_mutation_system,
             bundle.compatibility_crossover_system,
@@ -451,6 +460,9 @@ def test_circle_packing_prompt_surface_removes_safe_local_search_bias() -> None:
     assert "feasibility safety pass" not in combined
     assert "Repair is a full-file rewrite, not a diff." not in combined
     assert "maximize score subject to hard validity constraints" in bundle.implementation_system
+    assert "one coherent imported secondary module" in bundle.crossover_system
+    assert "score-inert" in combined
+    assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
     assert "Repair the smallest affected region set necessary" in bundle.repair_system
 
 

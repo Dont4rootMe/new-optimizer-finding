@@ -14,6 +14,7 @@ Important:
 - the goal is still to design an organism at the level of ideas, assumptions, constructive principles, and local procedures
 - the organism must define a plausible causal route from initial geometry through radius, growth, repair, and control to a high valid score
 - each required section should contribute to that route
+- section completeness alone is not enough; each required section should contribute to the effective packing behavior
 - avoid organisms whose sections are formally coherent but behaviorally weak, generic, or decorative
 - do not fill sections with generic filler text; every non-optional section should change the effective packing behavior
 - do not jump directly to a finished placement recipe

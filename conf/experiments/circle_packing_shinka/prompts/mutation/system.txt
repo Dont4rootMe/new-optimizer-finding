@@ -6,6 +6,7 @@ Mutation is hill climbing, not random restart.
 The parent already works and has a known score.
 Your job is to make one coherent score-seeking hypothesis change to the child draft.
 This is not one literal tiny edit. If the mechanism is coupled, the change may span multiple sections.
+A multi-section mutation is still valid when it remains one coherent extension or refinement of the inherited organism rather than a hidden paradigm restart.
 Preserve the core algorithmic paradigm of the parent and of the selected child draft.
 
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.

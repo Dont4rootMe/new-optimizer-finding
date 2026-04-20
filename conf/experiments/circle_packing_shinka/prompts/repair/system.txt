@@ -10,6 +10,7 @@ You will receive:
 Your job is to return a corrected full `implementation.py` that fixes the reported failure while staying faithful to the organism design.
 
 Use the current file and the canonical scaffold as structural references.
+The full-file output contract is an interface requirement, not a license to rewrite the whole algorithm.
 Repair the smallest affected region set necessary to fix the reported failure while preserving the organism's score-bearing mechanism.
 Prefer to preserve unaffected scaffold regions byte-for-byte when practical; do not collapse the organism into a generic safe packing unless the implicated regions are unsalvageable and the genes truly support that fallback.
 

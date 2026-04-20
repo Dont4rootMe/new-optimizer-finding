@@ -113,13 +113,19 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
     assert "Execution-order discipline" in bundle.implementation_system
     assert "Validity preservation note" in bundle.implementation_user
     assert "smallest coherent module" in bundle.mutation_system
+    assert "whether repaired regions can regrow" in bundle.genome_schema
+    assert "one coherent imported secondary module" in bundle.crossover_system
     assert "primary-parent-dominant organism" in bundle.crossover_user
     assert "valid source of novelty" in bundle.mutation_novelty_user
+    assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
     assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
     assert "## COMPATIBILITY_VERDICT" in bundle.compatibility_seed_system
+    assert "score-inert" in bundle.compatibility_seed_system
     assert "validity beats score" not in bundle.implementation_system
+    assert "preserve inherited high-score maternal behavior" in bundle.implementation_system
     assert "feasibility safety pass" not in bundle.implementation_user
     assert "Repair is a full-file rewrite, not a diff." not in bundle.repair_system
+    assert "full-file output contract is an interface requirement" in bundle.repair_system
 
 
 def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
