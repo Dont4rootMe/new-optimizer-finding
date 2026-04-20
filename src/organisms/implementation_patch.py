@@ -12,6 +12,8 @@ _FULL_MODE = "FULL"
 _PATCH_MODE = "PATCH"
 _START_MARKER_RE = re.compile(r"^[ \t]*# === REGION: ([A-Z][A-Z0-9_]*) ===[ \t]*$")
 _END_MARKER_RE = re.compile(r"^[ \t]*# === END_REGION: ([A-Z][A-Z0-9_]*) ===[ \t]*$")
+_PATCH_NAMED_END_RE = re.compile(r"^END_REGION(?::[ \t]*|[ \t]+)([A-Z][A-Z0-9_]*)$")
+_PATCH_SCAFFOLD_END_RE = re.compile(r"^[ \t]*# === END_REGION: ([A-Z][A-Z0-9_]*)(?: ===)?[ \t]*$")
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,7 @@ class _RegionSpan:
     body: str
     body_start: int
     body_end: int
+    marker_indent: str
 
 
 def parse_implementation_scaffold(
@@ -194,6 +197,7 @@ def _parse_region_spans(text: str) -> tuple[_RegionSpan, ...]:
     spans: list[_RegionSpan] = []
     active_name: str | None = None
     active_start_marker: str | None = None
+    active_marker_indent = ""
     active_body_start: int | None = None
     offset = 0
 
@@ -210,6 +214,9 @@ def _parse_region_spans(text: str) -> tuple[_RegionSpan, ...]:
                 raise ValueError(f"Nested region marker at line {line_number}: {stripped_line!r}")
             active_name = start_match.group(1)
             active_start_marker = stripped_line
+            active_marker_indent = line_without_newline[
+                : len(line_without_newline) - len(line_without_newline.lstrip(" \t"))
+            ]
             active_body_start = offset + len(line)
         elif end_match is not None:
             end_name = end_match.group(1)
@@ -227,10 +234,12 @@ def _parse_region_spans(text: str) -> tuple[_RegionSpan, ...]:
                     body=source[active_body_start:offset],
                     body_start=active_body_start,
                     body_end=offset,
+                    marker_indent=active_marker_indent,
                 )
             )
             active_name = None
             active_start_marker = None
+            active_marker_indent = ""
             active_body_start = None
         elif "=== REGION:" in line or "=== END_REGION:" in line:
             raise ValueError(f"Malformed region marker at line {line_number}: {stripped_line!r}")
@@ -293,16 +302,34 @@ def _parse_patch_sections(text: str) -> tuple[str, tuple[tuple[str, str], ...]]:
                     raise ValueError(f"Empty implementation region name at line {line_number}.")
                 active_region = region_name
                 active_body_start = offset + len(line)
-            elif header == "END_REGION":
+            else:
+                end_region_name = _parse_patch_end_region_name(header, line_without_newline)
+                if end_region_name is None:
+                    raise ValueError(f"Unexpected implementation patch section heading at line {line_number}: {header!r}")
                 if active_region is None or active_body_start is None:
                     raise ValueError(f"Unexpected ## END_REGION at line {line_number}.")
+                if end_region_name and end_region_name != active_region:
+                    raise ValueError(
+                        f"Mismatched ## END_REGION at line {line_number}: expected {active_region}, got {end_region_name}."
+                    )
                 regions.append((active_region, source[active_body_start:offset]))
                 active_region = None
                 active_body_start = None
-            else:
-                raise ValueError(f"Unexpected implementation patch section heading at line {line_number}: {header!r}")
         elif line_without_newline.startswith("##"):
             raise ValueError(f"Malformed implementation patch heading at line {line_number}: {line_without_newline!r}")
+        elif active_region is not None:
+            end_region_name = _parse_patch_end_region_name("", line_without_newline)
+            if end_region_name is not None:
+                if active_body_start is None:
+                    raise ValueError(f"Unexpected implementation patch end marker at line {line_number}.")
+                if end_region_name and end_region_name != active_region:
+                    raise ValueError(
+                        f"Mismatched implementation patch end marker at line {line_number}: "
+                        f"expected {active_region}, got {end_region_name}."
+                    )
+                regions.append((active_region, source[active_body_start:offset]))
+                active_region = None
+                active_body_start = None
         elif not mode_seen and line_without_newline.strip():
             raise ValueError("Implementation patch contains text before ## COMPILATION_MODE.")
 
@@ -317,6 +344,18 @@ def _parse_patch_sections(text: str) -> tuple[str, tuple[tuple[str, str], ...]]:
         duplicates = sorted({name for name in actual_names if actual_names.count(name) > 1})
         raise ValueError(f"Implementation patch contains duplicate region(s): {', '.join(duplicates)}.")
     return mode, tuple(regions)
+
+
+def _parse_patch_end_region_name(header: str, line_without_newline: str) -> str | None:
+    if header == "END_REGION":
+        return ""
+    named_end_match = _PATCH_NAMED_END_RE.match(header)
+    if named_end_match is not None:
+        return named_end_match.group(1)
+    scaffold_end_match = _PATCH_SCAFFOLD_END_RE.match(line_without_newline)
+    if scaffold_end_match is not None:
+        return scaffold_end_match.group(1)
+    return None
 
 
 def _find_next_header_offset(source: str, lines: list[str], current_line_number: int, fallback: int) -> int:
@@ -346,7 +385,29 @@ def _replace_region_bodies(
     cursor = 0
     for span in spans:
         parts.append(source_text[cursor:span.body_start])
-        parts.append(region_bodies.get(span.name, span.body))
+        if span.name in region_bodies:
+            parts.append(_align_patch_body_indentation(region_bodies[span.name], span.marker_indent))
+        else:
+            parts.append(span.body)
         cursor = span.body_end
     parts.append(source_text[cursor:])
     return "".join(parts)
+
+
+def _align_patch_body_indentation(body: str, marker_indent: str) -> str:
+    if not marker_indent or not str(body).strip():
+        return body
+    lines = str(body).splitlines(keepends=True)
+    needs_indent = False
+    for line in lines:
+        line_without_newline = line[:-1] if line.endswith("\n") else line
+        if line_without_newline.endswith("\r"):
+            line_without_newline = line_without_newline[:-1]
+        if not line_without_newline.strip():
+            continue
+        if not line_without_newline.startswith((" ", "\t")):
+            needs_indent = True
+            break
+    if not needs_indent:
+        return body
+    return "".join(marker_indent + line if line.strip() else line for line in lines)

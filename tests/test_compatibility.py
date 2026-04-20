@@ -101,6 +101,24 @@ def test_parse_compatibility_judgment_accepts_compacted_accepted_without_reason(
     assert judgment.sections_at_issue == ()
 
 
+def test_parse_compatibility_judgment_accepts_reason_alias_for_accepted() -> None:
+    judgment = parse_compatibility_judgment(
+        "## COMPATIBILITY_VERDICT\nCOMPATIBILITY_ACCEPTED\n\n## REASON\nN/A\n"
+    )
+
+    assert judgment.is_accepted is True
+    assert judgment.rejection_reason is None
+    assert judgment.sections_at_issue == ()
+
+
+def test_parse_compatibility_judgment_accepts_same_line_reason_alias_for_accepted() -> None:
+    judgment = parse_compatibility_judgment("## COMPATIBILITY_VERDICT COMPATIBILITY_ACCEPTED ## REASON N/A\n")
+
+    assert judgment.is_accepted is True
+    assert judgment.rejection_reason is None
+    assert judgment.sections_at_issue == ()
+
+
 def test_parse_compatibility_judgment_accepts_accepted_with_extra_commentary_after_na() -> None:
     judgment = parse_compatibility_judgment(
         (

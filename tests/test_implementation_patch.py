@@ -236,6 +236,59 @@ def test_parse_implementation_patch_response_accepts_patch_subset() -> None:
     assert tuple(name for name, _body in patch.region_bodies) == ("CONFLICT_MODEL", "REPAIR_POLICY")
 
 
+def test_parse_implementation_patch_response_accepts_named_end_region_alias() -> None:
+    text = (
+        "## COMPILATION_MODE\n"
+        "PATCH\n\n"
+        "## REGION RADIUS_POLICY\n"
+        "    radii = np.ones(26)\n"
+        "## END_REGION: RADIUS_POLICY\n"
+    )
+
+    patch = parse_implementation_patch_response(
+        text,
+        expected_mode="PATCH",
+        expected_region_names=("RADIUS_POLICY",),
+    )
+
+    assert patch.region_bodies == (("RADIUS_POLICY", "    radii = np.ones(26)\n"),)
+
+
+def test_parse_implementation_patch_response_accepts_scaffold_style_end_region_alias() -> None:
+    text = (
+        "## COMPILATION_MODE\n"
+        "PATCH\n\n"
+        "## REGION RADIUS_POLICY\n"
+        "    radii = np.ones(26)\n"
+        "# === END_REGION: RADIUS_POLICY\n"
+    )
+
+    patch = parse_implementation_patch_response(
+        text,
+        expected_mode="PATCH",
+        expected_region_names=("RADIUS_POLICY",),
+    )
+
+    assert patch.region_bodies == (("RADIUS_POLICY", "    radii = np.ones(26)\n"),)
+
+
+def test_parse_implementation_patch_response_rejects_mismatched_named_end_region() -> None:
+    text = (
+        "## COMPILATION_MODE\n"
+        "PATCH\n\n"
+        "## REGION RADIUS_POLICY\n"
+        "    radii = np.ones(26)\n"
+        "## END_REGION: PARAMETERS\n"
+    )
+
+    with pytest.raises(ValueError, match="Mismatched"):
+        parse_implementation_patch_response(
+            text,
+            expected_mode="PATCH",
+            expected_region_names=("RADIUS_POLICY",),
+        )
+
+
 def test_parse_implementation_patch_response_rejects_wrong_mode() -> None:
     with pytest.raises(ValueError, match="must be PATCH"):
         parse_implementation_patch_response(
@@ -313,6 +366,27 @@ def test_assemble_implementation_from_full_patch_inserts_all_regions() -> None:
     assert "# === FIXED: DO NOT MODIFY ===" in source
     assert "    # body for INIT_GEOMETRY" in source
     assert "    # body for OPTIONAL_CODE_SKETCH" in source
+
+
+def test_assemble_implementation_from_full_patch_aligns_unindented_region_bodies() -> None:
+    pieces = ["## COMPILATION_MODE", "FULL"]
+    for region in REGIONS:
+        pieces.extend(("", f"## REGION {region}", f"# body for {region}", "## END_REGION"))
+    patch = parse_implementation_patch_response(
+        "\n".join(pieces) + "\n",
+        expected_mode="FULL",
+        expected_region_names=REGIONS,
+    )
+
+    source = assemble_implementation_from_patch(
+        scaffold_text=TEMPLATE,
+        patch=patch,
+        expected_region_names=REGIONS,
+    )
+    bodies = dict(extract_region_bodies_from_source(source, expected_region_names=REGIONS))
+
+    assert bodies["INIT_GEOMETRY"] == "    # body for INIT_GEOMETRY\n"
+    assert bodies["OPTIONAL_CODE_SKETCH"] == "    # body for OPTIONAL_CODE_SKETCH\n"
 
 
 def test_assemble_implementation_from_patch_preserves_unchanged_regions_byte_for_byte() -> None:

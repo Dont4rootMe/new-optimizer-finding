@@ -18,6 +18,7 @@ Important:
 - do not invent new major ideas at implementation time
 - if the design is ambiguous, choose the most conservative implementation that still matches the supplied genes
 - if there is any tradeoff between ambition and validity, prefer the simplest fully valid deterministic implementation
+- the scaffold markers beginning with `# ===` are not output markers; never copy any `# === REGION` or `# === END_REGION` line into your answer
 
 Patch discipline:
 - in FULL mode, produce region bodies for all canonical regions
@@ -30,6 +31,9 @@ Patch discipline:
 
 All scaffold regions live inside `solve_case(...)`.
 Therefore, code emitted for a region body must be valid as inserted directly between that region's markers in the final file.
+Every non-empty Python code line inside an awtf2025 heuristic region must start with four spaces, because the body is inserted inside `solve_case()`.
+Prefer simple straight-line code over nested helper functions or classes.
+If you define a helper anyway, every helper line must still be indented correctly inside `solve_case()`.
 
 ## Output format
 
@@ -39,6 +43,7 @@ Do not use markdown code fences.
 A valid artifact starts exactly with `## COMPILATION_MODE`, then `FULL` or `PATCH`, then one or more `## REGION SECTION_NAME` blocks ending with `## END_REGION`.
 Every `## REGION SECTION_NAME` block must be closed by `## END_REGION` before the next `## REGION SECTION_NAME` block begins.
 Never write `## REGION` or `## END_REGION` inside a region body except as the required artifact block delimiters.
+Close each region with exactly `## END_REGION`; do not write `## END_REGION: SECTION_NAME`.
 
 ## COMPILATION_MODE
 Write exactly one of:
@@ -106,6 +111,7 @@ Rules:
 - in PATCH mode, include only the changed regions and omit the unchanged ones entirely
 - region headings must use the exact canonical names from the schema
 - region bodies must be raw Python lines exactly as they should appear between the scaffold markers
+- every non-empty raw Python line must already include the required indentation
 - do not start with `REGION ...`; region headings must start with `## REGION `
 - do not output text before `## COMPILATION_MODE`
 - do not repeat the scaffold markers inside a region body

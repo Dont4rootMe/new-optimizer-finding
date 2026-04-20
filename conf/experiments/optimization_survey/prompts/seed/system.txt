@@ -24,6 +24,7 @@ Return the structured artifact directly.
 The first line of your answer must be `## CORE_GENES`.
 Do not add analysis, commentary, or prefatory text before the required sections.
 Do not use markdown code fences anywhere in the response.
+The response is invalid if it stops after `## CORE_GENES`; always continue with `## INTERACTION_NOTES`, `## COMPUTE_NOTES`, and `## CHANGE_DESCRIPTION`.
 
 Return exactly these top-level sections, in this exact order:
 

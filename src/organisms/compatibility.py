@@ -111,8 +111,7 @@ def _parse_compact_compatibility_judgment(text: str, *, exact_error: ValueError)
     for verdict in (_COMPATIBILITY_ACCEPTED, _COMPATIBILITY_REJECTED):
         if compact_text == verdict or compact_text.startswith(verdict + "\n") or compact_text.startswith(verdict + " "):
             remainder = compact_text[len(verdict) :].strip()
-            if remainder.startswith("## REJECTION_REASON"):
-                remainder = remainder.removeprefix("## REJECTION_REASON").strip()
+            remainder = _strip_reason_heading_alias(remainder)
             if verdict == _COMPATIBILITY_ACCEPTED:
                 if remainder and _first_nonempty_line(remainder) != "N/A":
                     raise ValueError(
@@ -132,6 +131,21 @@ def _parse_compact_compatibility_judgment(text: str, *, exact_error: ValueError)
             )
 
     raise exact_error
+
+
+def _strip_reason_heading_alias(text: str) -> str:
+    remainder = str(text).strip()
+    for heading in (
+        "## REJECTION_REASON",
+        "## REASON",
+        "REJECTION_REASON",
+        "REASON",
+    ):
+        if remainder == heading:
+            return ""
+        if remainder.startswith(heading + "\n") or remainder.startswith(heading + " "):
+            return remainder[len(heading) :].strip()
+    return remainder
 
 
 def _first_nonempty_line(text: str) -> str:
