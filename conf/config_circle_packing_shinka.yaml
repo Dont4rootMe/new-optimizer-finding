@@ -43,16 +43,16 @@ api_platforms:
     stage_options:
       design:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
       implementation:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
       repair:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
       novelty_check:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
 
   ollama_gemma4_26b:
     base_url: ${oc.env:OLLAMA_GEMMA4_26B_BASE_URL,http://127.0.0.1:12435/api}
@@ -62,16 +62,16 @@ api_platforms:
     stage_options:
       design:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
       implementation:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
       repair:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
       novelty_check:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
 
   ollama_nemotron_cascade_2_30b:
     base_url: ${oc.env:OLLAMA_NEMOTRON_CASCADE_2_30B_BASE_URL,http://127.0.0.1:12434/api}
@@ -81,16 +81,16 @@ api_platforms:
     stage_options:
       design:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
       implementation:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
       repair:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
       novelty_check:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 8000
 
 hydra:
   run:
