@@ -1,6 +1,8 @@
 defaults:
   - evolver: circle_packing_shinka
-  - api_platforms@api_platforms.ollama_qwen35_122b: ollama_qwen35_122b
+  - api_platforms@api_platforms.ollama_qwen35_27b: ollama_qwen35_27b
+  - api_platforms@api_platforms.ollama_gemma4_26b: ollama_gemma4_26b
+  - api_platforms@api_platforms.ollama_nemotron_cascade_2_30b: ollama_nemotron_cascade_2_30b
   - experiments@experiments.unit_square_26: circle_packing_shinka/unit_square_26
   - _self_
 
