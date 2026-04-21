@@ -19,6 +19,7 @@ Requirements:
 - Return only Python code, no markdown fences
 - Do NOT add commentary before or after the file
 - The first non-empty line must be a Python import or `from __future__ ...` line
+- Never preserve or emit `FULL`, `PATCH`, `## COMPILATION_MODE`, `## REGION`, or `## END_REGION` in the repaired full file
 - Keep the code deterministic
 - Use only `numpy` and the Python standard library
 - The final module must define `run_packing()`
@@ -45,6 +46,9 @@ Before outputting the repaired code, verify:
 6. No two circles overlap
 7. No division by zero or NaN values can occur
 8. The code completes within 120 seconds
+
+If the error history contains `name 'FULL' is not defined` or syntax at line 1, remove any non-Python preamble first.
+If the error history says `run_packing() must return a 3-tuple`, preserve the algorithm but repair the final conversion and return path before changing geometry.
 
 ## Region-preserving repair strategy
 

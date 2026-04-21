@@ -45,5 +45,7 @@ Fix the error while staying faithful to the genetic code.
 The full-file output format is only the repair interface contract; preserve unaffected scaffold regions and the inherited mechanism whenever possible.
 Repair the smallest affected region set consistent with the error history and preserve the current algorithm outside those regions whenever possible.
 If the current implementation already realizes a strong mechanism imperfectly, repair it locally instead of replacing it with a weaker but safer generic algorithm.
+If the current file starts with `FULL`, `PATCH`, `## COMPILATION_MODE`, or a markdown fence, remove that preamble and return only Python.
+If the failure is that `run_packing()` does not return a 3-tuple, fix the return path first: compute arrays, compute `reported_sum = float(np.sum(radii))`, and return `centers, radii, reported_sum`.
 Do not replace the whole algorithm with a short generic packing unless no local repair is viable.
 Return ONLY the corrected full `implementation.py` text. No markdown fences, no commentary.

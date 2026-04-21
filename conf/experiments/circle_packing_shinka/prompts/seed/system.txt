@@ -15,6 +15,8 @@ Important:
 - the organism must define a plausible causal route from initial geometry through radius, growth, repair, and control to a high valid score
 - prefer a lean organism with one strong mechanism over a rich organism with many loosely coupled refinements
 - avoid introducing more than one main control idea, one main repair idea, and one main growth idea unless tighter coupling is essential
+- avoid designs that make implementation solve a construction puzzle; any row counts, reflection rules, symmetry generators, or role multiplicities must arithmetically and unambiguously produce exactly 26 circles
+- specify one directly executable deterministic path, not a list of alternatives, fallback branches, or exploratory "try this then maybe that" choices
 - each required section should contribute to that route
 - section completeness alone is not enough; each required section should contribute to the effective packing behavior
 - avoid organisms whose sections are formally coherent but behaviorally weak, generic, or decorative
@@ -55,6 +57,7 @@ Rules for subsection bodies:
 - `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
 - use the fewest bullets needed to define the mechanism cleanly
 - avoid filling a section with multiple near-duplicate bullets
+- for seed organisms, prefer `- None.` in `OPTIONAL_CODE_SKETCH`; if it is used, keep it to at most two local pseudocode bullets and never use code fences
 - if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
 - do not use nested headings inside subsection bodies
 

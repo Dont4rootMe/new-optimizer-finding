@@ -33,6 +33,9 @@ Mode-specific output contract:
 - FULL mode output contract: return the complete final `implementation.py` only
 - in FULL mode, use the scaffold as the file skeleton and return valid Python source code, not a patch artifact
 - in FULL mode, do not output `## COMPILATION_MODE`, `## REGION`, or `## END_REGION`
+- in FULL mode, the first non-empty line must be a Python import line, usually `import numpy as np`; it must never be `FULL`, `PATCH`, `## ...`, or a markdown fence
+- in FULL mode, write executable code, not a comment-only reasoning trace; brief comments are allowed only when paired with working code
+- in FULL mode, if the exact mechanism is underspecified, implement the simplest faithful deterministic version rather than leaving placeholders, repeated planning comments, or unfinished branches
 - PATCH mode output contract: return only the region patch artifact
 - in PATCH mode, the first line of your answer must be `## COMPILATION_MODE`
 - in PATCH mode, include only the changed regions, in canonical order, using exact canonical section names
@@ -42,5 +45,6 @@ Minimal syntax discipline:
 - do not use markdown code fences
 - do not emit commentary, analysis, or prose
 - use ASCII identifiers only
+- define `run_packing()` exactly once and make it return exactly `centers, radii, reported_sum`
 - PATCH region bodies must be raw Python lines exactly as they should appear between the scaffold markers
 - every non-empty PATCH region line must already include the required indentation inside `run_packing()`

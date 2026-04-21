@@ -24,6 +24,7 @@ This island explores organisms that treat an initial hypothesis as something to 
 - Determinism is required — no random restarts unless seeded consistently with numpy
 - Repairing overlaps by shrinking radii is safe but reduces the score; repairing by shifting positions preserves radii but may cascade
 - Rich multi-stage repair stacks can become implementation-heavy and score-destructive; prefer compact repair logic with clear priority rules
+- Avoid designs whose repair loop needs open-ended cascades, repeated alternative fallbacks, or implementation-time search to decide what the repair actually is
 
 ## Design prompt
 
@@ -33,6 +34,7 @@ Good organisms on this island should specify:
 3. What the repair operator does to fix one conflict (shift, shrink, swap)
 4. What the termination criterion is (max iterations, no violations, convergence tolerance)
 5. How radii are preserved during repair whenever possible
+6. One bounded repair loop that can be implemented directly without inventing additional machinery
 
 Do not treat this as a requirement to use any particular heuristic.
 The goal is a style of thinking, not a prescribed repair recipe.

@@ -53,6 +53,9 @@ If COMPILATION_MODE is FULL:
 - return the final full Python file only
 - use the canonical scaffold as the file skeleton
 - do not return a patch artifact
+- the first non-empty line must be `import numpy as np` or another Python import, not `FULL`, `PATCH`, `## COMPILATION_MODE`, or a markdown fence
+- the file must contain a complete executable `def run_packing():` that returns exactly `(centers, radii, reported_sum)`
+- do not write long exploratory comments in place of implementation; choose the simplest faithful deterministic realization and finish the file
 
 If COMPILATION_MODE is PATCH:
 - return only the patch artifact in the required `## COMPILATION_MODE` / `## REGION` / `## END_REGION` format

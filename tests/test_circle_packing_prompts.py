@@ -149,11 +149,13 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     assert "score-inert" in bundle.compatibility_seed_system
     assert "too many loosely coupled mechanisms or role taxonomies" in bundle.compatibility_seed_system
     assert "mathematically ill-posed or too vague" in bundle.compatibility_seed_system
+    assert "unambiguously produce exactly 26 circles" in bundle.compatibility_seed_system
     assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system.lower()
     assert "extra support machinery" in bundle.compatibility_mutation_system
     assert "too structurally elaborate" in bundle.compatibility_crossover_user
     assert "full-file output contract is an interface requirement" in bundle.repair_system
     assert "do not replace it with a short generic packing" in bundle.repair_system
+    assert "Never preserve or emit `FULL`" in bundle.repair_system
 
 
 def test_circle_packing_generation_prompt_files_are_section_schema_aware() -> None:
@@ -374,6 +376,8 @@ def test_circle_packing_implementation_prompt_splits_full_and_patch_contracts() 
     assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system
     assert "PATCH mode output contract: return only the region patch artifact" in bundle.implementation_system
     assert "close it immediately with `## END_REGION`" in bundle.implementation_system
+    assert "the first non-empty line must be a Python import line" in bundle.implementation_system
+    assert "write executable code, not a comment-only reasoning trace" in bundle.implementation_system
     assert "do not invent new major ideas at implementation time" in combined_prompt
     assert "do not output a full `implementation.py`" not in bundle.implementation_system
     assert "=== COMPILATION MODE ===" in bundle.implementation_user
@@ -382,6 +386,7 @@ def test_circle_packing_implementation_prompt_splits_full_and_patch_contracts() 
     assert "=== MATERNAL BASE IMPLEMENTATION ===" in bundle.implementation_user
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.implementation_user
     assert "return the final full Python file only" in bundle.implementation_user
+    assert "not `FULL`, `PATCH`, `## COMPILATION_MODE`, or a markdown fence" in bundle.implementation_user
     assert "return only the patch artifact" in bundle.implementation_user
     assert "RUN_PACKING_BODY" not in bundle.implementation_template
     for region in tuple(heading[4:] for heading in SECTION_HEADINGS):
@@ -393,6 +398,21 @@ def test_circle_packing_implementation_prompt_splits_full_and_patch_contracts() 
     assert "feasibility safety pass" not in combined_prompt
     assert "final safety pass" not in combined_prompt
     assert "PARAMETERS occurs late" not in combined_prompt
+
+
+def test_circle_packing_seed_prompts_reject_ambiguous_26_circle_generators() -> None:
+    bundle = load_prompt_bundle(_compose_cfg())
+    prompts_dir = ROOT / "conf" / "experiments" / "circle_packing_shinka" / "prompts"
+    symmetric_island = (prompts_dir / "islands" / "symmetric_constructions.txt").read_text(encoding="utf-8")
+    repair_island = (prompts_dir / "islands" / "iterative_repair.txt").read_text(encoding="utf-8")
+
+    assert "must arithmetically and unambiguously produce exactly 26 circles" in bundle.seed_system
+    assert "one directly executable deterministic path" in bundle.seed_system
+    assert "prefer `- None.` in `OPTIONAL_CODE_SKETCH`" in bundle.seed_system
+    assert "without requiring the implementation model to resolve contradictions" in bundle.seed_user
+    assert "arithmetic puzzle" in bundle.compatibility_seed_user
+    assert "row-count, trimming, or reflection rule" in symmetric_island
+    assert "One bounded repair loop" in repair_island
 
 
 def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> None:
