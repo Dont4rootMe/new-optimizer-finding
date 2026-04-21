@@ -358,13 +358,50 @@ def build_manual_implementation_prompts(
     normalized_mode = str(compilation_mode).strip().upper()
     if normalized_mode not in {"FULL", "PATCH"}:
         raise ValueError("compilation_mode must be FULL or PATCH.")
-    if normalized_mode == "FULL":
+    single_full_rewrite_contract = (
+        "Single rewrite contract:" in context.prompt_bundle.implementation_system
+    )
+    if single_full_rewrite_contract:
+        if normalized_mode == "PATCH":
+            raise ValueError("This implementation prompt family only supports full-source rewrite prompts.")
+        if base_parent_genetic_code_text is None and base_parent_implementation_text is None:
+            section_tuple = tuple(implementation_regions or ())
+            base_genetic_code = "NONE"
+            base_implementation = "NONE"
+        else:
+            if not base_parent_genetic_code_text or not base_parent_implementation_text:
+                raise ValueError(
+                    "Full child-rewrite prompts require both maternal base genetic code and implementation."
+                )
+            if changed_sections is None and expected_sections is not None and implementation_regions is not None:
+                changed_genome_sections = compute_changed_genome_sections(
+                    base_parent_genetic_code_text,
+                    organism_genetic_code_text,
+                    expected_section_names=expected_sections,
+                )
+                section_tuple = order_changed_sections_by_region_order(
+                    changed_genome_sections,
+                    region_order=implementation_regions,
+                )
+            elif changed_sections is None:
+                section_tuple = tuple(implementation_regions or ())
+            else:
+                section_tuple = tuple(str(section).strip() for section in changed_sections if str(section).strip())
+            base_genetic_code = base_parent_genetic_code_text
+            base_implementation = base_parent_implementation_text
+    elif normalized_mode == "FULL":
+        if base_parent_genetic_code_text is not None or base_parent_implementation_text is not None:
+            raise ValueError(
+                "Legacy section-patch prompt families do not support maternal-base FULL-mode implementation prompts."
+            )
         section_tuple = tuple(implementation_regions or ())
         base_genetic_code = "NONE"
         base_implementation = "NONE"
     else:
         if not base_parent_genetic_code_text or not base_parent_implementation_text:
-            raise ValueError("PATCH manual implementation prompts require maternal base genetic code and implementation.")
+            raise ValueError(
+                "PATCH manual implementation prompts require maternal base genetic code and implementation."
+            )
         if changed_sections is None:
             if expected_sections is None or implementation_regions is None:
                 raise ValueError("PATCH manual implementation prompts require schema-derived section names.")
@@ -386,17 +423,21 @@ def build_manual_implementation_prompts(
         genetic_code=genetic_code,
         change_description=str(novelty_summary),
         prompts=context.prompt_bundle,
-        compilation_mode=normalized_mode,
+        compilation_mode="FULL" if single_full_rewrite_contract else normalized_mode,
         changed_sections=rendered_changed_sections,
         base_parent_genetic_code=base_genetic_code,
         base_parent_implementation=base_implementation,
     )
-    return {
-        "compilation_mode": normalized_mode,
+    result = {
         "changed_sections": section_tuple,
         "system_prompt": system_prompt,
         "user_prompt": user_prompt,
     }
+    if single_full_rewrite_contract:
+        result["implementation_strategy"] = "full_source_rewrite"
+    else:
+        result["compilation_mode"] = normalized_mode
+    return result
 
 
 def build_manual_mutation_novelty_prompts(

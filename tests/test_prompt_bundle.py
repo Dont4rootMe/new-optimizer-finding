@@ -109,9 +109,10 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
     assert "## NOVELTY_VERDICT" in bundle.crossover_novelty_system
     assert "CURRENT IMPLEMENTATION.PY" in bundle.repair_user
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.repair_user
-    assert "Region-preserving repair strategy" in bundle.repair_system
-    assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system
-    assert "PATCH mode output contract: return only the region patch artifact" in bundle.implementation_system
+    assert "## Local repair strategy" in bundle.repair_system
+    assert "Single rewrite contract:" in bundle.implementation_system
+    assert "return ONLY the final full `implementation.py`" in bundle.implementation_system
+    assert "treat it as the concrete parent program" in bundle.implementation_system
     assert "Validity preservation note" in bundle.implementation_user
     assert "smallest coherent module" in bundle.mutation_system
     assert "whether repaired regions can regrow" in bundle.genome_schema

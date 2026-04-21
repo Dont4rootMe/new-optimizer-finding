@@ -5,9 +5,8 @@ You will receive:
 - the sectioned organism genetic code
 - the organism novelty summary
 - the canonical implementation scaffold
-- the compilation mode: FULL or PATCH
 - the ordered list of changed genome sections
-- in PATCH mode, the maternal base implementation and maternal base genetic code
+- when present, the maternal base implementation and maternal base genetic code
 
 Your job is to realize the supplied genes faithfully in deterministic code.
 
@@ -24,24 +23,23 @@ Scaffold discipline:
 - `PARAMETERS` executes early; assign shared values before first use
 - `OPTIONAL_CODE_SKETCH` must stay local and must not override the whole algorithm
 
-PATCH inheritance rules:
-- in PATCH mode, preserve maternal algorithmic behavior outside the changed sections unless those sections themselves require a coordinated local adjustment
-- in PATCH mode, preserve inherited high-score maternal behavior whenever the changed sections do not require altering it
-- do not compensate for unchanged regions by rewriting behavior elsewhere
+Maternal inheritance rules:
+- when maternal base code is supplied, treat it as the concrete parent program
+- preserve inherited behavior outside the changed sections unless the child genes require a coordinated adjustment
+- preserve inherited high-score maternal behavior whenever the changed sections do not require altering it
+- do not compensate for unchanged genes by rewriting unrelated behavior
 
-Mode-specific output contract:
-- FULL mode output contract: return the complete final `implementation.py` only
-- in FULL mode, use the scaffold as the file skeleton and return valid Python source code, not a patch artifact
-- in FULL mode, do not output `## COMPILATION_MODE`, `## REGION`, or `## END_REGION`
-- in FULL mode, the first non-empty line must be a Python import line, usually `import numpy as np`; it must never be `FULL`, `PATCH`, `## ...`, or a markdown fence
-- in FULL mode, write executable code, not a comment-only reasoning trace; brief comments are allowed only when paired with working code
-- in FULL mode, if the exact mechanism is underspecified, implement the simplest faithful deterministic version rather than leaving placeholders, repeated planning comments, or unfinished branches
-- in FULL mode, return only the final organism output state, not trajectories, repeated candidate batches, candidate histories, or duplicated full constructions
-- PATCH mode output contract: return only the region patch artifact
-- in PATCH mode, the first line of your answer must be `## COMPILATION_MODE`
-- in PATCH mode, include only the changed regions, in canonical order, using `## REGION SECTION_NAME` with exact canonical section names
-- in PATCH mode, do not put a colon after `REGION`
-- in PATCH mode, after writing one region body, close it immediately with `## END_REGION` before beginning the next region
+Single rewrite contract:
+- return ONLY the final full `implementation.py`
+- with maternal base code, rewrite the complete child file from that parent program with the minimum faithful edits
+- without maternal base code, use the scaffold as the starting skeleton
+- return valid Python source code, not changed snippets, patch artifacts, or prose
+- the first non-empty line must be a Python import line, usually `import numpy as np`; it must never be a markdown fence or commentary
+- write executable code, not a comment-only reasoning trace; brief comments are allowed only when paired with working code
+- if the exact mechanism is underspecified, implement the simplest faithful deterministic version rather than leaving placeholders, repeated planning comments, or unfinished branches
+- return only the final organism output state, not trajectories, repeated candidate batches, candidate histories, or duplicated full constructions
+- keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the code
+- preserve code outside the EVOLVE block unless the file is too broken to keep safely
 
 Minimal syntax discipline:
 - do not use markdown code fences
@@ -49,5 +47,3 @@ Minimal syntax discipline:
 - use ASCII identifiers only
 - define `run_packing()` exactly once and make it return exactly `centers, radii, reported_sum`
 - use bounded repair and growth loops; do not use unbounded `while True` unless the body has a hard counter and guaranteed progress
-- PATCH region bodies must be raw Python lines exactly as they should appear between the scaffold markers
-- every non-empty PATCH region line must already include the required indentation inside `run_packing()`

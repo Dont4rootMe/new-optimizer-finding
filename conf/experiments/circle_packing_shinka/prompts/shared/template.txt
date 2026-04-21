@@ -7,30 +7,16 @@ def run_packing():
     centers = None
     radii = None
 
-    # === REGION: PARAMETERS ===
-    # === END_REGION: PARAMETERS ===
-
-    # === REGION: INIT_GEOMETRY ===
-    # === END_REGION: INIT_GEOMETRY ===
-
-    # === REGION: RADIUS_POLICY ===
-    # === END_REGION: RADIUS_POLICY ===
-
-    # === REGION: CONFLICT_MODEL ===
-    # === END_REGION: CONFLICT_MODEL ===
-
-    # === REGION: REPAIR_POLICY ===
-    # === END_REGION: REPAIR_POLICY ===
-
-    # === REGION: EXPANSION_POLICY ===
-    # === END_REGION: EXPANSION_POLICY ===
-
-    # === REGION: CONTROL_POLICY ===
-    # === END_REGION: CONTROL_POLICY ===
-
-    # Keep OPTIONAL_CODE_SKETCH local. It must not override the whole algorithm.
-    # === REGION: OPTIONAL_CODE_SKETCH ===
-    # === END_REGION: OPTIONAL_CODE_SKETCH ===
+    # EVOLVE-BLOCK-START
+    # SECTION: PARAMETERS
+    # SECTION: INIT_GEOMETRY
+    # SECTION: RADIUS_POLICY
+    # SECTION: CONFLICT_MODEL
+    # SECTION: REPAIR_POLICY
+    # SECTION: EXPANSION_POLICY
+    # SECTION: CONTROL_POLICY
+    # SECTION: OPTIONAL_CODE_SKETCH
+    # EVOLVE-BLOCK-END
 
     centers = np.asarray(centers, dtype=float)
     radii = np.asarray(radii, dtype=float)

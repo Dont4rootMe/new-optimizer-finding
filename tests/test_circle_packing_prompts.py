@@ -169,7 +169,7 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     assert "Prefer `- None.` unless a genuinely local executable sketch is necessary" in bundle.genome_schema
     assert "do not invent new major ideas at implementation time" in bundle.implementation_system
     assert "preserve inherited high-score maternal behavior" in bundle.implementation_system
-    assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system
+    assert "Single rewrite contract:" in bundle.implementation_system
     assert "child genetic code draft" in bundle.mutation_system.lower()
     assert "child draft" in bundle.crossover_system.lower()
     assert "smallest coherent module" in bundle.mutation_system
@@ -192,7 +192,7 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     assert "do not replace it with a short generic packing" in bundle.repair_system
     assert "treat that exact local issue as the primary repair target" in bundle.repair_system
     assert "Centers shape incorrect" in bundle.repair_system
-    assert "Never preserve or emit `FULL`" in bundle.repair_system
+    assert "Keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the repaired file" in bundle.repair_system
 
 
 def test_circle_packing_generation_prompt_files_are_section_schema_aware() -> None:
@@ -516,36 +516,38 @@ def test_circle_packing_implementation_and_repair_prompts_do_not_require_genome_
     assert all("{genome_schema}" not in prompt for prompt in non_generation_prompts)
 
 
-def test_circle_packing_implementation_prompt_splits_full_and_patch_contracts() -> None:
+def test_circle_packing_implementation_prompt_uses_single_full_rewrite_contract() -> None:
     bundle = load_prompt_bundle(_compose_cfg())
     combined_prompt = "\n".join((bundle.implementation_system, bundle.implementation_user))
 
-    assert "## COMPILATION_MODE" in bundle.implementation_system
-    assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system
-    assert "PATCH mode output contract: return only the region patch artifact" in bundle.implementation_system
-    assert "do not put a colon after `REGION`" in bundle.implementation_system
-    assert "close it immediately with `## END_REGION`" in bundle.implementation_system
+    assert "Single rewrite contract:" in bundle.implementation_system
+    assert "return ONLY the final full `implementation.py`" in bundle.implementation_system
+    assert "when maternal base code is supplied, treat it as the concrete parent program" in bundle.implementation_system
+    assert "rewrite the complete child file from that parent program" in bundle.implementation_system
+    assert "not changed snippets, patch artifacts, or prose" in bundle.implementation_system
     assert "the first non-empty line must be a Python import line" in bundle.implementation_system
     assert "write executable code, not a comment-only reasoning trace" in bundle.implementation_system
     assert "candidate histories, or duplicated full constructions" in bundle.implementation_system
     assert "duplicated full constructions" in bundle.implementation_system
+    assert "keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the code" in bundle.implementation_system
     assert "do not invent new major ideas at implementation time" in combined_prompt
     assert "do not output a full `implementation.py`" not in bundle.implementation_system
-    assert "=== COMPILATION MODE ===" in bundle.implementation_user
+    assert "=== COMPILATION MODE ===" not in bundle.implementation_user
     assert "=== CHANGED_SECTIONS ===" in bundle.implementation_user
     assert "=== MATERNAL BASE GENETIC CODE ===" in bundle.implementation_user
     assert "=== MATERNAL BASE IMPLEMENTATION ===" in bundle.implementation_user
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.implementation_user
-    assert "return the final full Python file only" in bundle.implementation_user
-    assert "not `FULL`, `PATCH`, `## COMPILATION_MODE`, or a markdown fence" in bundle.implementation_user
+    assert "Return the final full Python file only." in bundle.implementation_user
+    assert "use it as the concrete parent program" in bundle.implementation_user
+    assert "do not return changed snippets only" in bundle.implementation_user
+    assert "keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the file" in bundle.implementation_user
     assert "not repeated generated batches, candidate histories, or repair trajectories" in bundle.implementation_user
-    assert "return only the patch artifact" in bundle.implementation_user
-    assert "not `## REGION: SECTION_NAME`" in bundle.implementation_user
     assert "RUN_PACKING_BODY" not in bundle.implementation_template
+    assert "# EVOLVE-BLOCK-START" in bundle.implementation_template
+    assert "# EVOLVE-BLOCK-END" in bundle.implementation_template
     for region in tuple(heading[4:] for heading in SECTION_HEADINGS):
-        assert f"# === REGION: {region} ===" in bundle.implementation_template
-        assert f"# === END_REGION: {region} ===" in bundle.implementation_template
-    positions = [bundle.implementation_template.index(f"# === REGION: {region} ===") for region in IMPLEMENTATION_REGION_ORDER]
+        assert f"# SECTION: {region}" in bundle.implementation_template
+    positions = [bundle.implementation_template.index(f"# SECTION: {region}") for region in IMPLEMENTATION_REGION_ORDER]
     assert positions == sorted(positions)
     assert "validity beats score" not in combined_prompt
     assert "feasibility safety pass" not in combined_prompt
@@ -656,7 +658,7 @@ def test_circle_packing_prompt_surface_removes_safe_local_search_bias() -> None:
     assert "one coherent imported secondary module" in bundle.crossover_system
     assert "score-inert" in combined
     assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
-    assert "Repair the smallest affected region set necessary" in bundle.repair_system
+    assert "Repair the smallest affected code span necessary" in bundle.repair_system
 
 
 def test_circle_packing_mutation_prompt_renders_novelty_feedback(tmp_path: Path) -> None:

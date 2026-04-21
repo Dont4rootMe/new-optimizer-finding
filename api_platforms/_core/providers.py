@@ -23,6 +23,15 @@ def _utc_now_iso() -> str:
 
 def _render_mock_implementation(template: str, organism_id: str, generation: int, seed: int) -> str:
     if "def run_packing():" in template:
+        if "# EVOLVE-BLOCK-START" in template and "# SECTION:" in template:
+            rendered = template
+            for region_name in _extract_template_region_names(template):
+                pattern = rf"(?m)^[ \t]*# SECTION: {region_name}[ \t]*$"
+                body = _mock_circle_region_body(region_name).rstrip("\n")
+                rendered, count = re.subn(pattern, body, rendered, count=1)
+                if count != 1:
+                    raise ValueError(f"Mock scaffold is missing section hint for {region_name}.")
+            return rendered.rstrip() + "\n"
         return template.format(
             imports="",
             helpers=(
@@ -158,7 +167,10 @@ def _extract_schema_sections_from_prompt(prompt: str) -> tuple[str, ...]:
 
 
 def _extract_template_region_names(text: str) -> tuple[str, ...]:
-    return tuple(re.findall(r"# === REGION: ([A-Z][A-Z0-9_]*) ===", text))
+    legacy_names = tuple(re.findall(r"# === REGION: ([A-Z][A-Z0-9_]*) ===", text))
+    if legacy_names:
+        return legacy_names
+    return tuple(re.findall(r"^[ \t]*# SECTION: ([A-Z][A-Z0-9_]*)[ \t]*$", text, flags=re.MULTILINE))
 
 
 def _extract_prompt_block(text: str, heading: str) -> str:

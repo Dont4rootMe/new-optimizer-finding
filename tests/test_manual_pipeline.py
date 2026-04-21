@@ -85,6 +85,41 @@ _LINEAGE = """[
   }
 ]"""
 
+_SECTIONED_CIRCLE_CODE = """## CORE_GENES
+### INIT_GEOMETRY
+- Start from a centered scaffold.
+
+### RADIUS_POLICY
+- Use uniform radii.
+
+### EXPANSION_POLICY
+- Do not expand after initialization.
+
+### CONFLICT_MODEL
+- Track boundary and pairwise violations.
+
+### REPAIR_POLICY
+- Use deterministic local shifts.
+
+### CONTROL_POLICY
+- Run construction once.
+
+### PARAMETERS
+- Use radius 0.04.
+
+### OPTIONAL_CODE_SKETCH
+- None.
+
+## INTERACTION_NOTES
+Sections are coherent.
+
+## COMPUTE_NOTES
+Deterministic constructive code.
+
+## CHANGE_DESCRIPTION
+This organism tests a compact deterministic layout.
+"""
+
 _CIRCLE_PACKING_CODE = """import numpy as np
 
 def run_packing():
@@ -208,6 +243,15 @@ def test_manual_section_aware_prompt_helpers_render_validation_and_patch_context
         organism_genetic_code_text=_SECTIONED_OPTIMIZER_CODE,
         novelty_summary="Manual full compilation.",
     )
+    with pytest.raises(ValueError, match="maternal-base FULL-mode implementation prompts"):
+        build_manual_implementation_prompts(
+            context,
+            organism_genetic_code_text=changed_child,
+            novelty_summary="Manual full parent rewrite.",
+            compilation_mode="FULL",
+            base_parent_genetic_code_text=_SECTIONED_OPTIMIZER_CODE,
+            base_parent_implementation_text="base implementation text",
+        )
     patch_implementation = build_manual_implementation_prompts(
         context,
         organism_genetic_code_text=changed_child,
@@ -256,3 +300,37 @@ def test_manual_simple_evaluation_runs_circle_packing_candidate(tmp_path: Path) 
     assert report["score"] == pytest.approx(1.04)
     assert report["manual_experiment_name"] == "unit_square_26"
     assert report["source_implementation_path"] == str(implementation_path.resolve())
+
+
+def test_manual_circle_implementation_prompts_use_full_source_rewrite_contract() -> None:
+    context = load_manual_pipeline_context(
+        config_name="config_circle_packing_shinka",
+        experiment_name="unit_square_26",
+    )
+    changed_child = _SECTIONED_CIRCLE_CODE.replace(
+        "Use uniform radii.",
+        "Use role-dependent non-uniform radii.",
+    )
+
+    seed_prompt = build_manual_implementation_prompts(
+        context,
+        organism_genetic_code_text=_SECTIONED_CIRCLE_CODE,
+        novelty_summary="Manual seed compilation.",
+    )
+    child_prompt = build_manual_implementation_prompts(
+        context,
+        organism_genetic_code_text=changed_child,
+        novelty_summary="Manual child rewrite.",
+        base_parent_genetic_code_text=_SECTIONED_CIRCLE_CODE,
+        base_parent_implementation_text="base implementation text",
+    )
+
+    assert seed_prompt["implementation_strategy"] == "full_source_rewrite"
+    assert "compilation_mode" not in seed_prompt
+    assert "=== COMPILATION MODE ===" not in seed_prompt["user_prompt"]
+    assert "=== CHANGED_SECTIONS ===\n" in seed_prompt["user_prompt"]
+    assert child_prompt["implementation_strategy"] == "full_source_rewrite"
+    assert child_prompt["changed_sections"] == ("RADIUS_POLICY",)
+    assert "=== COMPILATION MODE ===" not in child_prompt["user_prompt"]
+    assert "=== CHANGED_SECTIONS ===\nRADIUS_POLICY" in child_prompt["user_prompt"]
+    assert "=== MATERNAL BASE IMPLEMENTATION ===\nbase implementation text" in child_prompt["user_prompt"]

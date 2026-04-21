@@ -12,6 +12,7 @@ _FULL_MODE = "FULL"
 _PATCH_MODE = "PATCH"
 _START_MARKER_RE = re.compile(r"^[ \t]*# === REGION: ([A-Z][A-Z0-9_]*) ===[ \t]*$")
 _END_MARKER_RE = re.compile(r"^[ \t]*# === END_REGION: ([A-Z][A-Z0-9_]*) ===[ \t]*$")
+_SECTION_HINT_RE = re.compile(r"^[ \t]*# SECTION: ([A-Z][A-Z0-9_]*)[ \t]*$", re.MULTILINE)
 _PATCH_NAMED_START_RE = re.compile(r"^REGION(?::[ \t]*|[ \t]+)([A-Z][A-Z0-9_]*)$")
 _PATCH_NAMED_END_RE = re.compile(r"^END_REGION(?::[ \t]*|[ \t]+)([A-Z][A-Z0-9_]*)$")
 _PATCH_SCAFFOLD_END_RE = re.compile(r"^[ \t]*# === END_REGION: ([A-Z][A-Z0-9_]*)(?: ===)?[ \t]*$")
@@ -33,7 +34,8 @@ class ParsedImplementationPatch:
 
 @dataclass(frozen=True)
 class ImplementationCompilationPlan:
-    compilation_mode: Literal["FULL", "PATCH"]
+    strategy: str
+    compilation_mode: Literal["FULL", "PATCH"] | None
     changed_sections: tuple[str, ...]
     maternal_base_required: bool
 
@@ -77,9 +79,17 @@ def resolve_implementation_region_order(
     """Return scaffold region order while validating it matches the expected section set."""
 
     spans = _parse_region_spans(text)
-    actual_names = tuple(span.name for span in spans)
-    _validate_region_name_set(actual_names, expected_section_names)
-    return actual_names
+    if spans:
+        actual_names = tuple(span.name for span in spans)
+        _validate_region_name_set(actual_names, expected_section_names)
+        return actual_names
+
+    hinted_names = _parse_section_hints(text)
+    if hinted_names:
+        _validate_region_name_set(hinted_names, expected_section_names)
+        return hinted_names
+
+    raise ValueError("Implementation template does not declare canonical section order.")
 
 
 def order_changed_sections_by_region_order(
@@ -279,6 +289,14 @@ def _parse_region_spans(text: str) -> tuple[_RegionSpan, ...]:
     if active_name is not None:
         raise ValueError(f"Region {active_name} is missing its end marker.")
     return tuple(spans)
+
+
+def _parse_section_hints(text: str) -> tuple[str, ...]:
+    hinted_names = [
+        match.group(1)
+        for match in _SECTION_HINT_RE.finditer(str(text))
+    ]
+    return tuple(hinted_names)
 
 
 def _validate_region_order(spans: tuple[_RegionSpan, ...], expected_region_names: tuple[str, ...]) -> None:

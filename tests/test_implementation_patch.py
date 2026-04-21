@@ -16,9 +16,6 @@ from src.organisms.implementation_patch import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = (ROOT / "conf" / "experiments" / "circle_packing_shinka" / "prompts" / "shared" / "template.txt").read_text(
-    encoding="utf-8"
-)
 GENOME_SECTIONS = (
     "INIT_GEOMETRY",
     "RADIUS_POLICY",
@@ -39,6 +36,45 @@ REGIONS = (
     "CONTROL_POLICY",
     "OPTIONAL_CODE_SKETCH",
 )
+TEMPLATE = """# === FIXED: DO NOT MODIFY ===
+import numpy as np
+# === END FIXED ===
+
+# === FIXED: RUN_PACKING_CONTRACT ===
+def run_packing():
+    centers = None
+    radii = None
+
+    # === REGION: PARAMETERS ===
+    # === END_REGION: PARAMETERS ===
+
+    # === REGION: INIT_GEOMETRY ===
+    # === END_REGION: INIT_GEOMETRY ===
+
+    # === REGION: RADIUS_POLICY ===
+    # === END_REGION: RADIUS_POLICY ===
+
+    # === REGION: CONFLICT_MODEL ===
+    # === END_REGION: CONFLICT_MODEL ===
+
+    # === REGION: REPAIR_POLICY ===
+    # === END_REGION: REPAIR_POLICY ===
+
+    # === REGION: EXPANSION_POLICY ===
+    # === END_REGION: EXPANSION_POLICY ===
+
+    # === REGION: CONTROL_POLICY ===
+    # === END_REGION: CONTROL_POLICY ===
+
+    # === REGION: OPTIONAL_CODE_SKETCH ===
+    # === END_REGION: OPTIONAL_CODE_SKETCH ===
+
+    centers = np.asarray(centers, dtype=float)
+    radii = np.asarray(radii, dtype=float)
+    reported_sum = float(np.sum(radii))
+    return centers, radii, reported_sum
+# === END FIXED ===
+"""
 OPTIMIZER_TEMPLATE = (
     ROOT / "conf" / "experiments" / "optimization_survey" / "prompts" / "shared" / "template.txt"
 ).read_text(encoding="utf-8")

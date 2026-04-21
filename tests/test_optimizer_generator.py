@@ -19,11 +19,6 @@ from src.organisms.compatibility import (
     CompatibilityValidationContext,
     format_compatibility_rejection_feedback,
 )
-from src.organisms.implementation_patch import (
-    ParsedImplementationPatch,
-    assemble_implementation_from_patch,
-    extract_region_bodies_from_source,
-)
 from src.organisms.novelty import NoveltyCheckContext, NoveltyRejectionExhaustedError
 from src.organisms.organism import save_organism_artifacts
 
@@ -208,13 +203,33 @@ def _circle_scaffold_template() -> str:
 
 
 def _circle_base_source() -> str:
-    return assemble_implementation_from_patch(
-        scaffold_text=_circle_scaffold_template(),
-        patch=ParsedImplementationPatch(
-            compilation_mode="FULL",
-            region_bodies=tuple((region, _circle_region_body(region)) for region in CIRCLE_IMPLEMENTATION_REGIONS),
-        ),
-        expected_region_names=CIRCLE_IMPLEMENTATION_REGIONS,
+    return (
+        "import numpy as np\n\n"
+        "def run_packing():\n"
+        "    centers = None\n"
+        "    radii = None\n\n"
+        "    # EVOLVE-BLOCK-START\n"
+        "    # SECTION: PARAMETERS\n"
+        "    # base PARAMETERS\n"
+        "    # SECTION: INIT_GEOMETRY\n"
+        "    centers = np.asarray([[0.10 + 0.06 * (i % 13), 0.20 + 0.20 * (i // 13)] for i in range(26)], dtype=float)\n"
+        "    # SECTION: RADIUS_POLICY\n"
+        "    radii = np.full(26, 0.04, dtype=float)\n"
+        "    # SECTION: CONFLICT_MODEL\n"
+        "    # base CONFLICT_MODEL\n"
+        "    # SECTION: REPAIR_POLICY\n"
+        "    # base REPAIR_POLICY\n"
+        "    # SECTION: EXPANSION_POLICY\n"
+        "    # base EXPANSION_POLICY\n"
+        "    # SECTION: CONTROL_POLICY\n"
+        "    # base CONTROL_POLICY\n"
+        "    # SECTION: OPTIONAL_CODE_SKETCH\n"
+        "    # base OPTIONAL_CODE_SKETCH\n"
+        "    # EVOLVE-BLOCK-END\n\n"
+        "    centers = np.asarray(centers, dtype=float)\n"
+        "    radii = np.asarray(radii, dtype=float)\n"
+        "    reported_sum = float(np.sum(radii))\n"
+        "    return centers, radii, reported_sum\n"
     )
 
 
@@ -704,14 +719,10 @@ def test_circle_seed_implementation_stage_uses_full_source_compilation(
         if request.stage == "design":
             return _llm_response(request.stage, _circle_design_text())
         assert request.stage == "implementation"
-        assert (
-            "FULL mode output contract: return the complete final `implementation.py` only"
-            in request.system_prompt
-        )
-        assert "=== COMPILATION MODE ===\nFULL" in request.user_prompt
+        assert "Single rewrite contract:" in request.system_prompt
         assert "=== CHANGED_SECTIONS ===\n" + "\n".join(CIRCLE_IMPLEMENTATION_REGIONS) in request.user_prompt
         assert "=== MATERNAL BASE GENETIC CODE ===\nNONE" in request.user_prompt
-        assert "return the final full Python file only" in request.user_prompt
+        assert "Return the final full Python file only." in request.user_prompt
         return _llm_response(request.stage, _circle_base_source())
 
     monkeypatch.setattr(generator.registry, "generate", fake_generate)
@@ -728,11 +739,13 @@ def test_circle_seed_implementation_stage_uses_full_source_compilation(
 
     assert stages == ["design", "implementation"]
     assert "## COMPILATION_MODE" not in result.implementation_code
-    assert "# === REGION: INIT_GEOMETRY ===" in result.implementation_code
+    assert "# EVOLVE-BLOCK-START" in result.implementation_code
+    assert "# SECTION: INIT_GEOMETRY" in result.implementation_code
     assert "radii = np.full(26, 0.04, dtype=float)" in result.implementation_code
     llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
     llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
-    assert llm_request["implementation"]["compilation_mode"] == "FULL"
+    assert llm_request["implementation"]["implementation_strategy"] == "full_source_rewrite"
+    assert "compilation_mode" not in llm_request["implementation"]
     assert llm_request["implementation"]["changed_sections"] == list(CIRCLE_IMPLEMENTATION_REGIONS)
     assert llm_response["implementation"]["text"] == result.implementation_code
 
@@ -795,15 +808,19 @@ def test_circle_full_source_extraction_rejects_full_patch_artifact(
         generator.close()
 
 
-def test_circle_mutation_implementation_stage_uses_patch_and_preserves_maternal_regions(
+def test_circle_mutation_implementation_stage_uses_parent_full_rewrite(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     generator = CandidateGenerator(_circle_cfg())
-    organism_dir = tmp_path / "circle_mutation_patch"
+    organism_dir = tmp_path / "circle_mutation_full_rewrite"
     organism_dir.mkdir(parents=True, exist_ok=True)
     parent = _make_circle_parent(tmp_path)
     base_source = Path(parent.implementation_path).read_text(encoding="utf-8")
+    child_source = base_source.replace(
+        "radii = np.full(26, 0.04, dtype=float)",
+        "radii = np.full(26, 0.05, dtype=float)",
+    )
 
     def fake_generate(request):
         if request.stage == "design":
@@ -812,10 +829,10 @@ def test_circle_mutation_implementation_stage_uses_patch_and_preserves_maternal_
                 _circle_design_text(radius_policy="Use role-dependent non-uniform radii."),
             )
         assert request.stage == "implementation"
-        assert "=== COMPILATION MODE ===\nPATCH" in request.user_prompt
         assert "=== CHANGED_SECTIONS ===\nRADIUS_POLICY" in request.user_prompt
         assert "=== MATERNAL BASE IMPLEMENTATION ===\n" + base_source in request.user_prompt
-        return _llm_response(request.stage, _circle_patch_response("PATCH", ("RADIUS_POLICY",), patched=True))
+        assert "rewrite the complete child file" in request.user_prompt
+        return _llm_response(request.stage, child_source)
 
     monkeypatch.setattr(generator.registry, "generate", fake_generate)
     try:
@@ -823,45 +840,43 @@ def test_circle_mutation_implementation_stage_uses_patch_and_preserves_maternal_
             design_system_prompt="design system",
             design_user_prompt="design user",
             org_dir=organism_dir,
-            organism_id="circle_mutation_patch",
+            organism_id="circle_mutation_full_rewrite",
             generation=1,
             implementation_base_parent=parent,
         )
     finally:
         generator.close()
 
-    base_bodies = dict(
-        extract_region_bodies_from_source(base_source, expected_region_names=CIRCLE_IMPLEMENTATION_REGIONS)
-    )
-    final_bodies = dict(
-        extract_region_bodies_from_source(
-            result.implementation_code,
-            expected_region_names=CIRCLE_IMPLEMENTATION_REGIONS,
-        )
-    )
-    assert final_bodies["RADIUS_POLICY"] == _circle_region_body("RADIUS_POLICY", patched=True)
-    for region in CIRCLE_IMPLEMENTATION_REGIONS:
-        if region != "RADIUS_POLICY":
-            assert final_bodies[region] == base_bodies[region]
+    assert result.implementation_code == child_source
+    assert "radii = np.full(26, 0.05, dtype=float)" in result.implementation_code
     llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
     llm_response = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
-    assert llm_request["implementation"]["compilation_mode"] == "PATCH"
+    assert llm_request["implementation"]["implementation_strategy"] == "full_source_rewrite"
+    assert "compilation_mode" not in llm_request["implementation"]
     assert llm_request["implementation"]["changed_sections"] == ["RADIUS_POLICY"]
     assert llm_response["implementation"]["text"] == result.implementation_code
 
 
-def test_circle_patch_compilation_fails_instead_of_full_fallback_for_non_scaffold_base(
+def test_circle_parent_full_rewrite_accepts_non_scaffold_base(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     generator = CandidateGenerator(_circle_cfg())
-    organism_dir = tmp_path / "circle_patch_bad_base"
+    organism_dir = tmp_path / "circle_parent_full_non_scaffold"
     organism_dir.mkdir(parents=True, exist_ok=True)
     parent = _make_circle_parent(
         tmp_path,
         implementation_source="import numpy as np\n\ndef run_packing():\n    return None\n",
     )
     stages: list[str] = []
+    rewritten_source = (
+        "import numpy as np\n\n"
+        "def run_packing():\n"
+        "    centers = np.asarray([[0.0, 0.0]], dtype=float)\n"
+        "    radii = np.asarray([0.05], dtype=float)\n"
+        "    reported_sum = float(np.sum(radii))\n"
+        "    return centers, radii, reported_sum\n"
+    )
 
     def fake_generate(request):
         stages.append(request.stage)
@@ -871,27 +886,27 @@ def test_circle_patch_compilation_fails_instead_of_full_fallback_for_non_scaffol
                 _circle_design_text(radius_policy="Use role-dependent non-uniform radii."),
             )
         assert request.stage == "implementation"
-        assert "=== COMPILATION MODE ===\nPATCH" in request.user_prompt
-        return _llm_response(request.stage, _circle_patch_response("PATCH", ("RADIUS_POLICY",), patched=True))
+        return _llm_response(request.stage, rewritten_source)
 
     monkeypatch.setattr(generator.registry, "generate", fake_generate)
     try:
-        with pytest.raises(ValueError, match="expected"):
-            generator.run_creation_stages(
-                design_system_prompt="design system",
-                design_user_prompt="design user",
-                org_dir=organism_dir,
-                organism_id="circle_patch_bad_base",
-                generation=1,
-                implementation_base_parent=parent,
-            )
+        result = generator.run_creation_stages(
+            design_system_prompt="design system",
+            design_user_prompt="design user",
+            org_dir=organism_dir,
+            organism_id="circle_parent_full_non_scaffold",
+            generation=1,
+            implementation_base_parent=parent,
+        )
     finally:
         generator.close()
 
     assert stages == ["design", "implementation"]
+    assert result.implementation_code == rewritten_source
     llm_request = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
-    assert llm_request["implementation"]["compilation_mode"] == "PATCH"
-    assert llm_request["implementation"]["status"] == "failed"
+    assert llm_request["implementation"]["implementation_strategy"] == "full_source_rewrite"
+    assert "compilation_mode" not in llm_request["implementation"]
+    assert llm_request["implementation"]["status"] == "completed"
 
 
 def test_migrated_family_malformed_scaffold_fails_instead_of_legacy_fallback(
@@ -910,7 +925,7 @@ def test_migrated_family_malformed_scaffold_fails_instead_of_legacy_fallback(
         generator.close()
 
 
-def test_migrated_family_missing_patch_prompt_contract_fails_instead_of_legacy_fallback(
+def test_migrated_family_missing_mode_prompt_contract_fails_instead_of_legacy_fallback(
     tmp_path: Path,
 ) -> None:
     old_system = tmp_path / "old_implementation_system.txt"
@@ -920,7 +935,7 @@ def test_migrated_family_missing_patch_prompt_contract_fails_instead_of_legacy_f
     generator = CandidateGenerator(cfg)
 
     try:
-        with pytest.raises(ValueError, match="patch-artifact contract"):
+        with pytest.raises(ValueError, match="supported implementation contract"):
             generator.uses_section_patch_compilation()
     finally:
         generator.close()
@@ -957,7 +972,7 @@ def test_migrated_family_missing_scaffold_fails_during_prompt_loading(tmp_path: 
         CandidateGenerator(cfg)
 
 
-def test_circle_patch_compilation_requires_maternal_base_files(tmp_path: Path) -> None:
+def test_circle_parent_rewrite_requires_maternal_base_files(tmp_path: Path) -> None:
     generator = CandidateGenerator(_circle_cfg())
     parent = _make_circle_parent(tmp_path)
     Path(parent.implementation_path).unlink()
@@ -972,38 +987,20 @@ def test_circle_patch_compilation_requires_maternal_base_files(tmp_path: Path) -
         generator.close()
 
 
-def test_section_patch_extraction_returns_assembled_source_without_stripping(tmp_path: Path) -> None:
+def test_parent_full_rewrite_extraction_rejects_patch_artifact(tmp_path: Path) -> None:
     generator = CandidateGenerator(_circle_cfg())
     parent = _make_circle_parent(tmp_path)
-    base_source = "\n" + Path(parent.implementation_path).read_text(encoding="utf-8") + "\n"
     prepared = generator._prepare_implementation_stage(  # noqa: SLF001
         parse_llm_response(_circle_design_text(radius_policy="Use role-dependent non-uniform radii.")),
         implementation_base_parent=parent,
     )
-    prepared = type(prepared)(
-        system_prompt=prepared.system_prompt,
-        user_prompt=prepared.user_prompt,
-        compilation_plan=prepared.compilation_plan,
-        base_source_text=base_source,
-    )
     response_text = _circle_patch_response("PATCH", ("RADIUS_POLICY",), patched=True)
 
     try:
-        final_source = generator._extract_implementation_stage_code(response_text, prepared=prepared)  # noqa: SLF001
+        with pytest.raises(ValueError, match="syntactically invalid Python"):
+            generator._extract_implementation_stage_code(response_text, prepared=prepared)  # noqa: SLF001
     finally:
         generator.close()
-
-    expected_source = assemble_implementation_from_patch(
-        scaffold_text=generator.prompt_bundle.implementation_template,
-        patch=ParsedImplementationPatch(
-            compilation_mode="PATCH",
-            region_bodies=(("RADIUS_POLICY", _circle_region_body("RADIUS_POLICY", patched=True)),),
-        ),
-        expected_region_names=CIRCLE_IMPLEMENTATION_REGIONS,
-        base_source_text=base_source,
-    )
-    assert final_source.startswith("\n")
-    assert final_source == expected_source
 
 
 def test_run_creation_stages_persists_pending_design_exchange_before_transport_failure(

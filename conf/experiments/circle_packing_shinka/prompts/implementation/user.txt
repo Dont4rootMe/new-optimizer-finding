@@ -15,9 +15,6 @@ Validity preservation note:
   - If local correction is needed, preserve the intended geometry and strong inherited structure whenever possible
   - Do not perform a generic end-stage global shrink pass unless the genes themselves call for that behavior
 
-=== COMPILATION MODE ===
-{compilation_mode}
-
 === CHANGED_SECTIONS ===
 {changed_sections}
 
@@ -39,22 +36,19 @@ Validity preservation note:
 === TASK ===
 Realize the supplied genes faithfully and preserve the objective-seeking behavior they describe.
 
-If COMPILATION_MODE is FULL:
-- return the final full Python file only
-- use the canonical scaffold as the file skeleton
+Return the final full Python file only.
+- if MATERNAL BASE IMPLEMENTATION is not NONE, use it as the concrete parent program and rewrite the complete child file with the minimum faithful edits
+- if MATERNAL BASE IMPLEMENTATION is NONE, use the canonical scaffold as the file skeleton
+- use CHANGED_SECTIONS as the main list of causal modules that must differ from the maternal implementation
+- preserve unaffected strong inherited behavior when the child genes do not require changing it
+- do not return changed snippets only
 - do not return a patch artifact
-- the first non-empty line must be `import numpy as np` or another Python import, not `FULL`, `PATCH`, `## COMPILATION_MODE`, or a markdown fence
+- the first non-empty line must be `import numpy as np` or another Python import, not a markdown fence or commentary
 - the file must contain a complete executable `def run_packing():` that returns exactly `(centers, radii, reported_sum)`
 - return only the final organism output state, not repeated generated batches, candidate histories, or repair trajectories
+- keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the file
+- preserve code outside the EVOLVE block unless the current file is too broken to keep safely
 - do not write long exploratory comments in place of implementation; choose the simplest faithful deterministic realization and finish the file
-
-If COMPILATION_MODE is PATCH:
-- return only the patch artifact in the required `## COMPILATION_MODE` / `## REGION` / `## END_REGION` format
-- start each changed region with `## REGION SECTION_NAME`, not `## REGION: SECTION_NAME`
-- compile only the listed CHANGED_SECTIONS
-- do not compile any unchanged section
-- the repository will preserve unchanged maternal regions byte-for-byte
-- preserve the maternal organism's effective packing behavior outside the changed sections, including inherited high-score behavior
 
 Be faithful to the supplied sectioned genes and the change description.
 Do not output markdown fences or commentary.

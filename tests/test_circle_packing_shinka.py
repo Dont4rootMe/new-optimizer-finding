@@ -94,11 +94,11 @@ def test_circle_packing_prompt_bundle_loads() -> None:
 
     assert "hidden evaluator constants" in bundle.project_context
     assert "26 circles in the unit square" not in bundle.project_context
-    assert "patch artifact" in bundle.implementation_system
-    assert "## COMPILATION_MODE" in bundle.implementation_system
-    assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system
-    assert "# === REGION: INIT_GEOMETRY ===" in bundle.implementation_template
-    assert "# === REGION: OPTIONAL_CODE_SKETCH ===" in bundle.implementation_template
+    assert "Single rewrite contract:" in bundle.implementation_system
+    assert "return ONLY the final full `implementation.py`" in bundle.implementation_system
+    assert "# EVOLVE-BLOCK-START" in bundle.implementation_template
+    assert "# SECTION: INIT_GEOMETRY" in bundle.implementation_template
+    assert "# SECTION: OPTIONAL_CODE_SKETCH" in bundle.implementation_template
     assert "RUN_PACKING_BODY" not in bundle.implementation_template
 
 

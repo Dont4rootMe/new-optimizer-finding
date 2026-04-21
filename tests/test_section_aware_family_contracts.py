@@ -10,7 +10,10 @@ from hydra import compose, initialize_config_dir
 from src.evolve.manual_pipeline import load_manual_pipeline_context
 from src.evolve.prompt_utils import load_prompt_bundle
 from src.organisms.genetic_code_format import parse_genome_schema_text
-from src.organisms.implementation_patch import parse_implementation_scaffold
+from src.organisms.implementation_patch import (
+    parse_implementation_scaffold,
+    resolve_implementation_region_order,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,11 +116,11 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
     schema_sections = parse_genome_schema_text(bundle.genome_schema)
     assert tuple(section.name for section in schema_sections) == expected_sections
 
-    template_regions = parse_implementation_scaffold(
+    template_regions = resolve_implementation_region_order(
         bundle.implementation_template,
-        expected_region_names=expected_regions,
+        expected_section_names=expected_regions,
     )
-    assert tuple(region.name for region in template_regions) == expected_regions
+    assert template_regions == expected_regions
 
     raw_prompt_values = cfg.evolver.prompts
     generation_user_keys = ("seed_user", "mutation_user", "crossover_user")
@@ -154,19 +157,23 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
         assert "Do not put the verdict on the same line as `## COMPATIBILITY_VERDICT`." in prompt
         assert "Canonical accepted response:" in prompt
 
-    assert "## COMPILATION_MODE" in bundle.implementation_system
     if family == "circle_packing_shinka":
-        assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system
-        assert "PATCH mode output contract: return only the region patch artifact" in bundle.implementation_system
-        assert "close it immediately with `## END_REGION`" in bundle.implementation_system
+        assert "Single rewrite contract:" in bundle.implementation_system
+        assert "return ONLY the final full `implementation.py`" in bundle.implementation_system
+        assert "treat it as the concrete parent program" in bundle.implementation_system
+        assert "EVOLVE-BLOCK-START" in bundle.implementation_system
         assert "do not output a full `implementation.py`" not in bundle.implementation_system
     else:
+        assert "## COMPILATION_MODE" in bundle.implementation_system
         assert "The first line of your answer must be `## COMPILATION_MODE`." in bundle.implementation_system
         assert "do not start with `REGION ...`" in bundle.implementation_system
         assert "Every `## REGION SECTION_NAME` block must be closed by `## END_REGION`" in bundle.implementation_system
         assert "do not output a full `implementation.py`" in bundle.implementation_system
         assert "Execution-order discipline" in bundle.implementation_system
-    assert "=== COMPILATION MODE ===" in bundle.implementation_user
+    if family == "circle_packing_shinka":
+        assert "=== COMPILATION MODE ===" not in bundle.implementation_user
+    else:
+        assert "=== COMPILATION MODE ===" in bundle.implementation_user
     assert "=== CHANGED_SECTIONS ===" in bundle.implementation_user
     assert "=== MATERNAL BASE GENETIC CODE ===" in bundle.implementation_user
     assert "=== MATERNAL BASE IMPLEMENTATION ===" in bundle.implementation_user

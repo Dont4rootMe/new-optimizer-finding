@@ -213,6 +213,23 @@ def _validate_assembled_python_source(source_text: str) -> str:
     return source_text
 
 
+def _implementation_request_metadata(
+    plan: ImplementationCompilationPlan | None,
+) -> dict[str, object]:
+    if plan is None:
+        return {
+            "implementation_strategy": "legacy_full_source",
+            "changed_sections": None,
+        }
+    payload: dict[str, object] = {
+        "implementation_strategy": plan.strategy,
+        "changed_sections": list(plan.changed_sections),
+    }
+    if plan.compilation_mode is not None:
+        payload["compilation_mode"] = plan.compilation_mode
+    return payload
+
+
 class CandidateGenerator(BaseLlmGenerator):
     """Generate canonical structured seed organisms from configured prompt assets."""
 
@@ -344,7 +361,7 @@ class CandidateGenerator(BaseLlmGenerator):
         return value
 
     def uses_section_patch_compilation(self) -> bool:
-        """Return true when this prompt bundle uses the section-aligned scaffold contract."""
+        """Return true when this prompt bundle uses section-aware implementation prompts."""
 
         migrated = bool(
             self.prompt_bundle.genome_schema
@@ -362,24 +379,35 @@ class CandidateGenerator(BaseLlmGenerator):
             ) from self._implementation_region_order_error
         if not self.expected_implementation_regions:
             raise ValueError("Section-aware implementation compilation requires a parseable implementation scaffold.")
-        if "## COMPILATION_MODE" not in self.prompt_bundle.implementation_system:
+        if (
+            "## COMPILATION_MODE" not in self.prompt_bundle.implementation_system
+            and not self._uses_single_file_implementation_rewrite_contract()
+        ):
             raise ValueError(
                 "Section-aware implementation compilation requires an implementation system prompt "
-                "with the patch-artifact contract."
+                "with a supported implementation contract."
             )
-        try:
-            parse_implementation_scaffold(
-                self.prompt_bundle.implementation_template,
-                expected_region_names=self.expected_implementation_regions,
-            )
-        except ValueError as exc:
-            raise ValueError(f"Section-aware implementation scaffold is invalid: {exc}") from exc
+        if self._uses_single_file_implementation_rewrite_contract():
+            template_text = self.prompt_bundle.implementation_template
+            if "EVOLVE-BLOCK-START" not in template_text or "EVOLVE-BLOCK-END" not in template_text:
+                raise ValueError(
+                    "Section-aware implementation scaffold is invalid: full-source rewrite templates "
+                    "must declare EVOLVE-BLOCK-START and EVOLVE-BLOCK-END."
+                )
+        else:
+            try:
+                parse_implementation_scaffold(
+                    self.prompt_bundle.implementation_template,
+                    expected_region_names=self.expected_implementation_regions,
+                )
+            except ValueError as exc:
+                raise ValueError(f"Section-aware implementation scaffold is invalid: {exc}") from exc
         return True
 
-    def _section_aware_full_mode_returns_full_source(self) -> bool:
-        """Return true when FULL mode expects a complete Python file instead of a patch artifact."""
+    def _uses_single_file_implementation_rewrite_contract(self) -> bool:
+        """Return true when implementation prompts always expect a full Python file."""
 
-        sentinel = "FULL mode output contract: return the complete final `implementation.py` only"
+        sentinel = "Single rewrite contract:"
         return sentinel in self.prompt_bundle.implementation_system
 
     def _prepare_implementation_stage(
@@ -414,16 +442,19 @@ class CandidateGenerator(BaseLlmGenerator):
         change_description = parsed_design.get("CHANGE_DESCRIPTION", "").strip()
         if not change_description:
             raise ValueError("Implementation patch compilation requires CHANGE_DESCRIPTION.")
+        full_source_rewrite = self._uses_single_file_implementation_rewrite_contract()
 
         if implementation_base_parent is None:
-            compilation_mode = "FULL"
+            compilation_mode: str | None = None if full_source_rewrite else "FULL"
+            strategy = "full_source_rewrite" if full_source_rewrite else "section_patch_artifact"
             changed_sections = implementation_regions
             base_parent_genetic_code = "NONE"
             base_parent_implementation = "NONE"
             base_source_text = None
             maternal_base_required = False
         else:
-            compilation_mode = "PATCH"
+            compilation_mode = None if full_source_rewrite else "PATCH"
+            strategy = "full_source_rewrite" if full_source_rewrite else "section_patch_artifact"
             base_genetic_code_path = Path(implementation_base_parent.genetic_code_path)
             base_implementation_path = Path(implementation_base_parent.implementation_path)
             if not base_genetic_code_path.exists():
@@ -448,7 +479,7 @@ class CandidateGenerator(BaseLlmGenerator):
             genetic_code=child_genetic_code,
             change_description=change_description,
             prompts=self.prompt_bundle,
-            compilation_mode=compilation_mode,
+            compilation_mode=compilation_mode or "FULL",
             changed_sections=_format_changed_sections_for_prompt(changed_sections),
             base_parent_genetic_code=base_parent_genetic_code,
             base_parent_implementation=base_parent_implementation,
@@ -457,6 +488,7 @@ class CandidateGenerator(BaseLlmGenerator):
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             compilation_plan=ImplementationCompilationPlan(
+                strategy=strategy,
                 compilation_mode=compilation_mode,  # type: ignore[arg-type]
                 changed_sections=tuple(changed_sections),
                 maternal_base_required=maternal_base_required,
@@ -477,8 +509,8 @@ class CandidateGenerator(BaseLlmGenerator):
         if expected_sections is None:
             raise ValueError("Section patch compilation requires expected CORE_GENES sections.")
         plan = prepared.compilation_plan
-        if plan.compilation_mode == "FULL" and self._section_aware_full_mode_returns_full_source():
-            return self._extract_python(response_text, preserve_trailing_newline=False)
+        if plan.strategy == "full_source_rewrite":
+            return self._extract_python(response_text)
 
         expected_patch_regions = (
             expected_sections
@@ -638,16 +670,7 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": None,
             "status": "in_flight",
             "error_msg": None,
-            "compilation_mode": (
-                prepared_implementation.compilation_plan.compilation_mode
-                if prepared_implementation.compilation_plan is not None
-                else "legacy_full_source"
-            ),
-            "changed_sections": (
-                list(prepared_implementation.compilation_plan.changed_sections)
-                if prepared_implementation.compilation_plan is not None
-                else None
-            ),
+            **_implementation_request_metadata(prepared_implementation.compilation_plan),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -700,16 +723,7 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": implementation_response.raw_request,
             "status": "completed",
             "error_msg": None,
-            "compilation_mode": (
-                prepared_implementation.compilation_plan.compilation_mode
-                if prepared_implementation.compilation_plan is not None
-                else "legacy_full_source"
-            ),
-            "changed_sections": (
-                list(prepared_implementation.compilation_plan.changed_sections)
-                if prepared_implementation.compilation_plan is not None
-                else None
-            ),
+            **_implementation_request_metadata(prepared_implementation.compilation_plan),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -738,7 +752,7 @@ class CandidateGenerator(BaseLlmGenerator):
             )
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
-            llm_response_payload["implementation"]["error_kind"] = "implementation_patch_parse_failed"
+            llm_response_payload["implementation"]["error_kind"] = "implementation_extract_failed"
             llm_request_payload["implementation"]["status"] = "failed"
             llm_request_payload["implementation"]["error_msg"] = error_msg
             llm_response_payload["implementation"]["status"] = "failed"
@@ -1187,16 +1201,7 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": None,
             "status": "in_flight",
             "error_msg": None,
-            "compilation_mode": (
-                prepared_implementation.compilation_plan.compilation_mode
-                if prepared_implementation.compilation_plan is not None
-                else "legacy_full_source"
-            ),
-            "changed_sections": (
-                list(prepared_implementation.compilation_plan.changed_sections)
-                if prepared_implementation.compilation_plan is not None
-                else None
-            ),
+            **_implementation_request_metadata(prepared_implementation.compilation_plan),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -1250,16 +1255,7 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": implementation_response.raw_request,
             "status": "completed",
             "error_msg": None,
-            "compilation_mode": (
-                prepared_implementation.compilation_plan.compilation_mode
-                if prepared_implementation.compilation_plan is not None
-                else "legacy_full_source"
-            ),
-            "changed_sections": (
-                list(prepared_implementation.compilation_plan.changed_sections)
-                if prepared_implementation.compilation_plan is not None
-                else None
-            ),
+            **_implementation_request_metadata(prepared_implementation.compilation_plan),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -1288,7 +1284,7 @@ class CandidateGenerator(BaseLlmGenerator):
             )
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
-            llm_response_payload["implementation"]["error_kind"] = "implementation_patch_parse_failed"
+            llm_response_payload["implementation"]["error_kind"] = "implementation_extract_failed"
             llm_request_payload["implementation"]["status"] = "failed"
             llm_request_payload["implementation"]["error_msg"] = error_msg
             llm_response_payload["implementation"]["status"] = "failed"
@@ -1921,16 +1917,7 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": None,
             "status": "in_flight",
             "error_msg": None,
-            "compilation_mode": (
-                prepared_implementation.compilation_plan.compilation_mode
-                if prepared_implementation.compilation_plan is not None
-                else "legacy_full_source"
-            ),
-            "changed_sections": (
-                list(prepared_implementation.compilation_plan.changed_sections)
-                if prepared_implementation.compilation_plan is not None
-                else None
-            ),
+            **_implementation_request_metadata(prepared_implementation.compilation_plan),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -1978,16 +1965,7 @@ class CandidateGenerator(BaseLlmGenerator):
             "request": implementation_response.raw_request,
             "status": "completed",
             "error_msg": None,
-            "compilation_mode": (
-                prepared_implementation.compilation_plan.compilation_mode
-                if prepared_implementation.compilation_plan is not None
-                else "legacy_full_source"
-            ),
-            "changed_sections": (
-                list(prepared_implementation.compilation_plan.changed_sections)
-                if prepared_implementation.compilation_plan is not None
-                else None
-            ),
+            **_implementation_request_metadata(prepared_implementation.compilation_plan),
         }
         llm_response_payload["implementation"] = {
             "route_id": route_id,
@@ -2016,7 +1994,7 @@ class CandidateGenerator(BaseLlmGenerator):
             )
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
-            llm_response_payload["implementation"]["error_kind"] = "implementation_patch_parse_failed"
+            llm_response_payload["implementation"]["error_kind"] = "implementation_extract_failed"
             llm_request_payload["implementation"]["status"] = "failed"
             llm_request_payload["implementation"]["error_msg"] = error_msg
             llm_response_payload["implementation"]["status"] = "failed"

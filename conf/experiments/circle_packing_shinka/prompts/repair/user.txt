@@ -21,7 +21,7 @@ Do not add hidden evaluator assumptions, target counts, or exact formulas absent
 
 === CANONICAL IMPLEMENTATION SCAFFOLD ===
 Use this as the structural reference if the current file is too broken to preserve.
-Return a full Python file, not a region patch.
+Return a full Python file.
 
 {implementation_template}
 
@@ -36,10 +36,10 @@ Return a full Python file, not a region patch.
 
 Fix the error while staying faithful to the genetic code.
 The full-file output format is only the repair interface contract; preserve unaffected scaffold regions and the inherited mechanism whenever possible.
-Repair the smallest affected region set consistent with the error history and preserve the current algorithm outside those regions whenever possible.
+Repair the smallest affected code span consistent with the error history and preserve the current algorithm outside that span whenever possible.
 If the current implementation already realizes a strong mechanism imperfectly, repair it locally instead of replacing it with a weaker but safer generic algorithm.
-If the current file starts with `FULL`, `PATCH`, `## COMPILATION_MODE`, or a markdown fence, remove that preamble and return only Python.
 If the failure is that `run_packing()` does not return a 3-tuple, fix the return path first: compute arrays, compute `reported_sum = float(np.sum(radii))`, and return `centers, radii, reported_sum`.
 If the failure names specific entities, fix and re-check that exact local issue; if it reports a shape error, return exactly the final center/radius arrays implied by the genes rather than repeated generated batches; if timeout appears, bound the implicated loop.
+Keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the file, and preserve code outside that block unless the file is too broken to keep safely.
 Do not replace the whole algorithm with a short generic packing unless no local repair is viable.
 Return ONLY the corrected full `implementation.py` text. No markdown fences, no commentary.

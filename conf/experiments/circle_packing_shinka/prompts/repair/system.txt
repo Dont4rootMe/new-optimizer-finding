@@ -11,15 +11,15 @@ Your job is to return a corrected full `implementation.py` that fixes the report
 
 Use the current file and the canonical scaffold as structural references.
 The full-file output contract is an interface requirement, not a license to rewrite the whole algorithm.
-Repair the smallest affected region set necessary to fix the reported failure while preserving the organism's objective-bearing mechanism.
-Prefer to preserve unaffected scaffold regions byte-for-byte when practical; do not collapse the organism into a generic safe packing unless the implicated regions are unsalvageable and the genes truly support that fallback.
+Repair the smallest affected code span necessary to fix the reported failure while preserving the organism's objective-bearing mechanism.
+Prefer to preserve unaffected code byte-for-byte when practical; do not collapse the organism into a generic safe packing unless the implicated logic is unsalvageable and the genes truly support that fallback.
 When the current file already contains a strong inherited mechanism, do not replace it with a short generic packing merely because that packing is easier to validate.
 
 Requirements:
 - Return only Python code, no markdown fences
 - Do NOT add commentary before or after the file
 - The first non-empty line must be a Python import or `from __future__ ...` line
-- Never preserve or emit `FULL`, `PATCH`, `## COMPILATION_MODE`, `## REGION`, or `## END_REGION` in the repaired full file
+- Keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the repaired file
 - Keep the code deterministic
 - Use only `numpy` and the Python standard library
 - The final module must define `run_packing()`
@@ -31,9 +31,9 @@ Requirements:
 - Keep the repaired file compact; target fewer than 220 lines and never output unfinished code
 - Use ASCII identifiers only; do not use Unicode suffixes, copied mathematical symbols, or glued identifiers such as `2deg`
 - Assign every local variable before first use; use early parameter setup when shared values are needed
-- Focus first on the region or regions implicated by the error
+- Focus first on the code span implicated by the error
 - Prefer repairing `CONTROL_POLICY`, `REPAIR_POLICY`, `CONFLICT_MODEL`, or `OPTIONAL_CODE_SKETCH` before rewriting geometry or radius logic
-- Preserve inherited behavior outside the affected regions whenever possible
+- Preserve inherited behavior outside the affected code whenever possible
 - Generic safety-only fallback is a last resort, not the default
 
 ## Common failure modes to check
@@ -53,10 +53,10 @@ If an evaluator error names specific entities, treat that exact local issue as t
 If the same named local geometric violation repeats across attempts, add a bounded final local cleanup with an epsilon margin; this is local validity repair, not a generic objective-collapsing simplification.
 If the error history includes a timeout, remove unbounded repair/growth loops; every loop must have a fixed cap and guaranteed progress.
 
-## Region-preserving repair strategy
+## Local repair strategy
 
 When repair is needed:
-- identify the smallest affected region set consistent with the error history
+- identify the smallest affected code span consistent with the error history
 - fix local syntax, name, control-flow, or contract issues in place when possible
 - for shape, geometric feasibility, or evaluator-contract failures, prefer local corrections that preserve the intended structure before simplifying
 - if shrinking or simplification is necessary, limit it to the minimal local change needed for validity
