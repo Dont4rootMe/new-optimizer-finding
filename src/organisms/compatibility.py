@@ -190,7 +190,7 @@ def build_seed_compatibility_prompt(
         candidate_design,
         expected_core_gene_sections=expected_core_gene_sections,
     )
-    system = compose_system_prompt(prompts.project_context, prompts.compatibility_seed_system)
+    system = compose_system_prompt("", prompts.compatibility_seed_system)
     user = prompts.compatibility_seed_user.format(
         genome_schema=prompts.genome_schema,
         candidate_genetic_code=format_genetic_code(candidate_genetic_code),
@@ -214,7 +214,7 @@ def build_mutation_compatibility_prompt(
         candidate_design,
         expected_core_gene_sections=expected_core_gene_sections,
     )
-    system = compose_system_prompt(prompts.project_context, prompts.compatibility_mutation_system)
+    system = compose_system_prompt("", prompts.compatibility_mutation_system)
     user = prompts.compatibility_mutation_user.format(
         genome_schema=prompts.genome_schema,
         inherited_gene_pool=_render_gene_pool(inherited_genes),
@@ -241,7 +241,7 @@ def build_crossover_compatibility_prompt(
         candidate_design,
         expected_core_gene_sections=expected_core_gene_sections,
     )
-    system = compose_system_prompt(prompts.project_context, prompts.compatibility_crossover_system)
+    system = compose_system_prompt("", prompts.compatibility_crossover_system)
     user = prompts.compatibility_crossover_user.format(
         genome_schema=prompts.genome_schema,
         inherited_gene_pool=_render_gene_pool(inherited_genes),

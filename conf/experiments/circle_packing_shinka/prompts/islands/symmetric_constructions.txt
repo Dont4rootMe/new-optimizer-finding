@@ -4,8 +4,8 @@ This island explores organisms that begin from order, regularity, analytic const
 
 ## Mathematical DNA to build from
 
-- Hexagonal close packing: the densest known 2D packing uses a hexagonal lattice with row offset sqrt(3)/2; adapt it to 26 circles in a unit square by choosing lattice spacing and offset to fit
-- Grid-based layouts: rectangular or triangular grids with analytically computed maximum radius for each grid geometry (e.g., 5x6 minus 4 gives 26 in a staggered grid)
+- Hexagonal or staggered structure: use compact lattice-like generation with explicit spacing and offset choices, then adapt it to the finite square
+- Grid-based layouts: rectangular or triangular grids with analytically computed radius or spacing rules, plus an explicit trimming rule when the multiplicity does not match
 - Symmetry groups: exploit reflective or rotational symmetry of the square (D4 symmetry group) to reduce the problem — define positions for a generating set and mirror/rotate to fill
 - Analytical radius formulas: for N circles of uniform radius r in a unit square, the maximum r depends on the arrangement; organisms should reason about this bound
 - Mixed-radius approaches: assign different radii to circles in different geometric roles (corners, edges, interior) based on locally available space
@@ -26,6 +26,7 @@ This island explores organisms that begin from order, regularity, analytic const
 - Compact generative logic is good, but over-constrained parametric families may miss better irregular packings
 - Overly rich role taxonomies, too many generator parameters, or too much symmetry bookkeeping can produce designs that are elegant on paper but fragile to implement faithfully
 - Any row-count, trimming, or reflection rule must arithmetically produce exactly 26 circles; do not use D2/D4 reflection language unless the multiplicities work out
+- Count-list claims must be self-checked before output; show the arithmetic if the generator uses row counts, trimming, or reflections
 
 ## Design prompt
 

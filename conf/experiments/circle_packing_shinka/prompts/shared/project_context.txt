@@ -1,8 +1,9 @@
 You are participating in an automated evolutionary search for better circle-packing organisms.
 
-Task:
-- Place 26 circles in the unit square [0, 1] x [0, 1]
-- Maximize the sum of radii
+Task context:
+- evolve better organisms for this experiment's geometric packing task
+- maximize the score implied by the supplied task prompt and organism genes
+- do not introduce hidden evaluator constants, target counts, exact shapes, or closed-form answers unless they appear in the operator prompt or the supplied genes
 
 ## Primary research artifact
 
@@ -35,33 +36,17 @@ In mutation and crossover, evolutionary sampling already proposes a child-side g
 That draft is the main object you must work on.
 Parent code and parent lineage are reference context only.
 
-## Runtime contract
+## Implementation interface discipline
 
-The final program must define:
-
-`run_packing() -> (centers, radii, reported_sum)`
-
-Required output:
-- `centers.shape == (26, 2)`
-- `radii.shape == (26,)`
-- `reported_sum == sum(radii)`
-
-Evaluator rules:
-- all values finite
-- all radii non-negative
-- every circle fully inside the square
-- no overlaps
-- `reported_sum` matches `sum(radii)` within `1e-6`
-
-Score:
-- raw sum of radii
-- higher is better
+The concrete implementation interface is supplied by the implementation and repair prompts.
+Do not copy hidden task facts into implementation reasoning.
+If a target count, shape, feasibility rule, or exact formula is required, it must come from the supplied genes or operator prompt, not from shared prompt doctrine.
 
 Optimization principle:
 - maximize score subject to validity
 - validity is a hard constraint, not the optimization target by itself
 - do not prefer a safe low-score construction over a feasible high-score construction merely because it is simpler
-- implementations and repairs should preserve large feasible radii whenever possible
+- implementations and repairs should preserve strong feasible structure whenever possible
 
 ## Hard constraints
 

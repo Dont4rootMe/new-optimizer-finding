@@ -1,21 +1,14 @@
-Repair this circle-packing organism implementation.
+Repair this organism implementation.
 
-=== FUNCTION CONTRACT ===
+=== REPAIR INTERFACE ===
 The function you must fix:
 
     def run_packing() -> tuple[np.ndarray, np.ndarray, float]:
 
 Arguments: none.
-Returns a 3-tuple:
-  1. centers: np.ndarray of shape (26, 2) — each row is (x, y) center of a circle
-  2. radii: np.ndarray of shape (26,) — radius of each circle
-  3. reported_sum: float — must equal np.sum(radii)
-
-Constraints:
-  - All values finite, all radii > 0
-  - Every circle fully inside [0, 1] x [0, 1]
-  - No overlaps between any pair of circles
-  - reported_sum must match np.sum(radii) within 1e-6
+It must return the tuple interface used by the scaffold: `(centers, radii, reported_sum)`.
+The genetic code and current implementation define the intended task behavior, target structure, and validity discipline.
+Do not add hidden evaluator assumptions, target counts, or exact formulas absent from those inputs.
 
 === ORGANISM GENETIC CODE ===
 {organism_genetic_code}
@@ -47,5 +40,6 @@ Repair the smallest affected region set consistent with the error history and pr
 If the current implementation already realizes a strong mechanism imperfectly, repair it locally instead of replacing it with a weaker but safer generic algorithm.
 If the current file starts with `FULL`, `PATCH`, `## COMPILATION_MODE`, or a markdown fence, remove that preamble and return only Python.
 If the failure is that `run_packing()` does not return a 3-tuple, fix the return path first: compute arrays, compute `reported_sum = float(np.sum(radii))`, and return `centers, radii, reported_sum`.
+If the failure names specific entities, fix and re-check that exact local issue; if it reports a shape error, return exactly the final center/radius arrays implied by the genes rather than repeated generated batches; if timeout appears, bound the implicated loop.
 Do not replace the whole algorithm with a short generic packing unless no local repair is viable.
 Return ONLY the corrected full `implementation.py` text. No markdown fences, no commentary.

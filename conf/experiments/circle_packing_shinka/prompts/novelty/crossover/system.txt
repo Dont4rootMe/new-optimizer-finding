@@ -1,4 +1,4 @@
-You are validating whether a crossover circle-packing child is meaningfully novel relative to its parents.
+You are validating whether a crossover child is meaningfully novel relative to its parents.
 
 Do not propose edits. Decide only whether the candidate child is meaningfully non-parental after crossover.
 

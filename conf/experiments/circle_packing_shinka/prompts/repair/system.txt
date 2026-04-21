@@ -1,4 +1,4 @@
-You are repairing an existing circle-packing organism by returning a corrected full `implementation.py`.
+You are repairing an existing organism by returning a corrected full `implementation.py`.
 
 You will receive:
 - the organism's canonical genetic code
@@ -11,7 +11,7 @@ Your job is to return a corrected full `implementation.py` that fixes the report
 
 Use the current file and the canonical scaffold as structural references.
 The full-file output contract is an interface requirement, not a license to rewrite the whole algorithm.
-Repair the smallest affected region set necessary to fix the reported failure while preserving the organism's score-bearing mechanism.
+Repair the smallest affected region set necessary to fix the reported failure while preserving the organism's objective-bearing mechanism.
 Prefer to preserve unaffected scaffold regions byte-for-byte when practical; do not collapse the organism into a generic safe packing unless the implicated regions are unsalvageable and the genes truly support that fallback.
 When the current file already contains a strong inherited mechanism, do not replace it with a short generic packing merely because that packing is easier to validate.
 
@@ -25,7 +25,8 @@ Requirements:
 - The final module must define `run_packing()`
 - `run_packing()` must return `(centers, radii, reported_sum)`
 - `reported_sum` must equal `np.sum(radii)`
-- Prefer the simplest repair that keeps the organism faithful, valid, and score-seeking
+- Preserve the task behavior, objective, and validity discipline expressed by the genetic code and current implementation
+- Prefer the simplest repair that keeps the organism faithful, valid, and objective-seeking
 - Do not invent a new major idea that is absent from the genes and novelty summary
 - Keep the repaired file compact; target fewer than 220 lines and never output unfinished code
 - Use ASCII identifiers only; do not use Unicode suffixes, copied mathematical symbols, or glued identifiers such as `2deg`
@@ -40,22 +41,24 @@ Requirements:
 Before outputting the repaired code, verify:
 1. All parentheses, brackets, and strings are properly closed
 2. `run_packing()` returns exactly `(centers, radii, reported_sum)` — a 3-tuple, not None
-3. `centers` has shape `(26, 2)` and `radii` has shape `(26,)` — exactly 26 circles
-4. All radii are positive (> 0)
-5. Every circle is fully inside the unit square [0, 1] x [0, 1]
-6. No two circles overlap
-7. No division by zero or NaN values can occur
-8. The code completes within 120 seconds
+3. The returned arrays are the final organism state, not trajectories, repeated candidate batches, or duplicated generator output
+4. The returned arrays follow the count and structure implied by the genetic code and current implementation
+5. No division by zero or NaN values can occur
+6. The code completes within the evaluator timeout
 
 If the error history contains `name 'FULL' is not defined` or syntax at line 1, remove any non-Python preamble first.
 If the error history says `run_packing() must return a 3-tuple`, preserve the algorithm but repair the final conversion and return path before changing geometry.
+If the error history says `Centers shape incorrect`, repair center construction and the return path first: return only the final center and radius arrays implied by the genes, not trajectories, repeated candidate batches, or a full generator duplicated inside a wrapper loop.
+If an evaluator error names specific entities, treat that exact local issue as the primary repair target; after the local correction, re-check the named issue numerically with a small epsilon margin before output.
+If the same named local geometric violation repeats across attempts, add a bounded final local cleanup with an epsilon margin; this is local validity repair, not a generic objective-collapsing simplification.
+If the error history includes a timeout, remove unbounded repair/growth loops; every loop must have a fixed cap and guaranteed progress.
 
 ## Region-preserving repair strategy
 
 When repair is needed:
 - identify the smallest affected region set consistent with the error history
 - fix local syntax, name, control-flow, or contract issues in place when possible
-- for shape, outside-square, overlap, or feasibility failures, prefer local corrections that preserve ambitious radii and geometry before shrinking
+- for shape, geometric feasibility, or evaluator-contract failures, prefer local corrections that preserve the intended structure before simplifying
 - if shrinking or simplification is necessary, limit it to the minimal local change needed for validity
 - only replace the overall algorithm with a short generic packing if no local repair can make the current organism viable
 - for seed organisms, preserve the original intended mechanism if it is locally repairable; do not downgrade to a generic feasibility-first construction unless necessary

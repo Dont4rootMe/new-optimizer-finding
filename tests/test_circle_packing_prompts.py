@@ -16,7 +16,13 @@ from src.organisms.compatibility import (
 )
 from src.organisms.crossbreeding import _build_crossbreed_prompt
 from src.organisms.mutation import _build_mutate_prompt
-from src.organisms.organism import save_organism_artifacts
+from src.organisms.novelty import build_crossover_novelty_prompt, build_mutation_novelty_prompt
+from src.organisms.organism import (
+    build_implementation_prompt,
+    build_repair_prompt,
+    format_error_history,
+    save_organism_artifacts,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMPT_ROOT = ROOT / "conf" / "experiments" / "circle_packing_shinka" / "prompts"
@@ -45,6 +51,16 @@ IMPLEMENTATION_REGION_ORDER = (
     "CONTROL_POLICY",
     "OPTIONAL_CODE_SKETCH",
 )
+NON_DESIGN_LEAK_PHRASES = (
+    "Place 26 circles",
+    "centers.shape == (26, 2)",
+    "radii.shape == (26,)",
+    "exactly 26 circles",
+    "Constraints enforced by the evaluator",
+    "Score = sum of radii",
+    "Every circle fully inside [0, 1]",
+    "No overlaps",
+)
 
 
 def _sectioned_core_genes_body() -> str:
@@ -52,6 +68,25 @@ def _sectioned_core_genes_body() -> str:
         f"{heading}\n- {'None.' if heading.endswith('OPTIONAL_CODE_SKETCH') else 'Section-local test idea.'}"
         for heading in SECTION_HEADINGS
     )
+
+
+def _sectioned_genetic_code() -> dict[str, object]:
+    return {
+        "core_gene_sections": [
+            {
+                "name": heading[4:],
+                "entries": ["None." if heading.endswith("OPTIONAL_CODE_SKETCH") else "Section-local test idea."],
+            }
+            for heading in SECTION_HEADINGS
+        ],
+        "interaction_notes": "The sectioned ideas are mutually supportive.",
+        "compute_notes": "The design uses deterministic staged construction.",
+    }
+
+
+def _assert_no_non_design_contract_leak(text: str) -> None:
+    for phrase in NON_DESIGN_LEAK_PHRASES:
+        assert phrase not in text
 
 
 def _compose_cfg():
@@ -149,12 +184,14 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     assert "score-inert" in bundle.compatibility_seed_system
     assert "too many loosely coupled mechanisms or role taxonomies" in bundle.compatibility_seed_system
     assert "mathematically ill-posed or too vague" in bundle.compatibility_seed_system
-    assert "unambiguously produce exactly 26 circles" in bundle.compatibility_seed_system
+    assert "match the candidate's own declared target count or multiplicity" in bundle.compatibility_seed_system
     assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system.lower()
     assert "extra support machinery" in bundle.compatibility_mutation_system
     assert "too structurally elaborate" in bundle.compatibility_crossover_user
     assert "full-file output contract is an interface requirement" in bundle.repair_system
     assert "do not replace it with a short generic packing" in bundle.repair_system
+    assert "treat that exact local issue as the primary repair target" in bundle.repair_system
+    assert "Centers shape incorrect" in bundle.repair_system
     assert "Never preserve or emit `FULL`" in bundle.repair_system
 
 
@@ -278,6 +315,117 @@ def test_circle_packing_validation_prompt_rendering_includes_schema(tmp_path: Pa
         assert "=== CANDIDATE" in rendered
 
 
+def test_circle_packing_non_design_prompts_do_not_receive_hidden_task_contract(tmp_path: Path) -> None:
+    cfg = _compose_cfg()
+    bundle = load_prompt_bundle(cfg)
+    parent = _make_parent(tmp_path, "parent_no_leak", "symmetric_constructions")
+    secondary = _make_parent(tmp_path, "secondary_no_leak", "iterative_repair")
+    candidate_design = {
+        "CORE_GENES": _sectioned_core_genes_body(),
+        "INTERACTION_NOTES": "The sectioned ideas are mutually supportive.",
+        "COMPUTE_NOTES": "The design uses deterministic staged construction.",
+        "CHANGE_DESCRIPTION": "A sectioned validation fixture.",
+    }
+
+    prompt_pairs = [
+        build_implementation_prompt(
+            genetic_code=_sectioned_genetic_code(),
+            change_description="A generic implementation fixture.",
+            prompts=bundle,
+        ),
+        build_seed_compatibility_prompt(
+            candidate_design=candidate_design,
+            prompts=bundle,
+            expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
+        ),
+        build_mutation_compatibility_prompt(
+            inherited_genes=["Child draft sectioned idea"],
+            removed_genes=["Excluded idea"],
+            parent=parent,
+            candidate_design=candidate_design,
+            prompts=bundle,
+            expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
+        ),
+        build_crossover_compatibility_prompt(
+            inherited_genes=["Merged sectioned idea"],
+            mother=parent,
+            father=secondary,
+            candidate_design=candidate_design,
+            prompts=bundle,
+            expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
+        ),
+        build_mutation_novelty_prompt(
+            inherited_genes=["Child draft sectioned idea"],
+            removed_genes=["Excluded idea"],
+            parent=parent,
+            candidate_design=candidate_design,
+            prompts=bundle,
+            expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
+        ),
+        build_crossover_novelty_prompt(
+            inherited_genes=["Merged sectioned idea"],
+            mother=parent,
+            father=secondary,
+            candidate_design=candidate_design,
+            prompts=bundle,
+            expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
+        ),
+    ]
+
+    for system_prompt, user_prompt in prompt_pairs:
+        _assert_no_non_design_contract_leak(system_prompt)
+        _assert_no_non_design_contract_leak(user_prompt)
+
+    Path(parent.implementation_path).write_text(
+        "import numpy as np\n\n"
+        "def run_packing():\n"
+        "    centers = np.array([[0.5, 0.5]], dtype=float)\n"
+        "    radii = np.array([0.1], dtype=float)\n"
+        "    return centers, radii, float(np.sum(radii))\n",
+        encoding="utf-8",
+    )
+    repair_system, repair_user = build_repair_prompt(
+        parent,
+        bundle,
+        phase="simple",
+        experiment_name="fixture",
+        errors=[],
+    )
+    _assert_no_non_design_contract_leak(repair_system)
+    _assert_no_non_design_contract_leak(repair_user)
+
+
+def test_circle_packing_repair_error_history_scrubs_expected_shape_counts() -> None:
+    rendered = format_error_history(
+        [
+            {
+                "attempt": 1,
+                "status": "failed",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "error_msg": (
+                    "Centers shape incorrect. Expected (26, 2); radii expected=(26,). "
+                    "Implementation must produce exactly 26 circles."
+                ),
+            },
+            {
+                "attempt": 2,
+                "status": "failed",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "error_msg": "Target center shape: (26, 2); required radii shape (26,).",
+            }
+        ]
+    )
+
+    assert "Expected (26" not in rendered
+    assert "expected=(26" not in rendered
+    assert "exactly 26 circles" not in rendered
+    assert "Expected required center shape" in rendered
+    assert "Expected required radius shape" in rendered
+    assert "required center shape" in rendered
+    assert "required radius shape" in rendered
+    assert "required number of circles" in rendered
+
+
 def test_circle_packing_validation_prompts_are_section_schema_aware() -> None:
     bundle = load_prompt_bundle(_compose_cfg())
 
@@ -378,6 +526,8 @@ def test_circle_packing_implementation_prompt_splits_full_and_patch_contracts() 
     assert "close it immediately with `## END_REGION`" in bundle.implementation_system
     assert "the first non-empty line must be a Python import line" in bundle.implementation_system
     assert "write executable code, not a comment-only reasoning trace" in bundle.implementation_system
+    assert "candidate histories, or duplicated full constructions" in bundle.implementation_system
+    assert "duplicated full constructions" in bundle.implementation_system
     assert "do not invent new major ideas at implementation time" in combined_prompt
     assert "do not output a full `implementation.py`" not in bundle.implementation_system
     assert "=== COMPILATION MODE ===" in bundle.implementation_user
@@ -387,6 +537,7 @@ def test_circle_packing_implementation_prompt_splits_full_and_patch_contracts() 
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.implementation_user
     assert "return the final full Python file only" in bundle.implementation_user
     assert "not `FULL`, `PATCH`, `## COMPILATION_MODE`, or a markdown fence" in bundle.implementation_user
+    assert "not repeated generated batches, candidate histories, or repair trajectories" in bundle.implementation_user
     assert "return only the patch artifact" in bundle.implementation_user
     assert "RUN_PACKING_BODY" not in bundle.implementation_template
     for region in tuple(heading[4:] for heading in SECTION_HEADINGS):
@@ -407,11 +558,14 @@ def test_circle_packing_seed_prompts_reject_ambiguous_26_circle_generators() -> 
     repair_island = (prompts_dir / "islands" / "iterative_repair.txt").read_text(encoding="utf-8")
 
     assert "must arithmetically and unambiguously produce exactly 26 circles" in bundle.seed_system
+    assert "self-check the arithmetic in the gene text" in bundle.seed_system
     assert "one directly executable deterministic path" in bundle.seed_system
     assert "prefer `- None.` in `OPTIONAL_CODE_SKETCH`" in bundle.seed_system
     assert "without requiring the implementation model to resolve contradictions" in bundle.seed_user
     assert "arithmetic puzzle" in bundle.compatibility_seed_user
     assert "row-count, trimming, or reflection rule" in symmetric_island
+    assert "show the arithmetic if the generator uses row counts" in symmetric_island
+    assert "[5, 5, 6, 5, 5]" not in symmetric_island
     assert "One bounded repair loop" in repair_island
 
 
@@ -496,7 +650,7 @@ def test_circle_packing_prompt_surface_removes_safe_local_search_bias() -> None:
     assert "validity beats score" not in combined
     assert "feasibility safety pass" not in combined
     assert "Repair is a full-file rewrite, not a diff." not in combined
-    assert "maximize score subject to hard validity constraints" in bundle.implementation_system
+    assert "objective and validity discipline encoded in the supplied genetic code" in bundle.implementation_system
     assert "one coherent imported secondary module" in bundle.crossover_system
     assert "score-inert" in combined
     assert "tiny inert parameter nudges" in bundle.mutation_novelty_system

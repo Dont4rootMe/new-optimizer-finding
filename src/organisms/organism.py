@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -150,11 +151,34 @@ def format_error_history(errors: list[dict[str, Any]]) -> str:
     if not errors:
         return "No prior evaluator errors."
 
+    expected_shape_re = re.compile(
+        r"expected(?:\s+(?:center|centers)?\s*shape)?\s*[:=]?\s*\(\s*\d+\s*,\s*2\s*\)",
+        re.IGNORECASE,
+    )
+    expected_vector_re = re.compile(
+        r"expected(?:\s+(?:radius|radii)?\s*shape)?\s*[:=]?\s*\(\s*\d+\s*,\s*\)",
+        re.IGNORECASE,
+    )
+    required_shape_re = re.compile(
+        r"(?:required|target)\s+(?:center|centers)?\s*shape\s*[:=]?\s*\(\s*\d+\s*,\s*2\s*\)",
+        re.IGNORECASE,
+    )
+    required_vector_re = re.compile(
+        r"(?:required|target)\s+(?:radius|radii)?\s*shape\s*[:=]?\s*\(\s*\d+\s*,\s*\)",
+        re.IGNORECASE,
+    )
+    exact_count_re = re.compile(r"exactly\s+\d+\s+circles", re.IGNORECASE)
+
     lines: list[str] = []
     for entry in errors:
         attempt = entry.get("attempt", "?")
         status = entry.get("status", "unknown")
         error_msg = str(entry.get("error_msg", "")).strip() or "(none)"
+        error_msg = expected_shape_re.sub("Expected required center shape", error_msg)
+        error_msg = expected_vector_re.sub("Expected required radius shape", error_msg)
+        error_msg = required_shape_re.sub("required center shape", error_msg)
+        error_msg = required_vector_re.sub("required radius shape", error_msg)
+        error_msg = exact_count_re.sub("the required number of circles", error_msg)
         timestamp = str(entry.get("timestamp", "")).strip() or "(unknown time)"
         lines.append(f"- attempt={attempt} status={status} timestamp={timestamp} error={error_msg}")
     return "\n".join(lines)
@@ -329,7 +353,7 @@ def build_implementation_prompt(
     if not normalized_change_description:
         raise ValueError("Implementation prompt requires a non-empty CHANGE_DESCRIPTION.")
 
-    system = compose_system_prompt(prompts.project_context, prompts.implementation_system)
+    system = compose_system_prompt("", prompts.implementation_system)
     user = prompts.implementation_user.format(
         organism_genetic_code=format_genetic_code(dict(genetic_code)),
         change_description=normalized_change_description,
@@ -362,7 +386,7 @@ def build_repair_prompt(
         if candidate:
             change_description = candidate
 
-    system = compose_system_prompt(prompts.project_context, prompts.repair_system)
+    system = compose_system_prompt("", prompts.repair_system)
     user = prompts.repair_user.format(
         organism_genetic_code=format_genetic_code(genetic_code),
         change_description=change_description,

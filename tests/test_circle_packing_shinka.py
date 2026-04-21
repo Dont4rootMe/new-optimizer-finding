@@ -92,7 +92,8 @@ def test_circle_packing_prompt_bundle_loads() -> None:
 
     bundle = load_prompt_bundle(cfg)
 
-    assert "26 circles in the unit square" in bundle.project_context
+    assert "hidden evaluator constants" in bundle.project_context
+    assert "26 circles in the unit square" not in bundle.project_context
     assert "patch artifact" in bundle.implementation_system
     assert "## COMPILATION_MODE" in bundle.implementation_system
     assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system

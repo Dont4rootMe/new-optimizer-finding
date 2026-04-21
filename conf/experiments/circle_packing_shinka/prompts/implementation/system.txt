@@ -14,8 +14,8 @@ Your job is to realize the supplied genes faithfully in deterministic code.
 Core rules:
 - do not invent new major ideas at implementation time
 - if the design is ambiguous, choose the strongest deterministic interpretation that remains faithful to the genes and valid at return time
-- maximize score subject to hard validity constraints
-- prefer the leanest implementation that preserves the real score-bearing mechanism
+- preserve the objective and validity discipline encoded in the supplied genetic code
+- prefer the leanest implementation that preserves the real mechanism
 - do not collapse an ambitious but feasible design into a trivial safe layout
 - do not use `CONTROL_POLICY` or `OPTIONAL_CODE_SKETCH` as a hidden global override
 
@@ -36,6 +36,7 @@ Mode-specific output contract:
 - in FULL mode, the first non-empty line must be a Python import line, usually `import numpy as np`; it must never be `FULL`, `PATCH`, `## ...`, or a markdown fence
 - in FULL mode, write executable code, not a comment-only reasoning trace; brief comments are allowed only when paired with working code
 - in FULL mode, if the exact mechanism is underspecified, implement the simplest faithful deterministic version rather than leaving placeholders, repeated planning comments, or unfinished branches
+- in FULL mode, return only the final organism output state, not trajectories, repeated candidate batches, candidate histories, or duplicated full constructions
 - PATCH mode output contract: return only the region patch artifact
 - in PATCH mode, the first line of your answer must be `## COMPILATION_MODE`
 - in PATCH mode, include only the changed regions, in canonical order, using exact canonical section names
@@ -46,5 +47,6 @@ Minimal syntax discipline:
 - do not emit commentary, analysis, or prose
 - use ASCII identifiers only
 - define `run_packing()` exactly once and make it return exactly `centers, radii, reported_sum`
+- use bounded repair and growth loops; do not use unbounded `while True` unless the body has a hard counter and guaranteed progress
 - PATCH region bodies must be raw Python lines exactly as they should appear between the scaffold markers
 - every non-empty PATCH region line must already include the required indentation inside `run_packing()`

@@ -1,4 +1,4 @@
-You are validating whether a mutated circle-packing child is meaningfully novel relative to its parent.
+You are validating whether a mutated child is meaningfully novel relative to its parent.
 
 Do not propose edits. Decide only whether the candidate child is meaningfully non-parental after mutation.
 

@@ -1,28 +1,18 @@
-Compile this circle-packing organism into code.
+Compile this organism into code.
 
-=== FUNCTION CONTRACT ===
+=== IMPLEMENTATION INTERFACE ===
 You must implement exactly this function:
 
     def run_packing() -> tuple[np.ndarray, np.ndarray, float]:
 
 Arguments: none.
-Returns a 3-tuple:
-  1. centers: np.ndarray of shape (26, 2) — each row is (x, y) center of a circle
-  2. radii: np.ndarray of shape (26,) — radius of each circle
-  3. reported_sum: float — must equal np.sum(radii)
-
-Constraints enforced by the evaluator:
-  - All values must be finite (no NaN, no inf)
-  - All radii must be > 0
-  - Every circle fully inside [0, 1] x [0, 1]: center[i] - radii[i] >= 0 and center[i] + radii[i] <= 1, for both x and y
-  - No overlaps: for every pair i != j, distance(centers[i], centers[j]) >= radii[i] + radii[j]
-  - reported_sum must match np.sum(radii) within 1e-6
-
-Score = sum of radii. Higher is better.
+Return the tuple interface used by the scaffold: `(centers, radii, reported_sum)`.
+The supplied genetic code defines the intended geometry, count, feasibility discipline, and objective.
+Do not add task facts, evaluator assumptions, target counts, or exact formulas that are absent from the genes.
 
 Validity preservation note:
-  - The final returned packing must satisfy the evaluator constraints
-  - If local correction is needed, preserve large feasible radii and existing feasible geometry whenever possible
+  - The final returned organism state must satisfy the validity discipline implied by the genes
+  - If local correction is needed, preserve the intended geometry and strong inherited structure whenever possible
   - Do not perform a generic end-stage global shrink pass unless the genes themselves call for that behavior
 
 === COMPILATION MODE ===
@@ -47,7 +37,7 @@ Validity preservation note:
 {implementation_template}
 
 === TASK ===
-Realize the supplied genes faithfully and preserve score-seeking behavior under the evaluator constraints.
+Realize the supplied genes faithfully and preserve the objective-seeking behavior they describe.
 
 If COMPILATION_MODE is FULL:
 - return the final full Python file only
@@ -55,6 +45,7 @@ If COMPILATION_MODE is FULL:
 - do not return a patch artifact
 - the first non-empty line must be `import numpy as np` or another Python import, not `FULL`, `PATCH`, `## COMPILATION_MODE`, or a markdown fence
 - the file must contain a complete executable `def run_packing():` that returns exactly `(centers, radii, reported_sum)`
+- return only the final organism output state, not repeated generated batches, candidate histories, or repair trajectories
 - do not write long exploratory comments in place of implementation; choose the simplest faithful deterministic realization and finish the file
 
 If COMPILATION_MODE is PATCH:

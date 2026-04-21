@@ -16,6 +16,7 @@ Important:
 - prefer a lean organism with one strong mechanism over a rich organism with many loosely coupled refinements
 - avoid introducing more than one main control idea, one main repair idea, and one main growth idea unless tighter coupling is essential
 - avoid designs that make implementation solve a construction puzzle; any row counts, reflection rules, symmetry generators, or role multiplicities must arithmetically and unambiguously produce exactly 26 circles
+- before finalizing any explicit count list, trimming rule, reflection rule, or role multiplicity, self-check the arithmetic in the gene text; if the sum or multiplicity is not exactly 26, choose a simpler generator
 - specify one directly executable deterministic path, not a list of alternatives, fallback branches, or exploratory "try this then maybe that" choices
 - each required section should contribute to that route
 - section completeness alone is not enough; each required section should contribute to the effective packing behavior

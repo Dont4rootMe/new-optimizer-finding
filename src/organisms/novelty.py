@@ -121,7 +121,7 @@ def build_mutation_novelty_prompt(
         expected_core_gene_sections=expected_core_gene_sections,
     )
     candidate_change_description = require_response_section(candidate_design, "CHANGE_DESCRIPTION")
-    system = compose_system_prompt(prompts.project_context, prompts.mutation_novelty_system)
+    system = compose_system_prompt("", prompts.mutation_novelty_system)
     user = prompts.mutation_novelty_user.format(
         genome_schema=prompts.genome_schema,
         inherited_gene_pool=_render_gene_pool(inherited_genes),
@@ -149,7 +149,7 @@ def build_crossover_novelty_prompt(
         expected_core_gene_sections=expected_core_gene_sections,
     )
     candidate_change_description = require_response_section(candidate_design, "CHANGE_DESCRIPTION")
-    system = compose_system_prompt(prompts.project_context, prompts.crossover_novelty_system)
+    system = compose_system_prompt("", prompts.crossover_novelty_system)
     user = prompts.crossover_novelty_user.format(
         genome_schema=prompts.genome_schema,
         inherited_gene_pool=_render_gene_pool(inherited_genes),
