@@ -39,7 +39,8 @@ Mode-specific output contract:
 - in FULL mode, return only the final organism output state, not trajectories, repeated candidate batches, candidate histories, or duplicated full constructions
 - PATCH mode output contract: return only the region patch artifact
 - in PATCH mode, the first line of your answer must be `## COMPILATION_MODE`
-- in PATCH mode, include only the changed regions, in canonical order, using exact canonical section names
+- in PATCH mode, include only the changed regions, in canonical order, using `## REGION SECTION_NAME` with exact canonical section names
+- in PATCH mode, do not put a colon after `REGION`
 - in PATCH mode, after writing one region body, close it immediately with `## END_REGION` before beginning the next region
 
 Minimal syntax discipline:

@@ -264,6 +264,42 @@ def test_parse_implementation_patch_response_accepts_named_end_region_alias() ->
     assert patch.region_bodies == (("RADIUS_POLICY", "    radii = np.ones(26)\n"),)
 
 
+def test_parse_implementation_patch_response_accepts_colon_region_heading_alias() -> None:
+    text = (
+        "## COMPILATION_MODE\n"
+        "PATCH\n\n"
+        "## REGION: PARAMETERS\n"
+        "    init_radius = 0.02\n"
+        "## END_REGION: PARAMETERS\n"
+    )
+
+    patch = parse_implementation_patch_response(
+        text,
+        expected_mode="PATCH",
+        expected_region_names=("PARAMETERS",),
+    )
+
+    assert patch.region_bodies == (("PARAMETERS", "    init_radius = 0.02\n"),)
+
+
+def test_parse_implementation_patch_response_accepts_inline_compilation_mode_alias() -> None:
+    text = (
+        "## COMPILATION_MODE PATCH\n\n"
+        "## REGION: PARAMETERS\n"
+        "    init_radius = 0.02\n"
+        "## END_REGION: PARAMETERS\n"
+    )
+
+    patch = parse_implementation_patch_response(
+        text,
+        expected_mode="PATCH",
+        expected_region_names=("PARAMETERS",),
+    )
+
+    assert patch.compilation_mode == "PATCH"
+    assert patch.region_bodies == (("PARAMETERS", "    init_radius = 0.02\n"),)
+
+
 def test_parse_implementation_patch_response_accepts_scaffold_style_end_region_alias() -> None:
     text = (
         "## COMPILATION_MODE\n"

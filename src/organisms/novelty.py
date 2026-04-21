@@ -24,6 +24,14 @@ _NOVELTY_JUDGMENT_SECTIONS = (
     "REJECTION_REASON",
     "SECTIONS_AT_ISSUE",
 )
+_NON_CORE_ISSUE_NAMES = frozenset(
+    {
+        "CORE_GENES",
+        "INTERACTION_NOTES",
+        "COMPUTE_NOTES",
+        "CHANGE_DESCRIPTION",
+    }
+)
 
 
 class NoveltyRejectionExhaustedError(RuntimeError):
@@ -80,7 +88,7 @@ def parse_novelty_judgment(
     if verdict == _NOVELTY_ACCEPTED:
         if expected_section_names is not None:
             sections_text = parsed.get("SECTIONS_AT_ISSUE", "NONE")
-            sections_at_issue = parse_section_issue_list(
+            sections_at_issue = _parse_novelty_section_issue_list(
                 sections_text,
                 expected_section_names=expected_section_names,
             )
@@ -94,7 +102,7 @@ def parse_novelty_judgment(
     if "SECTIONS_AT_ISSUE" not in parsed:
         sections_at_issue = ()
     else:
-        sections_at_issue = parse_section_issue_list(
+        sections_at_issue = _parse_novelty_section_issue_list(
             require_response_section(parsed, "SECTIONS_AT_ISSUE"),
             expected_section_names=expected_section_names,
         )
@@ -163,6 +171,35 @@ def build_crossover_novelty_prompt(
 
 def _render_gene_pool(genes: list[str]) -> str:
     return "\n".join(f"- {gene}" for gene in genes) or "(none)"
+
+
+def _parse_novelty_section_issue_list(
+    text: str,
+    *,
+    expected_section_names: tuple[str, ...] | None,
+) -> tuple[str, ...]:
+    """Parse CORE_GENES section names while tolerating top-level artifact names.
+
+    Local models sometimes put CHANGE_DESCRIPTION in SECTIONS_AT_ISSUE when the
+    novelty problem is in the summary rather than a genome subsection. That is
+    valid rejection feedback but not a changed CORE_GENES section, so it should
+    not make the whole creation attempt fail.
+    """
+
+    raw = str(text).strip()
+    if raw == "NONE":
+        return ()
+    if not raw or "\n" in raw or raw.startswith(("- ", "* ", "1. ")):
+        return parse_section_issue_list(raw, expected_section_names=expected_section_names)
+
+    names = tuple(part.strip() for part in raw.split(","))
+    filtered = tuple(name for name in names if name not in _NON_CORE_ISSUE_NAMES)
+    if not filtered:
+        return ()
+    return parse_section_issue_list(
+        ", ".join(filtered),
+        expected_section_names=expected_section_names,
+    )
 
 
 def _parse_novelty_judgment_sections(text: str, expected: tuple[str, ...]) -> dict[str, str]:

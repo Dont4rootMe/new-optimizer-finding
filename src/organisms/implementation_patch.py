@@ -12,6 +12,7 @@ _FULL_MODE = "FULL"
 _PATCH_MODE = "PATCH"
 _START_MARKER_RE = re.compile(r"^[ \t]*# === REGION: ([A-Z][A-Z0-9_]*) ===[ \t]*$")
 _END_MARKER_RE = re.compile(r"^[ \t]*# === END_REGION: ([A-Z][A-Z0-9_]*) ===[ \t]*$")
+_PATCH_NAMED_START_RE = re.compile(r"^REGION(?::[ \t]*|[ \t]+)([A-Z][A-Z0-9_]*)$")
 _PATCH_NAMED_END_RE = re.compile(r"^END_REGION(?::[ \t]*|[ \t]+)([A-Z][A-Z0-9_]*)$")
 _PATCH_SCAFFOLD_END_RE = re.compile(r"^[ \t]*# === END_REGION: ([A-Z][A-Z0-9_]*)(?: ===)?[ \t]*$")
 
@@ -331,25 +332,26 @@ def _parse_patch_sections(text: str) -> tuple[str, tuple[tuple[str, str], ...]]:
 
         if line_without_newline.startswith("## "):
             header = line_without_newline[3:].strip()
-            if header == "COMPILATION_MODE":
+            mode_inline = _parse_inline_compilation_mode(header)
+            if header == "COMPILATION_MODE" or mode_inline is not None:
                 if mode_seen:
                     raise ValueError("Implementation patch contains duplicate COMPILATION_MODE section.")
                 if active_region is not None:
                     raise ValueError("COMPILATION_MODE cannot appear inside a region body.")
                 mode_seen = True
-                mode_start = offset + len(line)
-                mode_end = _find_next_header_offset(source, lines, line_number, mode_start)
-                mode = source[mode_start:mode_end].strip()
+                if mode_inline is None:
+                    mode_start = offset + len(line)
+                    mode_end = _find_next_header_offset(source, lines, line_number, mode_start)
+                    mode = source[mode_start:mode_end].strip()
+                else:
+                    mode = mode_inline
                 if mode not in {_FULL_MODE, _PATCH_MODE}:
                     raise ValueError("Implementation patch COMPILATION_MODE must be FULL or PATCH.")
-            elif header.startswith("REGION "):
+            elif (region_name := _parse_patch_region_name(header)) is not None:
                 if not mode_seen:
                     raise ValueError("Implementation patch must start with ## COMPILATION_MODE before regions.")
                 if active_region is not None:
                     raise ValueError(f"Region {active_region} is missing ## END_REGION before line {line_number}.")
-                region_name = header[len("REGION ") :].strip()
-                if not region_name:
-                    raise ValueError(f"Empty implementation region name at line {line_number}.")
                 active_region = region_name
                 active_body_start = offset + len(line)
             else:
@@ -394,6 +396,21 @@ def _parse_patch_sections(text: str) -> tuple[str, tuple[tuple[str, str], ...]]:
         duplicates = sorted({name for name in actual_names if actual_names.count(name) > 1})
         raise ValueError(f"Implementation patch contains duplicate region(s): {', '.join(duplicates)}.")
     return mode, tuple(regions)
+
+
+def _parse_inline_compilation_mode(header: str) -> str | None:
+    for prefix in ("COMPILATION_MODE ", "COMPILATION_MODE:"):
+        if header.startswith(prefix):
+            mode = header[len(prefix) :].strip()
+            return mode or None
+    return None
+
+
+def _parse_patch_region_name(header: str) -> str | None:
+    match = _PATCH_NAMED_START_RE.match(header)
+    if match is None:
+        return None
+    return match.group(1)
 
 
 def _parse_patch_end_region_name(header: str, line_without_newline: str) -> str | None:

@@ -110,6 +110,40 @@ def test_parse_section_aware_novelty_judgment_rejected_with_multiple_sections() 
     assert judgment.sections_at_issue == ("CONFLICT_MODEL", "REPAIR_POLICY")
 
 
+def test_parse_section_aware_novelty_judgment_ignores_top_level_artifact_issue_names() -> None:
+    judgment = parse_novelty_judgment(
+        (
+            "## NOVELTY_VERDICT\n"
+            "NOVELTY_REJECTED\n\n"
+            "## REJECTION_REASON\n"
+            "The novelty appears only in the summary, not in executable genes.\n\n"
+            "## SECTIONS_AT_ISSUE\n"
+            "CHANGE_DESCRIPTION, REPAIR_POLICY\n"
+        ),
+        expected_section_names=SECTION_NAMES,
+    )
+
+    assert judgment.is_accepted is False
+    assert judgment.sections_at_issue == ("REPAIR_POLICY",)
+
+
+def test_parse_section_aware_novelty_judgment_accepts_only_top_level_artifact_issue_name() -> None:
+    judgment = parse_novelty_judgment(
+        (
+            "## NOVELTY_VERDICT\n"
+            "NOVELTY_REJECTED\n\n"
+            "## REJECTION_REASON\n"
+            "The novelty appears only in the summary, not in executable genes.\n\n"
+            "## SECTIONS_AT_ISSUE\n"
+            "CHANGE_DESCRIPTION\n"
+        ),
+        expected_section_names=SECTION_NAMES,
+    )
+
+    assert judgment.is_accepted is False
+    assert judgment.sections_at_issue == ()
+
+
 def test_parse_section_aware_novelty_judgment_accepts_inline_section_headers() -> None:
     judgment = parse_novelty_judgment(
         (

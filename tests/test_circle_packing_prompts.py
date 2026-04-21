@@ -523,6 +523,7 @@ def test_circle_packing_implementation_prompt_splits_full_and_patch_contracts() 
     assert "## COMPILATION_MODE" in bundle.implementation_system
     assert "FULL mode output contract: return the complete final `implementation.py` only" in bundle.implementation_system
     assert "PATCH mode output contract: return only the region patch artifact" in bundle.implementation_system
+    assert "do not put a colon after `REGION`" in bundle.implementation_system
     assert "close it immediately with `## END_REGION`" in bundle.implementation_system
     assert "the first non-empty line must be a Python import line" in bundle.implementation_system
     assert "write executable code, not a comment-only reasoning trace" in bundle.implementation_system
@@ -539,6 +540,7 @@ def test_circle_packing_implementation_prompt_splits_full_and_patch_contracts() 
     assert "not `FULL`, `PATCH`, `## COMPILATION_MODE`, or a markdown fence" in bundle.implementation_user
     assert "not repeated generated batches, candidate histories, or repair trajectories" in bundle.implementation_user
     assert "return only the patch artifact" in bundle.implementation_user
+    assert "not `## REGION: SECTION_NAME`" in bundle.implementation_user
     assert "RUN_PACKING_BODY" not in bundle.implementation_template
     for region in tuple(heading[4:] for heading in SECTION_HEADINGS):
         assert f"# === REGION: {region} ===" in bundle.implementation_template

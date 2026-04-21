@@ -50,6 +50,7 @@ If COMPILATION_MODE is FULL:
 
 If COMPILATION_MODE is PATCH:
 - return only the patch artifact in the required `## COMPILATION_MODE` / `## REGION` / `## END_REGION` format
+- start each changed region with `## REGION SECTION_NAME`, not `## REGION: SECTION_NAME`
 - compile only the listed CHANGED_SECTIONS
 - do not compile any unchanged section
 - the repository will preserve unchanged maternal regions byte-for-byte
