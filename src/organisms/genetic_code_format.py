@@ -15,6 +15,7 @@ TOP_LEVEL_SECTION_NAMES = (
 _SCHEMA_HEADER_RE = re.compile(r"^# ([A-Z][A-Z0-9_]*)$")
 _TOP_LEVEL_HEADER_RE = re.compile(r"^## ([A-Z_]+)$")
 _SUBSECTION_HEADER_RE = re.compile(r"^### ([A-Z][A-Z0-9_]*)$")
+_OPTIONAL_CODE_SKETCH_SECTION = "OPTIONAL_CODE_SKETCH"
 
 
 @dataclass(frozen=True)
@@ -257,6 +258,7 @@ def _parse_sectioned_core_genes(
     current_name: str | None = None
     current_entries: list[ParsedGeneEntry] = []
     current_entry_lines: list[str] | None = None
+    inside_optional_code_fence = False
 
     def flush_entry() -> None:
         nonlocal current_entry_lines
@@ -280,6 +282,15 @@ def _parse_sectioned_core_genes(
         )
 
     for line_number, line in enumerate(core_text.splitlines(), start=1):
+        if inside_optional_code_fence:
+            if current_entry_lines is None:
+                raise ValueError("OPTIONAL_CODE_SKETCH fenced block lost its current entry state.")
+            current_entry_lines.append(line.rstrip())
+            if line.strip().startswith("```"):
+                inside_optional_code_fence = False
+                flush_entry()
+            continue
+
         if line.startswith("### "):
             match = _SUBSECTION_HEADER_RE.match(line)
             if match is None:
@@ -304,6 +315,14 @@ def _parse_sectioned_core_genes(
 
         if not line.strip():
             continue
+        if current_name == _OPTIONAL_CODE_SKETCH_SECTION and line.strip().startswith("```"):
+            flush_entry()
+            current_entry_lines = [line.rstrip()]
+            if line.strip().count("```") >= 2:
+                flush_entry()
+            else:
+                inside_optional_code_fence = True
+            continue
         if line.startswith("- "):
             flush_entry()
             current_entry_lines = [line[2:].strip()]
@@ -319,6 +338,9 @@ def _parse_sectioned_core_genes(
         raise ValueError(
             f"CORE_GENES subsection {current_name} contains non-bullet text at line {line_number}: {line!r}"
         )
+
+    if inside_optional_code_fence:
+        raise ValueError(f"CORE_GENES subsection {_OPTIONAL_CODE_SKETCH_SECTION} has an unterminated fenced code block.")
 
     flush_section()
     if not sections:

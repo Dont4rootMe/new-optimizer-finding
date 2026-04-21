@@ -737,6 +737,46 @@ def test_circle_seed_implementation_stage_uses_full_source_compilation(
     assert llm_response["implementation"]["text"] == result.implementation_code
 
 
+def test_circle_full_source_extraction_accepts_markdown_fenced_python(
+    tmp_path: Path,
+) -> None:
+    del tmp_path
+    generator = CandidateGenerator(_circle_cfg())
+    prepared = generator._prepare_implementation_stage(  # noqa: SLF001
+        parse_llm_response(_circle_design_text()),
+    )
+
+    try:
+        extracted = generator._extract_implementation_stage_code(  # noqa: SLF001
+            f"```python\n{_circle_base_source()}\n```",
+            prepared=prepared,
+        )
+    finally:
+        generator.close()
+
+    assert extracted == _circle_base_source()
+
+
+def test_circle_full_source_extraction_strips_legacy_full_mode_preamble(
+    tmp_path: Path,
+) -> None:
+    del tmp_path
+    generator = CandidateGenerator(_circle_cfg())
+    prepared = generator._prepare_implementation_stage(  # noqa: SLF001
+        parse_llm_response(_circle_design_text()),
+    )
+
+    try:
+        extracted = generator._extract_implementation_stage_code(  # noqa: SLF001
+            "## COMPILATION_MODE\nFULL\n\n" + _circle_base_source(),
+            prepared=prepared,
+        )
+    finally:
+        generator.close()
+
+    assert extracted == _circle_base_source()
+
+
 def test_circle_full_source_extraction_rejects_full_patch_artifact(
     tmp_path: Path,
 ) -> None:

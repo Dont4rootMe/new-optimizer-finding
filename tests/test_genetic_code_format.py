@@ -218,6 +218,33 @@ def test_sectioned_parser_attaches_continuation_lines_to_previous_bullet() -> No
     )
 
 
+def test_sectioned_parser_accepts_fenced_optional_code_sketch_block() -> None:
+    text = SECTIONED_GENETIC_CODE.replace(
+        "### OPTIONAL_CODE_SKETCH\n- None.",
+        (
+            "### OPTIONAL_CODE_SKETCH\n"
+            "```python\n"
+            "# local repair sketch\n"
+            "def nudge(circle, direction):\n"
+            "    return circle + 0.25 * direction\n"
+            "```"
+        ),
+    )
+
+    parsed = parse_genetic_code_text(text, expected_section_names=SCHEMA_SECTION_NAMES)
+
+    assert parsed.core_gene_sections is not None
+    optional = parsed.core_gene_sections[-1]
+    assert optional.name == "OPTIONAL_CODE_SKETCH"
+    assert optional.entries[0].text == (
+        "```python\n"
+        "# local repair sketch\n"
+        "def nudge(circle, direction):\n"
+        "    return circle + 0.25 * direction\n"
+        "```"
+    )
+
+
 def test_sectioned_parser_uses_arbitrary_schema_section_names() -> None:
     core = "\n\n".join(
         f"### {name}\n- "

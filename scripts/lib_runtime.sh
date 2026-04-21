@@ -44,6 +44,37 @@ def _resolve_path(value: object, *, root_dir: Path) -> Path:
     return path.resolve()
 
 
+def _positive_int(value: object) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _max_num_ctx(instance_cfg: object) -> int | None:
+    values: list[int] = []
+    request_options = getattr(instance_cfg, "request_options", {}) or {}
+    if isinstance(request_options, dict):
+        parsed = _positive_int(request_options.get("num_ctx"))
+        if parsed is not None:
+            values.append(parsed)
+    stage_options = getattr(instance_cfg, "stage_options", {}) or {}
+    if isinstance(stage_options, dict):
+        for stage_cfg in stage_options.values():
+            if not isinstance(stage_cfg, dict):
+                continue
+            stage_request_options = stage_cfg.get("request_options", {})
+            if not isinstance(stage_request_options, dict):
+                continue
+            parsed = _positive_int(stage_request_options.get("num_ctx"))
+            if parsed is not None:
+                values.append(parsed)
+    return max(values) if values else None
+
+
 def main() -> int:
     root_dir = Path(sys.argv[1]).resolve()
     cli_args = sys.argv[2:]
@@ -88,8 +119,10 @@ def main() -> int:
             base_url = str(instance_cfg.base_url or "http://127.0.0.1:11434/api").rstrip("/")
             gpu_ranks = ",".join(str(rank) for rank in instance_cfg.gpu_ranks)
             max_concurrency = max(1, int(instance_cfg.max_concurrency))
+            num_ctx = _max_num_ctx(instance_cfg)
+            num_ctx_field = "" if num_ctx is None else str(num_ctx)
             print(
-                f"OLLAMA_ROUTE={route_id}|{base_url}|{instance_cfg.provider_model_id}|{gpu_ranks}|{max_concurrency}"
+                f"OLLAMA_ROUTE={route_id}|{base_url}|{instance_cfg.provider_model_id}|{gpu_ranks}|{max_concurrency}|{num_ctx_field}"
             )
     return 0
 
@@ -565,9 +598,9 @@ PY
 
 _unique_local_ollama_base_urls() {
   declare -A seen=()
-  local route route_id base_url model gpu_ranks_csv max_concurrency
+  local route route_id base_url model gpu_ranks_csv max_concurrency num_ctx
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
-    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency <<<"$route"
+    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency num_ctx <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
     if ! _ollama_is_local "$base_url"; then
       continue
@@ -798,6 +831,7 @@ _start_local_ollama() {
   local gpu_group="${3:-}"
   local models_dir="${4:-}"
   local num_parallel="${5:-}"
+  local context_length="${6:-}"
   local origin log_dir log_name stdout_log stderr_log pid_file
   local -a launch_env=()
 
@@ -814,6 +848,9 @@ _start_local_ollama() {
   if [[ -n "$num_parallel" && "$num_parallel" -gt 0 ]]; then
     launch_env+=("OLLAMA_NUM_PARALLEL=${num_parallel}")
   fi
+  if [[ "$context_length" =~ ^[0-9]+$ ]] && [[ "$context_length" -gt 0 ]]; then
+    launch_env+=("OLLAMA_CONTEXT_LENGTH=${context_length}")
+  fi
   mkdir -p "$models_dir"
   log_dir="${runtime_root}/ollama"
   mkdir -p "$log_dir"
@@ -823,9 +860,9 @@ _start_local_ollama() {
   pid_file="${log_dir}/serve.${log_name}.pid"
 
   if [[ -n "$gpu_group" ]]; then
-    echo "Starting local Ollama server for ${base_url} on gpu:${gpu_group} (num_parallel=${num_parallel:-default})."
+    echo "Starting local Ollama server for ${base_url} on gpu:${gpu_group} (num_parallel=${num_parallel:-default}, context_length=${context_length:-default})."
   else
-    echo "Starting local Ollama server for ${base_url} (num_parallel=${num_parallel:-default})."
+    echo "Starting local Ollama server for ${base_url} (num_parallel=${num_parallel:-default}, context_length=${context_length:-default})."
   fi
   nohup "${launch_env[@]}" ollama serve >"${stdout_log}" 2>"${stderr_log}" </dev/null &
   printf '%s\n' "$!" > "${pid_file}"
@@ -909,12 +946,13 @@ _ensure_ollama_server() {
   local gpu_group="${3:-}"
   local models_dir="${4:-}"
   local num_parallel="${5:-}"
+  local context_length="${6:-}"
   if _ollama_healthcheck "$base_url"; then
     return 0
   fi
 
   if _ollama_is_local "$base_url"; then
-    _start_local_ollama "$base_url" "$runtime_root" "$gpu_group" "$models_dir" "$num_parallel" || return 1
+    _start_local_ollama "$base_url" "$runtime_root" "$gpu_group" "$models_dir" "$num_parallel" "$context_length" || return 1
     return 0
   fi
 
@@ -959,8 +997,10 @@ _warmup_ollama_model() {
   local base_url="$1"
   local model="$2"
   local runtime_root="${3:-}"
+  local num_ctx="${4:-}"
   local chat_url max_wait_sec retry_sleep_sec attempt status_code
   local log_name stdout_log stderr_log pid_file pid
+  local options_payload='{"num_predict":4}'
 
   chat_url="$(_ollama_chat_url "$base_url")"
   max_wait_sec="${NEW_OPTIMIZER_OLLAMA_WARMUP_MAX_WAIT_SEC:-300}"
@@ -975,6 +1015,9 @@ _warmup_ollama_model() {
   stdout_log="${runtime_root}/ollama/serve.${log_name}.stdout.log"
   stderr_log="${runtime_root}/ollama/serve.${log_name}.stderr.log"
   pid_file="$(_ollama_pid_file "$runtime_root" "$base_url")"
+  if [[ "$num_ctx" =~ ^[0-9]+$ ]] && [[ "$num_ctx" -gt 0 ]]; then
+    options_payload="{\"num_predict\":4,\"num_ctx\":${num_ctx}}"
+  fi
 
   echo "Warming up model ${model} at ${base_url} (forcing GPU load)..."
   local start_ts
@@ -985,7 +1028,7 @@ _warmup_ollama_model() {
       curl -sS -o /dev/null -w '%{http_code}' --max-time "$max_wait_sec" \
         -H 'Content-Type: application/json' \
         -X POST \
-        -d "{\"model\":\"${model}\",\"messages\":[{\"role\":\"user\",\"content\":\"say ok\"}],\"stream\":false,\"options\":{\"num_predict\":4}}" \
+        -d "{\"model\":\"${model}\",\"messages\":[{\"role\":\"user\",\"content\":\"say ok\"}],\"stream\":false,\"options\":${options_payload}}" \
         "$chat_url" 2>/dev/null
     )" || true
 
@@ -1052,11 +1095,12 @@ ensure_ollama_runtime() {
   declare -A server_gpu_by_url=()
   declare -A server_url_by_gpu=()
   declare -A server_num_parallel_by_url=()
-  local route route_id base_url model gpu_ranks_csv gpu_group max_concurrency
+  declare -A server_context_length_by_url=()
+  local route route_id base_url model gpu_ranks_csv gpu_group max_concurrency num_ctx
   local -a gpu_group_ranks=()
   local rank
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
-    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency <<<"$route"
+    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency num_ctx <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
     gpu_group="$gpu_ranks_csv"
     if [[ -z "$max_concurrency" || "$max_concurrency" -lt 1 ]]; then
@@ -1096,17 +1140,27 @@ ensure_ollama_runtime() {
     else
       server_num_parallel_by_url["$base_url"]=$max_concurrency
     fi
+    if [[ "$num_ctx" =~ ^[0-9]+$ ]] && [[ "$num_ctx" -gt 0 ]]; then
+      if [[ -n "${server_context_length_by_url[$base_url]+x}" ]]; then
+        if [[ "$num_ctx" -gt "${server_context_length_by_url[$base_url]}" ]]; then
+          server_context_length_by_url["$base_url"]="$num_ctx"
+        fi
+      else
+        server_context_length_by_url["$base_url"]="$num_ctx"
+      fi
+    fi
   done
 
   declare -A started_base_urls=()
-  local num_parallel
+  local num_parallel context_length
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
-    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency <<<"$route"
+    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency num_ctx <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
     gpu_group="${server_gpu_by_url[$base_url]-}"
     num_parallel="${server_num_parallel_by_url[$base_url]-}"
+    context_length="${server_context_length_by_url[$base_url]-}"
     if [[ -z "${started_base_urls[$base_url]+x}" ]]; then
-      _ensure_ollama_server "$base_url" "$OLLAMA_RUNTIME_ROOT" "$gpu_group" "$OLLAMA_MODELS_DIR" "$num_parallel" || return 1
+      _ensure_ollama_server "$base_url" "$OLLAMA_RUNTIME_ROOT" "$gpu_group" "$OLLAMA_MODELS_DIR" "$num_parallel" "$context_length" || return 1
       started_base_urls["$base_url"]=1
     fi
     _ensure_ollama_model "$base_url" "$model" "$OLLAMA_MODELS_DIR" || {
@@ -1116,9 +1170,9 @@ ensure_ollama_runtime() {
   done
 
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
-    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency <<<"$route"
+    IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency num_ctx <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
-    _warmup_ollama_model "$base_url" "$model" "$OLLAMA_RUNTIME_ROOT" || {
+    _warmup_ollama_model "$base_url" "$model" "$OLLAMA_RUNTIME_ROOT" "$num_ctx" || {
       echo "Error: failed to warm up Ollama model ${model} for route ${route_id}." >&2
       return 1
     }

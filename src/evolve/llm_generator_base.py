@@ -15,6 +15,20 @@ from api_platforms import ApiPlatformRegistry
 
 LOGGER = logging.getLogger(__name__)
 
+_FULL_MODE_PREAMBLE_RE = re.compile(
+    r"^\s*##\s*COMPILATION_MODE\s*\n\s*FULL\s*(?:\n+|$)",
+    re.IGNORECASE,
+)
+
+
+def _strip_legacy_full_mode_preamble(text: str) -> str:
+    """Remove a stray FULL-mode patch header from an otherwise full Python file."""
+
+    source = str(text).strip()
+    if not source:
+        return ""
+    return _FULL_MODE_PREAMBLE_RE.sub("", source, count=1).lstrip()
+
 
 class BaseLlmGenerator:
     """Hold route-weight sampling and code extraction for creation stages."""
@@ -45,30 +59,35 @@ class BaseLlmGenerator:
         # by `_rng_lock` because multiple creation threads read it in parallel.
         self._batch_route_assignments: dict[str, str] = {}
 
-    def _extract_python(self, text: str) -> str:
+    def _extract_python(self, text: str, *, preserve_trailing_newline: bool = True) -> str:
         """Extract Python code from LLM response, stripping markdown fences.
 
         Strategy:
         1. Find ALL markdown code blocks and pick the longest one (the main code).
         2. If no fences found, use the whole response.
         3. Strip any remaining stray backtick lines.
-        4. Validate syntax — raise ValueError if the code is not parseable Python.
+        4. Strip a stray legacy FULL-mode preamble if the model emitted one.
+        5. Validate syntax — raise ValueError if the code is not parseable Python.
         """
 
         # Find all code blocks — pick the longest to avoid grabbing a short snippet
         pattern = re.compile(r"```(?:python)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
         matches = pattern.findall(text)
         if matches:
-            code = max(matches, key=len).strip() + "\n"
+            code = max(matches, key=len).strip()
         else:
-            code = text.strip() + "\n"
+            code = text.strip()
 
         # Strip any remaining stray backtick lines that the regex didn't catch
         lines = code.split("\n")
         cleaned_lines = [line for line in lines if not line.strip().startswith("```")]
-        code = "\n".join(cleaned_lines)
+        code = "\n".join(cleaned_lines).strip()
         if not code.strip():
-            code = text.strip() + "\n"
+            code = text.strip()
+
+        code = _strip_legacy_full_mode_preamble(code)
+        if preserve_trailing_newline and code and not code.endswith("\n"):
+            code += "\n"
 
         # Validate Python syntax — fail fast instead of wasting an eval slot
         try:

@@ -27,7 +27,12 @@ def _write_fake_python(
     for route in ollama_routes or []:
         route_id, base_url, model = route[:3]
         gpu_ranks_csv = route[3] if len(route) > 3 else ""
-        ollama_lines.append(f"printf '%s\\n' 'OLLAMA_ROUTE={route_id}|{base_url}|{model}|{gpu_ranks_csv}'")
+        fields = [route_id, base_url, model, gpu_ranks_csv]
+        if len(route) > 4:
+            fields.append(route[4])
+        if len(route) > 5:
+            fields.append(route[5])
+        ollama_lines.append(f"printf '%s\\n' 'OLLAMA_ROUTE={'|'.join(fields)}'")
 
     script = textwrap.dedent(
         f"""\
@@ -131,10 +136,10 @@ PY
             host="${OLLAMA_HOST:-}"
             state_dir="${OLLAMA_STATE_DIR:?}/${host//[:\\/]/_}"
             mkdir -p "$state_dir"
-            printf 'host=%s gpu=%s | %s\\n' "$host" "${CUDA_VISIBLE_DEVICES:-}" "$*" >> "${OLLAMA_CALLS_FILE:?}"
+            printf 'host=%s gpu=%s | %s (parallel=%s ctx=%s)\\n' "$host" "${CUDA_VISIBLE_DEVICES:-}" "$*" "${OLLAMA_NUM_PARALLEL:-}" "${OLLAMA_CONTEXT_LENGTH:-}" >> "${OLLAMA_CALLS_FILE:?}"
             if [[ "${1:-}" == "serve" ]]; then
               touch "${state_dir}/server_ready"
-              trap 'printf "host=%s gpu=%s | stopped\\n" "$host" "${CUDA_VISIBLE_DEVICES:-}" >> "${OLLAMA_CALLS_FILE:?}"; rm -f "${state_dir}/server_ready"; exit 0' TERM INT
+              trap 'printf "host=%s gpu=%s | stopped (parallel=%s ctx=%s)\\n" "$host" "${CUDA_VISIBLE_DEVICES:-}" "${OLLAMA_NUM_PARALLEL:-}" "${OLLAMA_CONTEXT_LENGTH:-}" >> "${OLLAMA_CALLS_FILE:?}"; rm -f "${state_dir}/server_ready"; exit 0' TERM INT
               while true; do
                 sleep 1
               done
@@ -361,6 +366,51 @@ def test_seed_population_shell_wrapper_auto_starts_local_ollama(tmp_path: Path) 
     assert any("/api/tags" in line for line in curl_calls)
     assert any("/api/pull" in line for line in curl_calls)
     assert (runtime_root / "ollama").is_dir()
+
+
+def test_seed_population_shell_wrapper_uses_route_num_ctx_for_startup_and_warmup(tmp_path: Path) -> None:
+    script = ROOT / "scripts" / "seed_population.sh"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    calls_path = tmp_path / "python_calls.log"
+    curl_calls_path = tmp_path / "curl_calls.log"
+    ollama_calls_path = tmp_path / "ollama_calls.log"
+    runtime_root = tmp_path / "runtime"
+
+    fake_python = fake_bin / "python"
+    _write_fake_python(
+        fake_python,
+        ollama_routes=[
+            ("ollama_gemma4_31b", "http://127.0.0.1:12454/api", "gemma4:31b", "0", "3", "65536"),
+        ],
+    )
+    _write_fake_local_ollama_commands(fake_bin)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["PYTHON_CALLS_FILE"] = str(calls_path)
+    env["CURL_CALLS_FILE"] = str(curl_calls_path)
+    env["OLLAMA_CALLS_FILE"] = str(ollama_calls_path)
+    env["OLLAMA_STATE_DIR"] = str(tmp_path / "ollama_state")
+    env["OLLAMA_MODELS_DIR"] = str(tmp_path / "ollama_models")
+    env["API_PLATFORM_RUNTIME_ROOT"] = str(runtime_root)
+
+    completed = subprocess.run(
+        [str(script), "--config-name", "config_circle_packing_shinka"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        env=env,
+    )
+
+    assert completed.returncode == 0
+    assert "context_length=65536" in completed.stdout
+    ollama_calls = ollama_calls_path.read_text(encoding="utf-8")
+    assert "host=127.0.0.1:12454 gpu=0 | serve (parallel=3 ctx=65536)" in ollama_calls
+    curl_calls = curl_calls_path.read_text(encoding="utf-8")
+    assert 'http://127.0.0.1:12454/api/chat' in curl_calls
+    assert '"num_ctx":65536' in curl_calls
 
 
 def test_seed_population_shell_wrapper_auto_starts_multiple_local_ollama_servers(tmp_path: Path) -> None:

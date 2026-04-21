@@ -36,7 +36,12 @@ def _write_fake_python(
     for route in ollama_routes or []:
         route_id, base_url, model = route[:3]
         gpu_ranks_csv = route[3] if len(route) > 3 else ""
-        ollama_lines.append(f"printf '%s\\n' 'OLLAMA_ROUTE={route_id}|{base_url}|{model}|{gpu_ranks_csv}'")
+        fields = [route_id, base_url, model, gpu_ranks_csv]
+        if len(route) > 4:
+            fields.append(route[4])
+        if len(route) > 5:
+            fields.append(route[5])
+        ollama_lines.append(f"printf '%s\\n' 'OLLAMA_ROUTE={'|'.join(fields)}'")
 
     script = textwrap.dedent(
         f"""\
@@ -146,10 +151,10 @@ PY
             host="${OLLAMA_HOST:-}"
             state_dir="${OLLAMA_STATE_DIR:?}/${host//[:\\/]/_}"
             mkdir -p "$state_dir"
-            printf 'host=%s gpu=%s | %s\\n' "$host" "${CUDA_VISIBLE_DEVICES:-}" "$*" >> "${OLLAMA_CALLS_FILE:?}"
+            printf 'host=%s gpu=%s | %s (parallel=%s ctx=%s)\\n' "$host" "${CUDA_VISIBLE_DEVICES:-}" "$*" "${OLLAMA_NUM_PARALLEL:-}" "${OLLAMA_CONTEXT_LENGTH:-}" >> "${OLLAMA_CALLS_FILE:?}"
             if [[ "${1:-}" == "serve" ]]; then
               touch "${state_dir}/server_ready"
-              trap 'printf "host=%s gpu=%s | stopped\\n" "$host" "${CUDA_VISIBLE_DEVICES:-}" >> "${OLLAMA_CALLS_FILE:?}"; rm -f "${state_dir}/server_ready"; exit 0' TERM INT
+              trap 'printf "host=%s gpu=%s | stopped (parallel=%s ctx=%s)\\n" "$host" "${CUDA_VISIBLE_DEVICES:-}" "${OLLAMA_NUM_PARALLEL:-}" "${OLLAMA_CONTEXT_LENGTH:-}" >> "${OLLAMA_CALLS_FILE:?}"; rm -f "${state_dir}/server_ready"; exit 0' TERM INT
               while true; do
                 sleep 1
               done

@@ -478,7 +478,7 @@ class CandidateGenerator(BaseLlmGenerator):
             raise ValueError("Section patch compilation requires expected CORE_GENES sections.")
         plan = prepared.compilation_plan
         if plan.compilation_mode == "FULL" and self._section_aware_full_mode_returns_full_source():
-            return _validate_assembled_python_source(response_text)
+            return self._extract_python(response_text, preserve_trailing_newline=False)
 
         expected_patch_regions = (
             expected_sections
