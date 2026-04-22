@@ -16,3 +16,4 @@ Focus not only on contradiction-free structure, but on whether the sections defi
 Reject organisms whose section set is coherent but too over-specified or too loosely coupled to admit a compact faithful implementation.
 Reject organisms whose geometric generator is an arithmetic puzzle, such as inconsistent row counts, reflection multiplicities, or role counts that do not clearly yield the count claimed by the candidate.
 Focus on section completeness, cross-section consistency, support for the claimed hypothesis, and whether any code-like detail remains local rather than becoming a full implementation.
+Check the candidate claim-by-claim: every mechanism named in `CHANGE_DESCRIPTION` must be present in `CORE_GENES`, and every generator/count/spacing assumption in `INIT_GEOMETRY` must agree with `RADIUS_POLICY`, `PARAMETERS`, and `OPTIONAL_CODE_SKETCH`.

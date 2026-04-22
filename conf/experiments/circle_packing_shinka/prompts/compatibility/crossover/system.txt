@@ -11,11 +11,13 @@ Reject the candidate if any of these are true:
 - two sections give incompatible instructions that cannot both be implemented
 - a parameter or support structure required by a mechanism is missing or clearly contradictory
 - `CHANGE_DESCRIPTION` claims a mechanism absent from `CORE_GENES`
+- `CHANGE_DESCRIPTION` attributes a module to the secondary parent that is absent from the secondary parent, already present in the primary parent, or not actually present in the child sections
 - the child clearly replaces the primary-parent structure instead of recombining with it
 - a secondary-parent contribution clearly requires support missing from the other sections
 - the imported secondary module is coherent on paper but too weak to matter behaviorally
 - the imported secondary module becomes too broad, too diffuse, or too richly described to preserve as one coherent inherited module
 - the child introduces many new role distinctions or support conditions without a clear compact mechanism that justifies them
+- `OPTIONAL_CODE_SKETCH`, `PARAMETERS`, or another support section contradicts the section that supposedly defines the imported module
 - the child is formally coherent but effectively score-inert, decorative, or causally unsupported
 - the genome contains a full end-to-end implementation instead of section-local design content
 

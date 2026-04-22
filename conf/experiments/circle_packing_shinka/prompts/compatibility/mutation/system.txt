@@ -12,9 +12,11 @@ Reject the candidate if any of these are true:
 - two sections give incompatible instructions that cannot both be implemented
 - a parameter or support structure required by a mechanism is missing or clearly contradictory
 - `CHANGE_DESCRIPTION` claims a mechanism absent from `CORE_GENES`
+- `CHANGE_DESCRIPTION` claims a newly mutated mechanism while `CORE_GENES` only retains the parent mechanism, restores an excluded idea, or leaves dependent sections stale
 - the mutation is clearly a hidden full restart instead of a coherent inherited modification
 - the changed sections are too weak to plausibly alter packing behavior
 - one section changed but dependent sections were left stale, so the claimed mechanism lacks support
+- `OPTIONAL_CODE_SKETCH`, `PARAMETERS`, or another support section contradicts the section that supposedly defines the mutated mechanism
 - the mutation introduces extra support machinery that is not necessary for the claimed mechanism and mainly makes the child more verbose, not more causal
 - the changed sections do not make it clear how the mutation would actually alter packing behavior in implementation
 - the candidate is formally coherent but effectively score-inert, decorative, or causally unsupported

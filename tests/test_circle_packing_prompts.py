@@ -563,12 +563,17 @@ def test_circle_packing_seed_prompts_reject_ambiguous_26_circle_generators() -> 
 
     assert "must arithmetically and unambiguously produce exactly 26 circles" in bundle.seed_system
     assert "self-check the arithmetic in the gene text" in bundle.seed_system
+    assert "5 by 5 grid plus center" in bundle.seed_system
+    assert "30 minus 4 equals 26" in bundle.seed_system
     assert "one directly executable deterministic path" in bundle.seed_system
     assert "prefer `- None.` in `OPTIONAL_CODE_SKETCH`" in bundle.seed_system
     assert "without requiring the implementation model to resolve contradictions" in bundle.seed_user
     assert "arithmetic puzzle" in bundle.compatibility_seed_user
+    assert "claim-by-claim" in bundle.compatibility_seed_user
     assert "row-count, trimming, or reflection rule" in symmetric_island
     assert "show the arithmetic if the generator uses row counts" in symmetric_island
+    assert "5 by 5 square grid plus a center point" in symmetric_island
+    assert "30 minus 4 equals 26" in symmetric_island
     assert "[5, 5, 6, 5, 5]" not in symmetric_island
     assert "One bounded repair loop" in repair_island
 
@@ -656,6 +661,12 @@ def test_circle_packing_prompt_surface_removes_safe_local_search_bias() -> None:
     assert "Repair is a full-file rewrite, not a diff." not in combined
     assert "objective and validity discipline encoded in the supplied genetic code" in bundle.implementation_system
     assert "one coherent imported secondary module" in bundle.crossover_system
+    assert "claim-by-claim summary" in bundle.mutation_system
+    assert "claim-by-claim summary" in bundle.crossover_system
+    assert "newly mutated mechanism" in bundle.compatibility_mutation_system
+    assert "attributes a module to the secondary parent" in bundle.compatibility_crossover_system
+    assert "retained parent behavior" in bundle.mutation_novelty_system
+    assert "falsely attributes a mechanism to the secondary parent" in bundle.crossover_novelty_system
     assert "score-inert" in combined
     assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
     assert "Repair the smallest affected code span necessary" in bundle.repair_system

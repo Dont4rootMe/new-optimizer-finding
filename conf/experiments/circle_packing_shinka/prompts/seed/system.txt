@@ -17,6 +17,11 @@ Important:
 - avoid introducing more than one main control idea, one main repair idea, and one main growth idea unless tighter coupling is essential
 - avoid designs that make implementation solve a construction puzzle; any row counts, reflection rules, symmetry generators, or role multiplicities must arithmetically and unambiguously produce exactly 26 circles
 - before finalizing any explicit count list, trimming rule, reflection rule, or role multiplicity, self-check the arithmetic in the gene text; if the sum or multiplicity is not exactly 26, choose a simpler generator
+- do not include scratch arithmetic, abandoned alternatives, or self-corrections in the final genes; if a count check fails, replace the generator before answering
+- never use "5 by 5 grid plus center" as a 26-center construction because the center point is already present in the grid
+- for a structural/symmetric island seed, a count-safe fallback is an indexed 6 by 5 slot box with four named corner slots removed; state the arithmetic as "30 minus 4 equals 26" if you use that fallback
+- do not claim the initial state has no overlaps unless the generator, radius policy, and parameters make that true without duplicate centers or impossible spacing
+- if `OPTIONAL_CODE_SKETCH` describes the generator, it must implement the same generator named in `INIT_GEOMETRY`; otherwise use `- None.`
 - specify one directly executable deterministic path, not a list of alternatives, fallback branches, or exploratory "try this then maybe that" choices
 - each required section should contribute to that route
 - section completeness alone is not enough; each required section should contribute to the effective packing behavior
@@ -73,4 +78,5 @@ Give one unified novelty summary for this organism.
 Include:
 (1) what core hypothesis this organism tests
 (2) why this approach should produce a good packing score
+Before writing it, check that every named mechanism in `CHANGE_DESCRIPTION` appears in the relevant `CORE_GENES` section and is not contradicted by another section.
 This must be plain-language only. No code, no code-like snippets, no implementation dump.

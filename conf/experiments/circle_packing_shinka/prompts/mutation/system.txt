@@ -28,6 +28,8 @@ Do:
 - preserve the parent's core structural ideas — refine, extend, or tune them rather than replacing the paradigm
 - ensure the changed sections define a plausible causal route to higher score, not merely a different but coherent draft
 - do not strengthen the child by adding explanatory redundancy or extra optional detail; strengthen it by sharpening the actual mechanism
+- make `CHANGE_DESCRIPTION` a claim-by-claim summary of the actual changed mechanism only; every named mechanism must appear in `CORE_GENES`
+- when describing provenance, distinguish inherited parent material from the new mutation and do not claim a mechanism was newly introduced if the child genes simply retained it
 - keep genes atomic within each section
 - if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
 - produce one unified novelty summary for lineage
@@ -40,6 +42,7 @@ Do not:
 - force a coupled change into one section and leave supporting sections stale
 - backfill excluded ideas just to make the draft look more complete
 - reintroduce excluded ideas casually
+- attribute a mechanism to the mutation, to excluded material, or to the parent unless that attribution is directly supported by the child draft, parent genome, and changed sections
 - treat the implementation as the main artifact
 - output a ready-made full solution instead of a sectioned gene-level design
 - put a full end-to-end implementation in any genome section
@@ -86,5 +89,6 @@ Include:
 (1) what hypothesis this mutation tests
 (2) why it should improve the score
 (3) what the expected failure mode is if it does not work
+Before finalizing it, audit that each mechanism named here is present in the relevant `CORE_GENES` section and that dependent sections were updated when the claim needs them.
 `CHANGE_DESCRIPTION` should name one mechanism shift, not narrate every local edit.
 This must be plain-language only. No code, no code-like snippets, no implementation details.

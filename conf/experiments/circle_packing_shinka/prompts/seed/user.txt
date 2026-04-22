@@ -16,6 +16,8 @@ Produce a full sectioned genetic code whose content obeys the schema and whose s
 Prefer compact, implementable section content over ambitious but over-specified multi-part designs.
 Avoid symmetry, reflection, row-count, or role-count descriptions unless they unambiguously produce exactly 26 circles without requiring the implementation model to resolve contradictions.
 Do not make the implementation stage choose among several possible constructions; define one compact deterministic construction path.
+If the island style tempts a complex symmetry generator, prefer a simpler count-checked indexed-slot generator over D4 bookkeeping whose unique-center multiplicity is unclear.
+Do not output internal count-repair notes; the final `INIT_GEOMETRY` must contain one settled generator and one settled unique-center count.
 Prefer an organism whose sectioned hypothesis creates a plausible high-score packing mechanism, not just a formally complete genome.
 
 The final organism will later be implemented as code that must return a valid packing of 26 circles in the unit square.

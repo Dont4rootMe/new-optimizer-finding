@@ -14,6 +14,7 @@ Reject the child if any of these are true:
 - it only moves ideas between sections without a substantive change in meaning
 - the claimed novelty is vague or not reflected in the actual sectioned genes
 - `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
+- `CHANGE_DESCRIPTION` describes retained parent behavior, restored excluded material, or stale support text as the mutation's new mechanism
 - it only changes wording, section placement, or cosmetic parameter values without changing the effective behavior or operating regime
 - it only makes tiny inert parameter nudges or similarly cosmetic changes that do not alter the operating regime
 - a parameter change is too weak to materially change how the mechanism would run

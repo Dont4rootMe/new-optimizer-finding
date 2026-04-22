@@ -11,11 +11,14 @@ Reject the candidate if any of these are true:
 - two sections give incompatible instructions that cannot both be implemented
 - a parameter or support structure required by a mechanism is missing or clearly contradictory
 - `CHANGE_DESCRIPTION` claims a mechanism absent from `CORE_GENES`
+- `CHANGE_DESCRIPTION` names a geometry, radius, growth, conflict, repair, or control mechanism that is contradicted by the corresponding `CORE_GENES` section
 - the genome contains a full end-to-end implementation instead of section-local design content
 - the sections read like a list of individually coherent parts but do not add up to one plausible high-score mechanism
 - one or more non-optional sections are mere filler or decorative and do not alter effective packing behavior
 - the genome defines too many loosely coupled mechanisms or role taxonomies to admit a compact faithful deterministic implementation
 - the initial construction, row counts, reflection rules, symmetry generators, or role multiplicities do not unambiguously match the candidate's own declared target count or multiplicity
+- the candidate uses a 5 by 5 grid plus center as 26 distinct centers, leaves abandoned count corrections in the text, or relies on a spacing/margin too large to fit the stated number of centers in the unit square
+- `OPTIONAL_CODE_SKETCH`, `PARAMETERS`, or `RADIUS_POLICY` implements a different initial generator, count, spacing, or overlap assumption than `INIT_GEOMETRY`
 - a core quantitative definition in `CONFLICT_MODEL`, `RADIUS_POLICY`, or `EXPANSION_POLICY` is mathematically ill-posed or too vague to drive the claimed mechanism
 - `CONTROL_POLICY` introduces excessive orchestration relative to the actual mechanism, making the design fragile without adding a clear score-bearing role
 - the implementation would have to resolve multiple unstated alternatives, contradictory construction choices, or exploratory branches before it can produce code

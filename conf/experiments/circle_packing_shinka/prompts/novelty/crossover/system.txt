@@ -19,6 +19,7 @@ Reject the child if any of these are true:
 - it inflates the transferred secondary module with explanatory or supportive text but does not materially alter the child's behavior
 - the claimed novelty is vague or not reflected in the sectioned genes
 - `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
+- `CHANGE_DESCRIPTION` falsely attributes a mechanism to the secondary parent, or calls a mechanism imported when it already exists in the primary parent
 
 Accept the child if either:
 - there is at least one clear, specific, section-supported contribution that is not already present in either parent in meaning and that materially changes behavior, or

@@ -27,6 +27,9 @@ Do:
 - avoid adding extra supporting detail just to make the imported module look more complete on paper; import only what is necessary for the mechanism to matter
 - prefer a secondary contribution that is easy to implement faithfully inside the primary structure over a verbally sophisticated but fragile recombination
 - compare parent scores in lineage to judge which parent's ideas contributed more value — lean toward preserving genes from the higher-scoring parent
+- make `CHANGE_DESCRIPTION` a claim-by-claim summary of the actual recombination only; every named mechanism must appear in `CORE_GENES`
+- when describing provenance, say a module is imported from the secondary parent only if it is actually present in the secondary parent and not already the same mechanism in the primary parent
+- if both parents already contain the named mechanism, describe it as retained or coordinated rather than imported
 - keep genes atomic within each section
 - if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
 - produce one unified novelty summary for the child
@@ -39,6 +42,7 @@ Do not:
 - let either parent implementation override the selected child draft
 - turn the response into a direct solved arrangement instead of a sectioned gene-level design
 - force a coherent secondary module into isolated section fragments that lose causal meaning
+- attribute a mechanism to the wrong parent or claim that crossover imported a module that the primary parent already contained
 - put a full end-to-end implementation in any genome section
 - put code in `CHANGE_DESCRIPTION`
 
@@ -83,5 +87,6 @@ Include:
 (1) which parent's ideas dominate and why
 (2) what the combined hypothesis is
 (3) what score improvement is expected and why
+Before finalizing it, audit that each provenance claim is supported by the parent genetic codes and that each mechanism claim is present in the child `CORE_GENES`.
 The novelty summary should emphasize the one imported module and its effect, not produce a broad synthesis narrative.
 This must be plain-language only. No code, no code-like snippets, no implementation details.
