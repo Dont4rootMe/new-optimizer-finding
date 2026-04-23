@@ -116,6 +116,12 @@ python -m src.main --config-name config_circle_packing_shinka mode=run +organism
 ./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka
 ```
 
+To stop by total organism creation attempts instead of generation count, disable the generation cap and set `evolver.max_organism_creations`. Pending and failed organism creations count toward this cap:
+
+```bash
+./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka evolver.max_generations=false evolver.max_organism_creations=200
+```
+
 That preset now uses one logical local Ollama route by default:
 
 - `qwen3.5:122b` rooted at `http://127.0.0.1:12434/api` with `gpu_ranks=[[0,1,2],[3,4,5]]`

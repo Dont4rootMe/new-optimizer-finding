@@ -82,6 +82,7 @@ def test_circle_packing_config_composes() -> None:
     assert cfg.evolver.phases.great_filter.enabled is False
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 20
+    assert cfg.evolver.max_organism_creations is False
     assert cfg.evolver.prompts.project_context == "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt"
 
 

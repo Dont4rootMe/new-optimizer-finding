@@ -103,6 +103,8 @@ class EvolutionLoop:
         self.orchestrator = EvolverOrchestrator(cfg, repair_callback=self._repair_organism_after_eval_error)
         self.rng = random.Random(int(cfg.seed))
         self.max_parallel_organisms = self._max_parallel_organisms()
+        self.max_generation_limit = self._max_generation_limit()
+        self.max_organism_creations = self._max_organism_creations()
 
         self.islands = self._load_islands()
         self.islands_by_id = {island.island_id: island for island in self.islands}
@@ -122,6 +124,7 @@ class EvolutionLoop:
         self.crossover_primary_parent_gene_inheritance_probability = (
             self._crossover_primary_parent_gene_inheritance_probability()
         )
+        self._validate_stop_limits()
         self._validate_phase_selection_bounds()
 
     def _require_cfg_value(self, path: str) -> Any:
@@ -129,6 +132,64 @@ class EvolutionLoop:
         if value is None:
             raise ValueError(f"Canonical evolve config must define {path}")
         return value
+
+    def _optional_stop_limit(self, path: str) -> int | None:
+        value = OmegaConf.select(self.cfg, path, default=None)
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            if value is False:
+                return None
+            raise ValueError(
+                f"Invalid evolve config: {path} must be a non-negative integer, -1, or false."
+            )
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if text in {"", "false", "none", "null"}:
+                return None
+            value = text
+        try:
+            limit = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid evolve config: {path} must be a non-negative integer, -1, or false."
+            ) from exc
+        if limit == -1:
+            return None
+        if limit < -1:
+            raise ValueError(
+                f"Invalid evolve config: {path} must be a non-negative integer, -1, or false."
+            )
+        return limit
+
+    def _max_generation_limit(self) -> int | None:
+        return self._optional_stop_limit("evolver.max_generations")
+
+    def _max_organism_creations(self) -> int | None:
+        return self._optional_stop_limit("evolver.max_organism_creations")
+
+    def _validate_stop_limits(self) -> None:
+        if self.max_generation_limit is None and self.max_organism_creations is None:
+            raise ValueError(
+                "Invalid evolve config: set evolver.max_generations or evolver.max_organism_creations. "
+                "Use -1 or false only for the criterion you want to disable."
+            )
+
+    def _organism_creation_attempt_count(self) -> int:
+        return sum(1 for _ in self.population_root.glob("gen_*/island_*/org_*/organism.json"))
+
+    def _remaining_organism_creation_budget(self) -> int | None:
+        if self.max_organism_creations is None:
+            return None
+        return max(0, self.max_organism_creations - self._organism_creation_attempt_count())
+
+    def _stop_reason_before_generation(self, generation: int) -> str | None:
+        if self.max_generation_limit is not None and generation > self.max_generation_limit:
+            return f"max_generations={self.max_generation_limit}"
+        remaining_budget = self._remaining_organism_creation_budget()
+        if remaining_budget is not None and remaining_budget <= 0:
+            return f"max_organism_creations={self.max_organism_creations}"
+        return None
 
     def _load_islands(self) -> list[Island]:
         islands_dir = str(self._require_cfg_value("evolver.islands.dir")).strip()
@@ -428,7 +489,13 @@ class EvolutionLoop:
     def _planned_reproduction_routes(
         self,
         active_by_island: dict[str, list[OrganismMeta]],
+        *,
+        offspring_count: int | None = None,
     ) -> list[str]:
+        target_count = self.offspring_per_generation if offspring_count is None else int(offspring_count)
+        if target_count <= 0:
+            return []
+
         available_routes = [
             route
             for route in self._available_reproduction_routes(active_by_island)
@@ -440,25 +507,34 @@ class EvolutionLoop:
             )
 
         if self.operator_selection_strategy == "random":
-            return [self._sample_reproduction_route(available_routes) for _ in range(self.offspring_per_generation)]
+            return [self._sample_reproduction_route(available_routes) for _ in range(target_count)]
         if self.operator_selection_strategy == "deterministic":
-            return self._deterministic_reproduction_plan(available_routes)
+            return self._deterministic_reproduction_plan(available_routes, offspring_count=target_count)
         raise ValueError(
             f"Unsupported operator selection strategy '{self.operator_selection_strategy}'."
         )
 
-    def _deterministic_reproduction_plan(self, available_routes: list[str]) -> list[str]:
+    def _deterministic_reproduction_plan(
+        self,
+        available_routes: list[str],
+        *,
+        offspring_count: int | None = None,
+    ) -> list[str]:
+        target_count = self.offspring_per_generation if offspring_count is None else int(offspring_count)
+        if target_count <= 0:
+            return []
+
         total_weight = sum(self.reproduction_operator_weights[route] for route in available_routes)
         if total_weight <= 0:
             raise ValueError("Deterministic reproduction planning requires positive total route weight.")
 
         exact_counts = {
-            route: self.offspring_per_generation * (self.reproduction_operator_weights[route] / total_weight)
+            route: target_count * (self.reproduction_operator_weights[route] / total_weight)
             for route in available_routes
         }
         base_counts = {route: int(exact_counts[route]) for route in available_routes}
         assigned = sum(base_counts.values())
-        remaining = self.offspring_per_generation - assigned
+        remaining = target_count - assigned
 
         ranked_routes = sorted(
             available_routes,
@@ -885,11 +961,16 @@ class EvolutionLoop:
     def _plan_seed_population(self) -> list[PlannedOrganismCreation]:
         if self.seed_organisms_per_island <= 0:
             return []
+        remaining_budget = self._remaining_organism_creation_budget()
+        if remaining_budget is not None and remaining_budget <= 0:
+            return []
 
         gen_dir = generation_dir(self.population_root, 0)
         planned_organisms: list[PlannedOrganismCreation] = []
         for island in self.islands:
             for _ in range(self.seed_organisms_per_island):
+                if remaining_budget is not None and len(planned_organisms) >= remaining_budget:
+                    return planned_organisms
                 organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=island.island_id)
                 operator_seed = self.rng.randint(0, 2**31 - 1)
                 timestamp = utc_now_iso()
@@ -926,11 +1007,19 @@ class EvolutionLoop:
     ) -> list[PlannedOrganismCreation]:
         if self.offspring_per_generation <= 0:
             return []
+        remaining_budget = self._remaining_organism_creation_budget()
+        if remaining_budget is not None and remaining_budget <= 0:
+            return []
+        target_offspring = self.offspring_per_generation
+        if remaining_budget is not None:
+            target_offspring = min(target_offspring, remaining_budget)
+        if target_offspring <= 0:
+            return []
 
         gen_dir = generation_dir(self.population_root, self.generation)
         planned_offspring: list[PlannedOrganismCreation] = []
         parent_offspring_counts: dict[str, int] = {}
-        for route in self._planned_reproduction_routes(active_by_island):
+        for route in self._planned_reproduction_routes(active_by_island, offspring_count=target_offspring):
             if route == _ROUTE_MUTATION:
                 candidate_islands = self._eligible_island_ids_for_route(_ROUTE_MUTATION, active_by_island)
                 island_id = self._sample_island_ids(
@@ -1775,6 +1864,7 @@ class EvolutionLoop:
             best = self._best_active_organism()
             return {
                 "total_generations": 0,
+                "total_organism_creation_attempts": self._organism_creation_attempt_count(),
                 "active_population_size": len(self.population),
                 "best_organism_id": best.organism_id if best is not None else None,
                 "best_simple_score": best.simple_score if best is not None else None,
@@ -1786,7 +1876,6 @@ class EvolutionLoop:
                 self.llm_registry.stop()
 
     async def run(self) -> dict[str, Any]:
-        max_generations = int(self._require_cfg_value("evolver.max_generations"))
         if self._owns_llm_registry:
             self.llm_registry.start()
 
@@ -1820,12 +1909,29 @@ class EvolutionLoop:
                 planned_offspring = self._restore_inflight_generation(inflight_generation)
                 await self._run_generation(target_generation, planned_offspring=planned_offspring)
 
-            for generation in range(self.generation + 1, max_generations + 1):
-                await self._run_generation(generation)
+            while True:
+                next_generation = self.generation + 1
+                stop_reason = self._stop_reason_before_generation(next_generation)
+                if stop_reason is not None:
+                    _announce(f"stopping evolution before generation {next_generation}: {stop_reason}")
+                    break
+                attempts_before_generation = self._organism_creation_attempt_count()
+                await self._run_generation(next_generation)
+                if (
+                    self.max_generation_limit is None
+                    and self.max_organism_creations is not None
+                    and self._organism_creation_attempt_count() <= attempts_before_generation
+                ):
+                    _announce(
+                        "stopping evolution because the last generation did not plan new organisms "
+                        "and no max_generations limit is active"
+                    )
+                    break
 
             best = self._best_active_organism()
             return {
                 "total_generations": self.generation,
+                "total_organism_creation_attempts": self._organism_creation_attempt_count(),
                 "active_population_size": len(self.population),
                 "best_organism_id": best.organism_id if best is not None else None,
                 "best_simple_score": best.simple_score if best is not None else None,

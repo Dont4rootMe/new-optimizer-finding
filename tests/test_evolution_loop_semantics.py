@@ -51,6 +51,7 @@ def _cfg(tmp_path: Path, **overrides) -> object:
         "evolver": {
             "resume": False,
             "max_generations": 1,
+            "max_organism_creations": False,
             "_eval_entrypoint_module": "tests.fixtures.fake_eval",
             "creation": {
                 "max_attempts_to_create_organism": 1,
@@ -409,6 +410,68 @@ def test_weighted_rule_parent_counts_accumulate_within_generation(tmp_path: Path
     assert len(planned) == 3
     assert [plan.mother_id for plan in planned] == ["a", "a", "a"]
     assert snapshots == [{}, {"a": 1}, {"a": 2}]
+
+
+def test_seed_planning_caps_total_organism_creations(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        evolver={
+            "max_organism_creations": 3,
+            "islands": {
+                "seed_organisms_per_island": 2,
+            },
+        },
+    )
+    loop = EvolutionLoop(cfg)
+
+    planned = loop._plan_seed_population()
+
+    assert len(planned) == 3
+    assert loop._organism_creation_attempt_count() == 3
+
+
+def test_evolution_loop_requires_at_least_one_stop_limit(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        evolver={
+            "max_generations": False,
+            "max_organism_creations": False,
+        },
+    )
+
+    with pytest.raises(ValueError, match="max_generations or evolver.max_organism_creations"):
+        EvolutionLoop(cfg)
+
+
+def test_offspring_planning_uses_remaining_total_organism_creation_budget(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        evolver={
+            "max_organism_creations": 5,
+            "islands": {
+                "seed_organisms_per_island": 2,
+            },
+            "reproduction": {
+                "offspring_per_generation": 5,
+                "operator_weights": {
+                    "within_island_crossover": 0.0,
+                    "inter_island_crossover": 0.0,
+                    "mutation": 1.0,
+                },
+            },
+        },
+    )
+    loop = EvolutionLoop(cfg)
+    seed_plans = loop._plan_seed_population()
+    parent = _make_organism(tmp_path, "parent", "gradient_methods")
+    active = {"gradient_methods": [parent], "second_order": []}
+    loop.generation = 1
+
+    planned = loop._plan_offspring_generation(active)
+
+    assert len(seed_plans) == 4
+    assert len(planned) == 1
+    assert loop._organism_creation_attempt_count() == 5
 
 
 def test_softmax_species_sampling_uses_route_specific_temperatures(tmp_path: Path, monkeypatch) -> None:

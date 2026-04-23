@@ -204,6 +204,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.resources.evaluation.cpu_parallel_jobs == 20
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
     assert cfg.evolver.max_generations == 50
+    assert cfg.evolver.max_organism_creations is False
     assert cfg.mode == "evolve"
     assert "organism_dir" not in cfg
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3

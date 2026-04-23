@@ -1,5 +1,8 @@
 resume: true
 max_generations: 10
+# false or -1 disables this cap. If both generation and organism caps are enabled,
+# evolution stops at whichever cap is reached first.
+max_organism_creations: false
 max_retries_per_eval: 0
 
 creation:
