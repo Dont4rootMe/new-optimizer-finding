@@ -55,7 +55,6 @@ NON_DESIGN_LEAK_PHRASES = (
     "Place 26 circles",
     "centers.shape == (26, 2)",
     "radii.shape == (26,)",
-    "exactly 26 circles",
     "Constraints enforced by the evaluator",
     "Score = sum of radii",
     "Every circle fully inside [0, 1]",
@@ -158,6 +157,7 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     bundle = load_prompt_bundle(cfg)
 
     assert "primary object is the organism's genetic code" in bundle.project_context
+    assert "exactly 26 total circles in the unit square" in bundle.project_context
     assert "maximize score subject to validity" in bundle.project_context
     assert "score-bearing mechanism" in bundle.project_context
     assert "smallest set of genes that defines a real score-bearing mechanism" in bundle.project_context
@@ -315,7 +315,7 @@ def test_circle_packing_validation_prompt_rendering_includes_schema(tmp_path: Pa
         assert "=== CANDIDATE" in rendered
 
 
-def test_circle_packing_non_design_prompts_do_not_receive_hidden_task_contract(tmp_path: Path) -> None:
+def test_circle_packing_non_design_prompts_include_explicit_count_without_shape_leak(tmp_path: Path) -> None:
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
     parent = _make_parent(tmp_path, "parent_no_leak", "symmetric_constructions")
@@ -327,7 +327,7 @@ def test_circle_packing_non_design_prompts_do_not_receive_hidden_task_contract(t
         "CHANGE_DESCRIPTION": "A sectioned validation fixture.",
     }
 
-    prompt_pairs = [
+    counted_prompt_pairs = [
         build_implementation_prompt(
             genetic_code=_sectioned_genetic_code(),
             change_description="A generic implementation fixture.",
@@ -354,6 +354,9 @@ def test_circle_packing_non_design_prompts_do_not_receive_hidden_task_contract(t
             prompts=bundle,
             expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
         ),
+    ]
+    prompt_pairs = [
+        *counted_prompt_pairs,
         build_mutation_novelty_prompt(
             inherited_genes=["Child draft sectioned idea"],
             removed_genes=["Excluded idea"],
@@ -371,6 +374,9 @@ def test_circle_packing_non_design_prompts_do_not_receive_hidden_task_contract(t
             expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
         ),
     ]
+
+    for system_prompt, user_prompt in counted_prompt_pairs:
+        assert "exactly 26 total circles" in f"{system_prompt}\n{user_prompt}"
 
     for system_prompt, user_prompt in prompt_pairs:
         _assert_no_non_design_contract_leak(system_prompt)
@@ -391,11 +397,12 @@ def test_circle_packing_non_design_prompts_do_not_receive_hidden_task_contract(t
         experiment_name="fixture",
         errors=[],
     )
+    assert "exactly 26 total circles" in f"{repair_system}\n{repair_user}"
     _assert_no_non_design_contract_leak(repair_system)
     _assert_no_non_design_contract_leak(repair_user)
 
 
-def test_circle_packing_repair_error_history_scrubs_expected_shape_counts() -> None:
+def test_circle_packing_repair_error_history_preserves_explicit_count_contract() -> None:
     rendered = format_error_history(
         [
             {
@@ -418,12 +425,12 @@ def test_circle_packing_repair_error_history_scrubs_expected_shape_counts() -> N
 
     assert "Expected (26" not in rendered
     assert "expected=(26" not in rendered
-    assert "exactly 26 circles" not in rendered
+    assert "exactly 26 circles" in rendered
     assert "Expected required center shape" in rendered
     assert "Expected required radius shape" in rendered
     assert "required center shape" in rendered
     assert "required radius shape" in rendered
-    assert "required number of circles" in rendered
+    assert "required number of circles" not in rendered
 
 
 def test_circle_packing_validation_prompts_are_section_schema_aware() -> None:
@@ -562,6 +569,7 @@ def test_circle_packing_seed_prompts_reject_ambiguous_26_circle_generators() -> 
     repair_island = (prompts_dir / "islands" / "iterative_repair.txt").read_text(encoding="utf-8")
 
     assert "must arithmetically and unambiguously produce exactly 26 circles" in bundle.seed_system
+    assert "target exactly 26 total circles" in bundle.seed_system
     assert "self-check the arithmetic in the gene text" in bundle.seed_system
     assert "5 by 5 grid plus center" in bundle.seed_system
     assert "30 minus 4 equals 26" in bundle.seed_system

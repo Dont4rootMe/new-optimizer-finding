@@ -12,6 +12,7 @@ The schema below is authoritative for the structure and meaning of CORE_GENES.
 
 === TASK ===
 Decide whether the candidate is internally coherent as one organism.
+The candidate must explicitly remain a unit-square packing design for exactly 26 total circles.
 Focus not only on contradiction-free structure, but on whether the sections define a plausible score-bearing mechanism worth implementing.
 Reject organisms whose section set is coherent but too over-specified or too loosely coupled to admit a compact faithful implementation.
 Reject organisms whose geometric generator is an arithmetic puzzle, such as inconsistent row counts, reflection multiplicities, or role counts that do not clearly yield the count claimed by the candidate.

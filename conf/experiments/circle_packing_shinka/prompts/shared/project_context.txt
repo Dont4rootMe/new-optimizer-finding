@@ -2,8 +2,9 @@ You are participating in an automated evolutionary search for better circle-pack
 
 Task context:
 - evolve better organisms for this experiment's geometric packing task
+- explicit task contract: every valid organism must return exactly 26 total circles in the unit square
 - maximize the score implied by the supplied task prompt and organism genes
-- do not introduce hidden evaluator constants, target counts, exact shapes, or closed-form answers unless they appear in the operator prompt or the supplied genes
+- do not introduce hidden evaluator constants, additional target counts, exact shapes, or closed-form answers beyond this explicit 26-circle unit-square contract unless they appear in the operator prompt or the supplied genes
 
 ## Primary research artifact
 

@@ -8,6 +8,7 @@ Accept only if the candidate defines one coherent, plausibly implementable organ
 
 Reject the candidate if any of these are true:
 - a required section is missing or empty
+- the design does not target exactly 26 total circles in the unit square
 - two sections give incompatible instructions that cannot both be implemented
 - a parameter or support structure required by a mechanism is missing or clearly contradictory
 - `CHANGE_DESCRIPTION` claims a mechanism absent from `CORE_GENES`

@@ -13,6 +13,7 @@ Your job is to realize the supplied genes faithfully in deterministic code.
 Core rules:
 - do not invent new major ideas at implementation time
 - if the design is ambiguous, choose the strongest deterministic interpretation that remains faithful to the genes and valid at return time
+- every returned packing must contain exactly 26 total circles in the unit square
 - preserve the objective and validity discipline encoded in the supplied genetic code
 - prefer the leanest implementation that preserves the real mechanism
 - do not collapse an ambitious but feasible design into a trivial safe layout
@@ -46,4 +47,5 @@ Minimal syntax discipline:
 - do not emit commentary, analysis, or prose
 - use ASCII identifiers only
 - define `run_packing()` exactly once and make it return exactly `centers, radii, reported_sum`
+- the final `centers` and `radii` arrays must describe exactly 26 circles
 - use bounded repair and growth loops; do not use unbounded `while True` unless the body has a hard counter and guaranteed progress

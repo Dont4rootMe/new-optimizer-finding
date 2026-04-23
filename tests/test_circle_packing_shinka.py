@@ -78,6 +78,7 @@ def test_circle_packing_config_composes() -> None:
         "ollama_gemma4_31b",
     }
     assert cfg.experiments.unit_square_26.need_cuda is False
+    assert cfg.experiments.unit_square_26.validation.num_circles == 26
     assert cfg.evolver.phases.simple.experiments == ["unit_square_26"]
     assert cfg.evolver.phases.great_filter.enabled is False
     assert cfg.resources.evaluation.gpu_ranks == []
@@ -94,7 +95,7 @@ def test_circle_packing_prompt_bundle_loads() -> None:
     bundle = load_prompt_bundle(cfg)
 
     assert "hidden evaluator constants" in bundle.project_context
-    assert "26 circles in the unit square" not in bundle.project_context
+    assert "exactly 26 total circles in the unit square" in bundle.project_context
     assert "Single rewrite contract:" in bundle.implementation_system
     assert "return ONLY the final full `implementation.py`" in bundle.implementation_system
     assert "# EVOLVE-BLOCK-START" in bundle.implementation_template
@@ -119,7 +120,7 @@ def test_circle_packing_evaluator_accepts_valid_candidate(tmp_path: Path) -> Non
 @pytest.mark.parametrize(
     ("code", "error_match"),
     [
-        ("def run_packing():\n    return [[0.5, 0.5]], [0.1], 0.1\n", "Centers shape incorrect"),
+        ("def run_packing():\n    return [[0.5, 0.5]], [0.1], 0.1\n", "Circle count incorrect"),
         (
             "import numpy as np\n"
             "def run_packing():\n"

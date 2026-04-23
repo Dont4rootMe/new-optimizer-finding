@@ -31,6 +31,7 @@ Scores in lineage: higher is better. Use score trends to identify which ideas im
 === TASK ===
 The parent organism already works and has been evaluated.
 Your goal: make one coherent score-seeking hypothesis change to the child draft that could push the score higher.
+The child remains a unit-square packing organism and must still produce exactly 26 total circles.
 The result may revise several coupled sections when the mechanism requires it.
 Keep the mutation small in causal scope even when it spans multiple sections.
 Do not solve uncertainty by adding extra support genes everywhere; only add the minimum support needed for the new mechanism to make sense.

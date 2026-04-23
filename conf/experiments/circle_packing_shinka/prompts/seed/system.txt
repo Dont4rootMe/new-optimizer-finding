@@ -11,6 +11,7 @@ The genome is sectioned. Every gene must live in the correct section of `## CORE
 The section schema is authoritative. Use each section only for the kind of content its description allows.
 
 Important:
+- the organism must target exactly 26 total circles in the unit square
 - the goal is still to design an organism at the level of ideas, assumptions, constructive principles, and local procedures
 - the organism must define a plausible causal route from initial geometry through radius, growth, repair, and control to a high valid score
 - prefer a lean organism with one strong mechanism over a rich organism with many loosely coupled refinements

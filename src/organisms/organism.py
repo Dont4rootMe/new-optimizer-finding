@@ -167,8 +167,6 @@ def format_error_history(errors: list[dict[str, Any]]) -> str:
         r"(?:required|target)\s+(?:radius|radii)?\s*shape\s*[:=]?\s*\(\s*\d+\s*,\s*\)",
         re.IGNORECASE,
     )
-    exact_count_re = re.compile(r"exactly\s+\d+\s+circles", re.IGNORECASE)
-
     lines: list[str] = []
     for entry in errors:
         attempt = entry.get("attempt", "?")
@@ -178,7 +176,6 @@ def format_error_history(errors: list[dict[str, Any]]) -> str:
         error_msg = expected_vector_re.sub("Expected required radius shape", error_msg)
         error_msg = required_shape_re.sub("required center shape", error_msg)
         error_msg = required_vector_re.sub("required radius shape", error_msg)
-        error_msg = exact_count_re.sub("the required number of circles", error_msg)
         timestamp = str(entry.get("timestamp", "")).strip() or "(unknown time)"
         lines.append(f"- attempt={attempt} status={status} timestamp={timestamp} error={error_msg}")
     return "\n".join(lines)

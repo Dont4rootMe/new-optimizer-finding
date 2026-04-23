@@ -24,6 +24,7 @@ Requirements:
 - Use only `numpy` and the Python standard library
 - The final module must define `run_packing()`
 - `run_packing()` must return `(centers, radii, reported_sum)`
+- The final returned arrays must describe exactly 26 total circles in the unit square
 - `reported_sum` must equal `np.sum(radii)`
 - Preserve the task behavior, objective, and validity discipline expressed by the genetic code and current implementation
 - Prefer the simplest repair that keeps the organism faithful, valid, and objective-seeking
@@ -41,13 +42,15 @@ Requirements:
 Before outputting the repaired code, verify:
 1. All parentheses, brackets, and strings are properly closed
 2. `run_packing()` returns exactly `(centers, radii, reported_sum)` — a 3-tuple, not None
-3. The returned arrays are the final organism state, not trajectories, repeated candidate batches, or duplicated generator output
-4. The returned arrays follow the count and structure implied by the genetic code and current implementation
-5. No division by zero or NaN values can occur
-6. The code completes within the evaluator timeout
+3. The returned arrays contain exactly 26 centers and 26 radii
+4. The returned arrays are the final organism state, not trajectories, repeated candidate batches, or duplicated generator output
+5. The returned arrays follow the count and structure implied by the genetic code and current implementation
+6. No division by zero or NaN values can occur
+7. The code completes within the evaluator timeout
 
 If the error history contains `name 'FULL' is not defined` or syntax at line 1, remove any non-Python preamble first.
 If the error history says `run_packing() must return a 3-tuple`, preserve the algorithm but repair the final conversion and return path before changing geometry.
+If the error history says `Circle count incorrect`, repair the center/radius construction so the final arrays describe exactly 26 circles before tuning geometry.
 If the error history says `Centers shape incorrect`, repair center construction and the return path first: return only the final center and radius arrays implied by the genes, not trajectories, repeated candidate batches, or a full generator duplicated inside a wrapper loop.
 If an evaluator error names specific entities, treat that exact local issue as the primary repair target; after the local correction, re-check the named issue numerically with a small epsilon margin before output.
 If the same named local geometric violation repeats across attempts, add a bounded final local cleanup with an epsilon margin; this is local validity repair, not a generic objective-collapsing simplification.

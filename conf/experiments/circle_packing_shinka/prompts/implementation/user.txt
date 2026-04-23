@@ -7,8 +7,9 @@ You must implement exactly this function:
 
 Arguments: none.
 Return the tuple interface used by the scaffold: `(centers, radii, reported_sum)`.
-The supplied genetic code defines the intended geometry, count, feasibility discipline, and objective.
-Do not add task facts, evaluator assumptions, target counts, or exact formulas that are absent from the genes.
+The explicit experiment contract is a unit-square packing with exactly 26 total circles.
+The supplied genetic code defines the intended geometry, feasibility discipline, and objective within that count contract.
+Do not add task facts, evaluator assumptions, additional target counts, or exact formulas beyond this explicit 26-circle unit-square contract when they are absent from the genes.
 
 Validity preservation note:
   - The final returned organism state must satisfy the validity discipline implied by the genes
@@ -45,6 +46,7 @@ Return the final full Python file only.
 - do not return a patch artifact
 - the first non-empty line must be `import numpy as np` or another Python import, not a markdown fence or commentary
 - the file must contain a complete executable `def run_packing():` that returns exactly `(centers, radii, reported_sum)`
+- the final returned arrays must contain exactly 26 centers and 26 radii
 - return only the final organism output state, not repeated generated batches, candidate histories, or repair trajectories
 - keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the file
 - preserve code outside the EVOLVE block unless the current file is too broken to keep safely

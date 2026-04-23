@@ -21,6 +21,23 @@ def coerce_run_output(run_output: Any) -> tuple[np.ndarray, np.ndarray, float]:
     return centers, radii, reported_sum
 
 
+def validate_circle_count(
+    *,
+    centers: np.ndarray,
+    radii: np.ndarray,
+    num_circles: int,
+) -> None:
+    """Validate that a candidate returns exactly the configured circle count."""
+
+    center_count = int(centers.shape[0]) if centers.ndim >= 1 else 0
+    radius_count = int(radii.shape[0]) if radii.ndim >= 1 else 0
+    if center_count != num_circles or radius_count != num_circles:
+        raise ValueError(
+            f"Circle count incorrect. Expected exactly {num_circles} circles, "
+            f"got {center_count} centers and {radius_count} radii."
+        )
+
+
 def validate_circle_packing(
     *,
     centers: np.ndarray,
@@ -31,6 +48,8 @@ def validate_circle_packing(
     atol: float,
 ) -> None:
     """Validate one circle packing instance inside a square."""
+
+    validate_circle_count(centers=centers, radii=radii, num_circles=num_circles)
 
     if centers.shape != (num_circles, 2):
         raise ValueError(f"Centers shape incorrect. Expected ({num_circles}, 2), got {centers.shape}.")
