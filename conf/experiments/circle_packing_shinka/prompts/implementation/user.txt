@@ -41,7 +41,8 @@ Return the final full Python file only.
 - if MATERNAL BASE IMPLEMENTATION is not NONE, use it as the concrete parent program and rewrite the complete child file with the minimum faithful edits
 - if MATERNAL BASE IMPLEMENTATION is NONE, use the canonical scaffold as the file skeleton
 - use CHANGED_SECTIONS as the main list of causal modules that must differ from the maternal implementation
-- preserve unaffected strong inherited behavior when the child genes do not require changing it
+- preserve unaffected strong inherited behavior unless the child genes require a distinct packing regime or phenotype shift
+- if the child genes imply a distinct center, radius, or repair regime, rewrite enough of the maternal implementation to realize that regime instead of preserving the old one silently
 - do not return changed snippets only
 - do not return a patch artifact
 - the first non-empty line must be `import numpy as np` or another Python import, not a markdown fence or commentary

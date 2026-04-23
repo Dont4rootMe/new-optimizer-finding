@@ -21,9 +21,12 @@ Important:
 - do not include scratch arithmetic, abandoned alternatives, or self-corrections in the final genes; if a count check fails, replace the generator before answering
 - never use "5 by 5 grid plus center" as a 26-center construction because the center point is already present in the grid
 - for a structural/symmetric island seed, a count-safe fallback is an indexed 6 by 5 slot box with four named corner slots removed; state the arithmetic as "30 minus 4 equals 26" if you use that fallback
+- a count-safe fallback is still a fallback baseline, not a self-justifying structural hypothesis; if you keep a one-radius indexed-slot regime, explain why that regime should beat a role-based or non-uniform alternative
 - do not claim the initial state has no overlaps unless the generator, radius policy, and parameters make that true without duplicate centers or impossible spacing
 - if `OPTIONAL_CODE_SKETCH` describes the generator, it must implement the same generator named in `INIT_GEOMETRY`; otherwise use `- None.`
 - specify one directly executable deterministic path, not a list of alternatives, fallback branches, or exploratory "try this then maybe that" choices
+- state one intended packing family and one intended radius regime; if the organism keeps uniform radii, justify why that regime should win instead of a role-based or non-uniform one
+- do not rely on generic one-radius layout plus generic repair as an implicit safe default; the genes should explain what makes this organism's regime score-bearing
 - each required section should contribute to that route
 - section completeness alone is not enough; each required section should contribute to the effective packing behavior
 - avoid organisms whose sections are formally coherent but behaviorally weak, generic, or decorative
@@ -77,7 +80,7 @@ State the computational style implied by the design.
 ## CHANGE_DESCRIPTION
 Give one unified novelty summary for this organism.
 Include:
-(1) what core hypothesis this organism tests
+(1) what core hypothesis and packing family this organism tests
 (2) why this approach should produce a good packing score
-Before writing it, check that every named mechanism in `CHANGE_DESCRIPTION` appears in the relevant `CORE_GENES` section and is not contradicted by another section.
+Before writing it, check that every named mechanism in `CHANGE_DESCRIPTION` appears in the relevant `CORE_GENES` section and is not contradicted by another section, and that the named score path is not merely a generic one-radius fallback plus repair tuning.
 This must be plain-language only. No code, no code-like snippets, no implementation dump.

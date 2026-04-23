@@ -432,6 +432,53 @@ def test_ollama_route_rejects_truncated_thinking_only_response(monkeypatch: pyte
         generate_direct(route_cfg, request)
 
 
+def test_ollama_route_uses_content_text_when_thinking_is_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    route_cfg = ApiRouteConfig(
+        route_id="ollama_qwen35_27b",
+        provider="ollama",
+        provider_model_id="qwen3.5:27b",
+        backend="ollama",
+        base_url="http://localhost:11434/api",
+        timeout_sec=45.0,
+    )
+    request = LlmRequest(
+        route_id="ollama_qwen35_27b",
+        stage="compatibility_check",
+        system_prompt="system prompt",
+        user_prompt="user prompt",
+        seed=123,
+        metadata={"organism_id": "org001"},
+    )
+
+    class FakeHttpResponse:
+        def __enter__(self) -> "FakeHttpResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "message": {
+                        "role": "assistant",
+                        "thinking": "reasoning that should stay out of response.text",
+                        "content": "## COMPATIBILITY_VERDICT\nCOMPATIBILITY_ACCEPTED\n",
+                    },
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(_http_request, timeout: float):
+        return FakeHttpResponse()
+
+    monkeypatch.setattr(provider_backends.urllib_request, "urlopen", fake_urlopen)
+
+    response = generate_direct(route_cfg, request)
+
+    assert response.text == "## COMPATIBILITY_VERDICT\nCOMPATIBILITY_ACCEPTED"
+    assert response.raw_response["message"]["thinking"] == "reasoning that should stay out of response.text"
+
+
 def test_ollama_route_applies_stage_specific_generation_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     route_cfg = ApiRouteConfig(
         route_id="ollama_qwen35_27b",

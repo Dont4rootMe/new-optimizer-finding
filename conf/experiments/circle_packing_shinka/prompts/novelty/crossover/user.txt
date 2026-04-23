@@ -25,4 +25,6 @@ Accept a coherent section-aware recombination that preserves substantial materia
 Reject a candidate that collapses back to one parent, drops the selected contribution from one side, only rephrases parent ideas, only rearranges parental content across sections, or is formally two-parental but too weak to define a meaningful new operating regime.
 Reject a child whose selected recombination is formally two-parental but too weak to define a meaningful new operating regime.
 Reject a child whose recombination looks richer only because it contains more section text rather than a stronger transferred mechanism.
+Reject a child that keeps the dominant parent's center family, radius regime, and repair/control regime while only renaming the imported module or weakly retuning it.
+Reject a retained one-radius regime unless the transferred module clearly implies a different phenotype family.
 If `CHANGE_DESCRIPTION` overclaims novelty that the sectioned genes do not support, reject it.

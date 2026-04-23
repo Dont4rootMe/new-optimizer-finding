@@ -17,6 +17,7 @@ This island explores organisms that begin from order, regularity, analytic const
 - Voronoi-aware placement: place centers, compute Voronoi cells within the square, set each radius to the inscribed circle of its Voronoi cell
 - Nested structures: place a ring of circles near the boundary and fill the interior with a different arrangement optimized for the remaining space
 - Tilings with defects: start from a known tiling and handle the leftover circles (26 is not a "nice" tiling number) with explicit defect placement
+- Role-based geometry: deliberately assign different geometric roles so the packing can justify mixed-radius or role-dependent slack instead of defaulting to one shared radius
 
 ## Reality checks
 
@@ -29,7 +30,10 @@ This island explores organisms that begin from order, regularity, analytic const
 - Count-list claims must be self-checked before output; show the arithmetic if the generator uses row counts, trimming, or reflections
 - Do not use a 5 by 5 square grid plus a center point; the center is already occupied, so the extra point is a duplicate rather than a 26th distinct center
 - Do not leave correction notes such as "25? no" or competing count formulas in the final genes; choose one count-checked generator and state only that generator
-- If exact symmetry bookkeeping is uncertain, prefer a count-safe indexed slot construction: define 30 slots in a 6 by 5 index box, remove the four named corner slots, and state the check as "30 minus 4 equals 26" before any offset or normalization rule
+- If exact symmetry bookkeeping is uncertain, a count-safe indexed slot construction is an acceptable fallback, not the preferred family: define 30 slots in a 6 by 5 index box, remove the four named corner slots, and state the check as "30 minus 4 equals 26" before any offset or normalization rule
+- Do not let the count-safe 6 by 5 minus 4 fallback become the default answer; use it only when the actual structure still creates a distinct geometric or radius regime
+- A uniform-radius construction needs an explicit reason it should outperform role-based or mixed-radius alternatives on this island
+- Purely count-safe slot generators with generic repair are fallback baselines, not strong structural hypotheses
 
 ## Design prompt
 
@@ -40,6 +44,7 @@ Good organisms on this island should specify:
 4. Whether the approach uses uniform or variable radii and why
 5. Prefer the smallest generative description that still leaves room for score-improving irregularity
 6. If the seed uses trimming or reflection, include one explicit unique-center count check in `INIT_GEOMETRY` and keep all later sections consistent with that same generator
+7. Prefer role-based geometry, mixed-radius structure, or explicit defect placement when they materially change the packing family; if a one-radius regime is kept, justify why
 
 Do not overfit the organism to exact symmetry or exact analytic formulas when a compact approximate structure plus local correction is stronger.
 Do not describe multiple inconsistent row patterns or reflection schemes; pick one generator that yields exactly 26 centers.

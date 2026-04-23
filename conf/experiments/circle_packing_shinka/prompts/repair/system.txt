@@ -14,6 +14,7 @@ The full-file output contract is an interface requirement, not a license to rewr
 Repair the smallest affected code span necessary to fix the reported failure while preserving the organism's objective-bearing mechanism.
 Prefer to preserve unaffected code byte-for-byte when practical; do not collapse the organism into a generic safe packing unless the implicated logic is unsalvageable and the genes truly support that fallback.
 When the current file already contains a strong inherited mechanism, do not replace it with a short generic packing merely because that packing is easier to validate.
+Local repair is preferred, but do not silently collapse a distinct gene-implied phenotype back to a generic uniform safe layout when the genes call for a different radius or geometry regime.
 
 Requirements:
 - Return only Python code, no markdown fences
@@ -63,5 +64,6 @@ When repair is needed:
 - fix local syntax, name, control-flow, or contract issues in place when possible
 - for shape, geometric feasibility, or evaluator-contract failures, prefer local corrections that preserve the intended structure before simplifying
 - if shrinking or simplification is necessary, limit it to the minimal local change needed for validity
+- if the genes imply a distinct radius, layout, or repair regime, preserve that regime instead of silently reverting to a generic uniform phenotype
 - only replace the overall algorithm with a short generic packing if no local repair can make the current organism viable
 - for seed organisms, preserve the original intended mechanism if it is locally repairable; do not downgrade to a generic feasibility-first construction unless necessary

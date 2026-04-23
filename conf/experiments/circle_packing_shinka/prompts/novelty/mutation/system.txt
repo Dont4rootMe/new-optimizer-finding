@@ -19,6 +19,9 @@ Reject the child if any of these are true:
 - it only makes tiny inert parameter nudges or similarly cosmetic changes that do not alter the operating regime
 - a parameter change is too weak to materially change how the mechanism would run
 - it adds many words or supporting bullets around the same underlying mechanism without materially changing the mechanism itself
+- it preserves the same center-generation family, the same radius regime, and the same repair/control regime while only changing narrative or weak parameters
+- it retains a one-radius regime and parent-shaped packing family without a section-supported reason that the effective operating regime is different
+- it presents coefficient-only retuning without a plausible phenotype shift
 - after accounting for the excluded ideas and the sectioned structure, the child is still substantively the same as the parent
 
 Accept the child if either:
@@ -28,6 +31,7 @@ Accept the child if either:
 Important:
 - a localized change inside one section can be sufficient for novelty if it is a real idea-level change that materially affects behavior
 - a parameter or local procedural change counts only if it materially changes how the mechanism would run
+- novelty is judged from the sectioned genes plus the expected operating regime or packing family they imply, not from wording alone
 - novelty is not created merely by changing section placement, wording, or formatting
 
 ## Output discipline

@@ -162,24 +162,33 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     assert "score-bearing mechanism" in bundle.project_context
     assert "smallest set of genes that defines a real score-bearing mechanism" in bundle.project_context
     assert "compact faithful deterministic implementation" in bundle.project_context
+    assert "Textual novelty is not the same as phenotype novelty." in bundle.project_context
+    assert "Uniform-radii organisms are allowed only" in bundle.project_context
+    assert "Noise-like ingredients are supporting detail" in bundle.project_context
     assert "# INIT_GEOMETRY" in bundle.genome_schema
     assert "whether repaired regions can regrow" in bundle.genome_schema
     assert "Prefer low-parameter geometric structure" in bundle.genome_schema
     assert "Global terminal shrink-to-feasibility is normally not a repair policy" in bundle.genome_schema
     assert "Prefer `- None.` unless a genuinely local executable sketch is necessary" in bundle.genome_schema
     assert "do not invent new major ideas at implementation time" in bundle.implementation_system
-    assert "preserve inherited high-score maternal behavior" in bundle.implementation_system
+    assert "preserve inherited behavior outside the changed sections unless the child genes require a coordinated adjustment or a distinct packing regime" in bundle.implementation_system
+    assert "when the changed sections still imply the same phenotype family, preserve strong inherited maternal behavior" in bundle.implementation_system
+    assert "do not silently keep the maternal radius, layout, or repair regime" in bundle.implementation_system
     assert "Single rewrite contract:" in bundle.implementation_system
     assert "child genetic code draft" in bundle.mutation_system.lower()
     assert "child draft" in bundle.crossover_system.lower()
     assert "smallest coherent module" in bundle.mutation_system
     assert "alter at most one causal module" in bundle.mutation_system
+    assert "same one-radius layout with different repair tuning" in bundle.mutation_system
     assert "one coherent imported secondary module" in bundle.crossover_system
     assert "modify at most one major causal block" in bundle.crossover_system
+    assert "same parent-shaped one-radius regime with a renamed imported module" in bundle.crossover_system
     assert "valid source of novelty" in bundle.mutation_novelty_user
     assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
     assert "supporting bullets around the same underlying mechanism" in bundle.mutation_novelty_system
+    assert "same center-generation family, the same radius regime, and the same repair/control regime" in bundle.mutation_novelty_system
     assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
+    assert "same center-generation family, the same radius regime, and the same repair/control regime as the dominant parent" in bundle.crossover_novelty_system
     assert "## COMPATIBILITY_VERDICT" in bundle.compatibility_seed_system
     assert "score-inert" in bundle.compatibility_seed_system
     assert "too many loosely coupled mechanisms or role taxonomies" in bundle.compatibility_seed_system
@@ -187,9 +196,12 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     assert "match the candidate's own declared target count or multiplicity" in bundle.compatibility_seed_system
     assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system.lower()
     assert "extra support machinery" in bundle.compatibility_mutation_system
+    assert "same center family, the same radius regime, and the same repair/control regime" in bundle.compatibility_mutation_system
     assert "too structurally elaborate" in bundle.compatibility_crossover_user
+    assert "primary parent's phenotype family" in bundle.compatibility_crossover_system
     assert "full-file output contract is an interface requirement" in bundle.repair_system
     assert "do not replace it with a short generic packing" in bundle.repair_system
+    assert "do not silently collapse a distinct gene-implied phenotype back to a generic uniform safe layout" in bundle.repair_system
     assert "treat that exact local issue as the primary repair target" in bundle.repair_system
     assert "Centers shape incorrect" in bundle.repair_system
     assert "Keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the repaired file" in bundle.repair_system
@@ -573,6 +585,7 @@ def test_circle_packing_seed_prompts_reject_ambiguous_26_circle_generators() -> 
     assert "self-check the arithmetic in the gene text" in bundle.seed_system
     assert "5 by 5 grid plus center" in bundle.seed_system
     assert "30 minus 4 equals 26" in bundle.seed_system
+    assert "count-safe fallback is still a fallback baseline" in bundle.seed_system
     assert "one directly executable deterministic path" in bundle.seed_system
     assert "prefer `- None.` in `OPTIONAL_CODE_SKETCH`" in bundle.seed_system
     assert "without requiring the implementation model to resolve contradictions" in bundle.seed_user
@@ -582,8 +595,13 @@ def test_circle_packing_seed_prompts_reject_ambiguous_26_circle_generators() -> 
     assert "show the arithmetic if the generator uses row counts" in symmetric_island
     assert "5 by 5 square grid plus a center point" in symmetric_island
     assert "30 minus 4 equals 26" in symmetric_island
+    assert "acceptable fallback, not the preferred family" in symmetric_island
+    assert "Do not let the count-safe 6 by 5 minus 4 fallback become the default answer" in symmetric_island
+    assert "Prefer role-based geometry, mixed-radius structure, or explicit defect placement" in symmetric_island
     assert "[5, 5, 6, 5, 5]" not in symmetric_island
     assert "One bounded repair loop" in repair_island
+    assert "Repair-only refinement should lead to a distinguishable packing regime" in repair_island
+    assert "same global radius regime, and same repair loop with retuned constants is a weak direction" in repair_island
 
 
 def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> None:
@@ -676,6 +694,9 @@ def test_circle_packing_prompt_surface_removes_safe_local_search_bias() -> None:
     assert "retained parent behavior" in bundle.mutation_novelty_system
     assert "falsely attributes a mechanism to the secondary parent" in bundle.crossover_novelty_system
     assert "score-inert" in combined
+    assert "same center family, the same radius regime, and the same repair/control regime" in combined
+    assert "coefficient-only retuning" in combined
+    assert "distinct packing regime or phenotype shift" in combined
     assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
     assert "Repair the smallest affected code span necessary" in bundle.repair_system
 

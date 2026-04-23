@@ -127,9 +127,9 @@ def _structured_response_text(response: object) -> _StructuredResponseText:
     """Return the text that strict structured parsers should consume.
 
     Some Ollama models return reasoning in message.thinking and the final
-    answer in message.content. The provider-level response.text deliberately
-    preserves both for diagnostics, but strict artifact parsers must consume
-    only the final content when it is available.
+    answer in message.content. Strict artifact parsers must consume only the
+    final content when it is available; thinking stays available through
+    raw_response diagnostics.
     """
 
     full_text = str(getattr(response, "text", "") or "")
@@ -177,6 +177,19 @@ def _parse_failure_diagnostics(response_text: _StructuredResponseText) -> str:
         f"full_text_preview={_single_line(response_text.full_text)!r}, "
         f"parse_text_preview={_single_line(response_text.parse_text)!r}"
     )
+
+
+def _parse_failure_diagnostics_payload(response_text: _StructuredResponseText) -> dict[str, object]:
+    return {
+        "parse_source": response_text.parse_source,
+        "content_chars": len(response_text.content_text),
+        "thinking_chars": len(response_text.thinking_text),
+        "parse_chars": len(response_text.parse_text),
+        "content_preview": _single_line(response_text.content_text, limit=500),
+        "thinking_preview": _single_line(response_text.thinking_text, limit=500),
+        "full_text_preview": _single_line(response_text.full_text, limit=500),
+        "parse_text_preview": _single_line(response_text.parse_text, limit=500),
+    }
 
 
 def _first_non_empty_line(text: str) -> str:
@@ -530,6 +543,246 @@ class CandidateGenerator(BaseLlmGenerator):
         )
         return _validate_assembled_python_source(assembled)
 
+    def _resolve_max_implementation_stage_attempts(self) -> int:
+        repair_budget = int(
+            self.evolver_cfg.creation.get(
+                "max_attempts_to_repair_organism_after_error",
+                0,
+            )
+        )
+        if repair_budget < 0:
+            raise ValueError("evolver.creation.max_attempts_to_repair_organism_after_error must be >= 0")
+        return 1 + repair_budget
+
+    def _implementation_contract_metadata(
+        self,
+        prepared: _PreparedImplementationStage,
+    ) -> dict[str, object]:
+        if prepared.compilation_plan is None:
+            return {
+                "expected_mode": "legacy_full_source",
+                "expected_regions": None,
+            }
+
+        expected_regions = (
+            list(self.expected_implementation_regions or ())
+            if prepared.compilation_plan.compilation_mode == "FULL"
+            else list(prepared.compilation_plan.changed_sections)
+        )
+        return {
+            "expected_mode": prepared.compilation_plan.compilation_mode,
+            "expected_regions": expected_regions,
+        }
+
+    def _implementation_failure_diagnostics(
+        self,
+        *,
+        prepared: _PreparedImplementationStage,
+        response_text: _StructuredResponseText,
+        error_msg: str,
+    ) -> dict[str, object]:
+        return {
+            **self._implementation_contract_metadata(prepared),
+            **_parse_failure_diagnostics_payload(response_text),
+            "first_non_empty_line": _first_non_empty_line(response_text.parse_text),
+            "error_msg": error_msg,
+        }
+
+    def _run_implementation_stage_with_retries(
+        self,
+        *,
+        route_id: str,
+        prepared: _PreparedImplementationStage,
+        llm_request_path: Path,
+        llm_response_path: Path,
+        llm_request_payload: dict[str, object],
+        llm_response_payload: dict[str, object],
+        organism_id: str,
+        generation: int,
+    ) -> str:
+        implementation_system_prompt = prepared.system_prompt
+        implementation_user_prompt = prepared.user_prompt
+        max_attempts = self._resolve_max_implementation_stage_attempts()
+        request_attempts = llm_request_payload.setdefault("implementation_attempts", [])
+        response_attempts = llm_response_payload.setdefault("implementation_attempts", [])
+        if not isinstance(request_attempts, list):
+            request_attempts = []
+            llm_request_payload["implementation_attempts"] = request_attempts
+        if not isinstance(response_attempts, list):
+            response_attempts = []
+            llm_response_payload["implementation_attempts"] = response_attempts
+
+        last_error: BaseException | None = None
+        last_error_msg: str | None = None
+        for attempt in range(1, max_attempts + 1):
+            request_entry = {
+                "attempt": attempt,
+                "max_attempts": max_attempts,
+                "route_id": route_id,
+                "system_prompt": implementation_system_prompt,
+                "user_prompt": implementation_user_prompt,
+                "request": None,
+                "status": "in_flight",
+                "error_msg": None,
+                **_implementation_request_metadata(prepared.compilation_plan),
+                **self._implementation_contract_metadata(prepared),
+            }
+            response_entry = {
+                "attempt": attempt,
+                "max_attempts": max_attempts,
+                "route_id": route_id,
+                "text": None,
+                "raw_text": None,
+                "response": None,
+                "usage": None,
+                "started_at": None,
+                "finished_at": None,
+                "status": "awaiting_response",
+                "error_msg": None,
+                **self._implementation_contract_metadata(prepared),
+            }
+            request_attempts.append(request_entry)
+            response_attempts.append(response_entry)
+            llm_request_payload["implementation"] = request_entry
+            llm_response_payload["implementation"] = response_entry
+            write_json(llm_request_path, llm_request_payload)
+            write_json(llm_response_path, llm_response_payload)
+
+            _announce(
+                f"organism {organism_id} -> route {route_id}: calling implementation stage "
+                f"(attempt={attempt}/{max_attempts})"
+            )
+            try:
+                implementation_response = self._call_llm_stage(
+                    route_id,
+                    "implementation",
+                    implementation_system_prompt,
+                    implementation_user_prompt,
+                    organism_id=organism_id,
+                    generation=generation,
+                    extra_metadata={
+                        "implementation_template": self.prompt_bundle.implementation_template,
+                        "implementation_attempt": attempt,
+                        "max_implementation_attempts": max_attempts,
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                last_error_msg = f"{type(exc).__name__}: {exc}"
+                request_entry["status"] = "failed"
+                request_entry["error_msg"] = last_error_msg
+                response_entry["status"] = "failed"
+                response_entry["error_msg"] = last_error_msg
+                response_entry["error_kind"] = "provider_failure"
+                llm_request_payload["implementation"] = request_entry
+                llm_response_payload["implementation"] = response_entry
+                write_json(llm_request_path, llm_request_payload)
+                write_json(llm_response_path, llm_response_payload)
+                _announce(
+                    f"organism {organism_id} implementation stage failed "
+                    f"(route={route_id}, attempt={attempt}/{max_attempts}): {last_error_msg}"
+                )
+                if attempt < max_attempts:
+                    continue
+                raise
+
+            implementation_text = _structured_response_text(implementation_response)
+            request_entry.update(
+                {
+                    "provider": implementation_response.provider,
+                    "provider_model_id": implementation_response.provider_model_id,
+                    "request": implementation_response.raw_request,
+                    "status": "completed",
+                    "error_msg": None,
+                }
+            )
+            response_entry.update(
+                {
+                    "provider": implementation_response.provider,
+                    "provider_model_id": implementation_response.provider_model_id,
+                    "text": implementation_response.text,
+                    "raw_text": implementation_response.text,
+                    **_structured_response_fields(implementation_text),
+                    "response": implementation_response.raw_response,
+                    "usage": implementation_response.usage,
+                    "started_at": implementation_response.started_at,
+                    "finished_at": implementation_response.finished_at,
+                    "status": "completed",
+                    "error_msg": None,
+                }
+            )
+            llm_request_payload["provider"] = implementation_response.provider
+            llm_request_payload["provider_model_id"] = implementation_response.provider_model_id
+            llm_response_payload["provider"] = implementation_response.provider
+            llm_response_payload["provider_model_id"] = implementation_response.provider_model_id
+            llm_request_payload["implementation"] = request_entry
+            llm_response_payload["implementation"] = response_entry
+            write_json(llm_request_path, llm_request_payload)
+            write_json(llm_response_path, llm_response_payload)
+
+            try:
+                implementation_code = self._extract_implementation_stage_code(
+                    implementation_text.parse_text,
+                    prepared=prepared,
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                last_error_msg = f"{type(exc).__name__}: {exc}"
+                diagnostics = self._implementation_failure_diagnostics(
+                    prepared=prepared,
+                    response_text=implementation_text,
+                    error_msg=last_error_msg,
+                )
+                response_entry["error_kind"] = "implementation_extract_failed"
+                response_entry["failure_diagnostics"] = diagnostics
+                request_entry["status"] = "failed"
+                request_entry["error_msg"] = last_error_msg
+                response_entry["status"] = "failed"
+                response_entry["error_msg"] = last_error_msg
+                llm_request_payload["implementation"] = request_entry
+                llm_response_payload["implementation"] = response_entry
+                write_json(llm_request_path, llm_request_payload)
+                write_json(llm_response_path, llm_response_payload)
+                _announce(
+                    f"organism {organism_id} implementation stage produced unusable code "
+                    f"(route={route_id}, attempt={attempt}/{max_attempts}): {last_error_msg}"
+                )
+                LOGGER.warning(
+                    "Implementation extraction failed organism=%s route=%s attempt=%d/%d expected_mode=%s "
+                    "expected_regions=%s first_non_empty_line=%r %s %s error=%s",
+                    organism_id,
+                    route_id,
+                    attempt,
+                    max_attempts,
+                    diagnostics["expected_mode"],
+                    diagnostics["expected_regions"],
+                    diagnostics["first_non_empty_line"],
+                    _response_summary(
+                        text=implementation_response.text,
+                        raw_response=implementation_response.raw_response,
+                        usage=implementation_response.usage,
+                    ),
+                    _parse_failure_diagnostics(implementation_text),
+                    last_error_msg,
+                )
+                if attempt < max_attempts:
+                    continue
+                raise
+
+            response_entry["text"] = implementation_code
+            response_entry["status"] = "completed"
+            response_entry["error_msg"] = None
+            llm_request_payload["implementation"] = request_entry
+            llm_response_payload["implementation"] = response_entry
+            write_json(llm_request_path, llm_request_payload)
+            write_json(llm_response_path, llm_response_payload)
+            return implementation_code
+
+        raise RuntimeError(
+            "Failed to extract valid implementation after "
+            f"{max_attempts} implementation attempts: {last_error_msg}"
+        ) from last_error
+
     def _run_standard_creation_stages(
         self,
         *,
@@ -637,6 +890,10 @@ class CandidateGenerator(BaseLlmGenerator):
         except Exception as exc:  # noqa: BLE001
             error_msg = f"{type(exc).__name__}: {exc}"
             llm_response_payload["design"]["error_kind"] = "design_contract_parse_failed"
+            llm_response_payload["design"]["expected_contract"] = (
+                "top-level sections CORE_GENES, INTERACTION_NOTES, COMPUTE_NOTES, CHANGE_DESCRIPTION"
+            )
+            llm_response_payload["design"]["failure_diagnostics"] = _parse_failure_diagnostics_payload(design_text)
             llm_request_payload["design"]["status"] = "failed"
             llm_request_payload["design"]["error_msg"] = error_msg
             llm_response_payload["design"]["status"] = "failed"
@@ -663,134 +920,16 @@ class CandidateGenerator(BaseLlmGenerator):
         )
         implementation_system_prompt = prepared_implementation.system_prompt
         implementation_user_prompt = prepared_implementation.user_prompt
-        llm_request_payload["implementation"] = {
-            "route_id": route_id,
-            "system_prompt": implementation_system_prompt,
-            "user_prompt": implementation_user_prompt,
-            "request": None,
-            "status": "in_flight",
-            "error_msg": None,
-            **_implementation_request_metadata(prepared_implementation.compilation_plan),
-        }
-        llm_response_payload["implementation"] = {
-            "route_id": route_id,
-            "text": None,
-            "response": None,
-            "usage": None,
-            "started_at": None,
-            "finished_at": None,
-            "status": "awaiting_response",
-            "error_msg": None,
-        }
-        write_json(llm_request_path, llm_request_payload)
-        write_json(llm_response_path, llm_response_payload)
-
-        _announce(
-            f"organism {organism_id} -> route {route_id}: calling implementation stage"
+        implementation_code = self._run_implementation_stage_with_retries(
+            route_id=route_id,
+            prepared=prepared_implementation,
+            llm_request_path=llm_request_path,
+            llm_response_path=llm_response_path,
+            llm_request_payload=llm_request_payload,
+            llm_response_payload=llm_response_payload,
+            organism_id=organism_id,
+            generation=generation,
         )
-        try:
-            implementation_response = self._call_llm_stage(
-                route_id,
-                "implementation",
-                implementation_system_prompt,
-                implementation_user_prompt,
-                organism_id=organism_id,
-                generation=generation,
-                extra_metadata={"implementation_template": self.prompt_bundle.implementation_template},
-            )
-        except Exception as exc:  # noqa: BLE001
-            error_msg = f"{type(exc).__name__}: {exc}"
-            llm_request_payload["implementation"]["status"] = "failed"
-            llm_request_payload["implementation"]["error_msg"] = error_msg
-            llm_response_payload["implementation"]["status"] = "failed"
-            llm_response_payload["implementation"]["error_msg"] = error_msg
-            llm_response_payload["implementation"]["error_kind"] = "provider_failure"
-            write_json(llm_request_path, llm_request_payload)
-            write_json(llm_response_path, llm_response_payload)
-            _announce(f"organism {organism_id} implementation stage failed (route={route_id}): {error_msg}")
-            raise
-        _announce(
-            f"organism {organism_id} implementation stage returned "
-            f"(route={route_id})"
-        )
-        implementation_text = _structured_response_text(implementation_response)
-        llm_request_payload["implementation"] = {
-            "route_id": route_id,
-            "provider": implementation_response.provider,
-            "provider_model_id": implementation_response.provider_model_id,
-            "system_prompt": implementation_system_prompt,
-            "user_prompt": implementation_user_prompt,
-            "request": implementation_response.raw_request,
-            "status": "completed",
-            "error_msg": None,
-            **_implementation_request_metadata(prepared_implementation.compilation_plan),
-        }
-        llm_response_payload["implementation"] = {
-            "route_id": route_id,
-            "provider": implementation_response.provider,
-            "provider_model_id": implementation_response.provider_model_id,
-            "text": implementation_response.text,
-            **_structured_response_fields(implementation_text),
-            "response": implementation_response.raw_response,
-            "usage": implementation_response.usage,
-            "started_at": implementation_response.started_at,
-            "finished_at": implementation_response.finished_at,
-            "status": "completed",
-            "error_msg": None,
-        }
-        llm_request_payload["provider"] = implementation_response.provider
-        llm_request_payload["provider_model_id"] = implementation_response.provider_model_id
-        llm_response_payload["provider"] = implementation_response.provider
-        llm_response_payload["provider_model_id"] = implementation_response.provider_model_id
-        write_json(llm_request_path, llm_request_payload)
-        write_json(llm_response_path, llm_response_payload)
-
-        try:
-            implementation_code = self._extract_implementation_stage_code(
-                implementation_text.parse_text,
-                prepared=prepared_implementation,
-            )
-        except Exception as exc:  # noqa: BLE001
-            error_msg = f"{type(exc).__name__}: {exc}"
-            llm_response_payload["implementation"]["error_kind"] = "implementation_extract_failed"
-            llm_request_payload["implementation"]["status"] = "failed"
-            llm_request_payload["implementation"]["error_msg"] = error_msg
-            llm_response_payload["implementation"]["status"] = "failed"
-            llm_response_payload["implementation"]["error_msg"] = error_msg
-            write_json(llm_request_path, llm_request_payload)
-            write_json(llm_response_path, llm_response_payload)
-            _announce(
-                f"organism {organism_id} implementation stage produced unusable code "
-                f"(route={route_id}): {error_msg}"
-            )
-            LOGGER.warning(
-                "Implementation extraction failed organism=%s route=%s expected_mode=%s expected_regions=%s first_non_empty_line=%r %s %s error=%s",
-                organism_id,
-                route_id,
-                (
-                    prepared_implementation.compilation_plan.compilation_mode
-                    if prepared_implementation.compilation_plan is not None
-                    else "legacy_full_source"
-                ),
-                (
-                    list(prepared_implementation.compilation_plan.changed_sections)
-                    if prepared_implementation.compilation_plan is not None
-                    else None
-                ),
-                _first_non_empty_line(implementation_text.parse_text),
-                _response_summary(
-                    text=implementation_response.text,
-                    raw_response=implementation_response.raw_response,
-                    usage=implementation_response.usage,
-                ),
-                _parse_failure_diagnostics(implementation_text),
-                error_msg,
-            )
-            raise
-
-        llm_response_payload["implementation"]["text"] = implementation_code
-        write_json(llm_request_path, llm_request_payload)
-        write_json(llm_response_path, llm_response_payload)
 
         prompt_hash = sha1_text(
             "\n".join(
@@ -1006,6 +1145,10 @@ class CandidateGenerator(BaseLlmGenerator):
             except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
                 response_entry["error_kind"] = "design_contract_parse_failed"
+                response_entry["expected_contract"] = (
+                    "top-level sections CORE_GENES, INTERACTION_NOTES, COMPUTE_NOTES, CHANGE_DESCRIPTION"
+                )
+                response_entry["failure_diagnostics"] = _parse_failure_diagnostics_payload(design_text)
                 request_entry["status"] = "failed"
                 request_entry["error_msg"] = error_msg
                 response_entry["status"] = "failed"
@@ -1132,6 +1275,8 @@ class CandidateGenerator(BaseLlmGenerator):
             except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
                 novelty_response_entry["error_kind"] = "novelty_judgment_parse_failed"
+                novelty_response_entry["expected_contract"] = "NOVELTY_VERDICT, REJECTION_REASON, SECTIONS_AT_ISSUE"
+                novelty_response_entry["failure_diagnostics"] = _parse_failure_diagnostics_payload(novelty_text)
                 novelty_request_entry["status"] = "failed"
                 novelty_request_entry["error_msg"] = error_msg
                 novelty_response_entry["status"] = "failed"
@@ -1194,135 +1339,16 @@ class CandidateGenerator(BaseLlmGenerator):
         implementation_system_prompt = prepared_implementation.system_prompt
         implementation_user_prompt = prepared_implementation.user_prompt
         prompt_hash_parts.extend((implementation_system_prompt, implementation_user_prompt))
-        llm_request_payload["implementation"] = {
-            "route_id": route_id,
-            "system_prompt": implementation_system_prompt,
-            "user_prompt": implementation_user_prompt,
-            "request": None,
-            "status": "in_flight",
-            "error_msg": None,
-            **_implementation_request_metadata(prepared_implementation.compilation_plan),
-        }
-        llm_response_payload["implementation"] = {
-            "route_id": route_id,
-            "text": None,
-            "response": None,
-            "usage": None,
-            "started_at": None,
-            "finished_at": None,
-            "status": "awaiting_response",
-            "error_msg": None,
-        }
-        write_json(llm_request_path, llm_request_payload)
-        write_json(llm_response_path, llm_response_payload)
-
-        _announce(
-            f"organism {organism_id} -> route {route_id}: calling implementation stage"
+        implementation_code = self._run_implementation_stage_with_retries(
+            route_id=route_id,
+            prepared=prepared_implementation,
+            llm_request_path=llm_request_path,
+            llm_response_path=llm_response_path,
+            llm_request_payload=llm_request_payload,
+            llm_response_payload=llm_response_payload,
+            organism_id=organism_id,
+            generation=generation,
         )
-        try:
-            implementation_response = self._call_llm_stage(
-                route_id,
-                "implementation",
-                implementation_system_prompt,
-                implementation_user_prompt,
-                organism_id=organism_id,
-                generation=generation,
-                extra_metadata={"implementation_template": self.prompt_bundle.implementation_template},
-            )
-        except Exception as exc:  # noqa: BLE001
-            error_msg = f"{type(exc).__name__}: {exc}"
-            llm_request_payload["implementation"]["status"] = "failed"
-            llm_request_payload["implementation"]["error_msg"] = error_msg
-            llm_response_payload["implementation"]["status"] = "failed"
-            llm_response_payload["implementation"]["error_msg"] = error_msg
-            llm_response_payload["implementation"]["error_kind"] = "provider_failure"
-            write_json(llm_request_path, llm_request_payload)
-            write_json(llm_response_path, llm_response_payload)
-            _announce(f"organism {organism_id} implementation stage failed (route={route_id}): {error_msg}")
-            raise
-
-        _announce(
-            f"organism {organism_id} implementation stage returned "
-            f"(route={route_id})"
-        )
-        implementation_text = _structured_response_text(implementation_response)
-        llm_request_payload["implementation"] = {
-            "route_id": route_id,
-            "provider": implementation_response.provider,
-            "provider_model_id": implementation_response.provider_model_id,
-            "system_prompt": implementation_system_prompt,
-            "user_prompt": implementation_user_prompt,
-            "request": implementation_response.raw_request,
-            "status": "completed",
-            "error_msg": None,
-            **_implementation_request_metadata(prepared_implementation.compilation_plan),
-        }
-        llm_response_payload["implementation"] = {
-            "route_id": route_id,
-            "provider": implementation_response.provider,
-            "provider_model_id": implementation_response.provider_model_id,
-            "text": implementation_response.text,
-            **_structured_response_fields(implementation_text),
-            "response": implementation_response.raw_response,
-            "usage": implementation_response.usage,
-            "started_at": implementation_response.started_at,
-            "finished_at": implementation_response.finished_at,
-            "status": "completed",
-            "error_msg": None,
-        }
-        llm_request_payload["provider"] = implementation_response.provider
-        llm_request_payload["provider_model_id"] = implementation_response.provider_model_id
-        llm_response_payload["provider"] = implementation_response.provider
-        llm_response_payload["provider_model_id"] = implementation_response.provider_model_id
-        write_json(llm_request_path, llm_request_payload)
-        write_json(llm_response_path, llm_response_payload)
-
-        try:
-            implementation_code = self._extract_implementation_stage_code(
-                implementation_text.parse_text,
-                prepared=prepared_implementation,
-            )
-        except Exception as exc:  # noqa: BLE001
-            error_msg = f"{type(exc).__name__}: {exc}"
-            llm_response_payload["implementation"]["error_kind"] = "implementation_extract_failed"
-            llm_request_payload["implementation"]["status"] = "failed"
-            llm_request_payload["implementation"]["error_msg"] = error_msg
-            llm_response_payload["implementation"]["status"] = "failed"
-            llm_response_payload["implementation"]["error_msg"] = error_msg
-            write_json(llm_request_path, llm_request_payload)
-            write_json(llm_response_path, llm_response_payload)
-            _announce(
-                f"organism {organism_id} implementation stage produced unusable code "
-                f"(route={route_id}): {error_msg}"
-            )
-            LOGGER.warning(
-                "Implementation extraction failed organism=%s route=%s expected_mode=%s expected_regions=%s first_non_empty_line=%r %s %s error=%s",
-                organism_id,
-                route_id,
-                (
-                    prepared_implementation.compilation_plan.compilation_mode
-                    if prepared_implementation.compilation_plan is not None
-                    else "legacy_full_source"
-                ),
-                (
-                    list(prepared_implementation.compilation_plan.changed_sections)
-                    if prepared_implementation.compilation_plan is not None
-                    else None
-                ),
-                _first_non_empty_line(implementation_text.parse_text),
-                _response_summary(
-                    text=implementation_response.text,
-                    raw_response=implementation_response.raw_response,
-                    usage=implementation_response.usage,
-                ),
-                _parse_failure_diagnostics(implementation_text),
-                error_msg,
-            )
-            raise
-
-        llm_response_payload["implementation"]["text"] = implementation_code
-        write_json(llm_request_path, llm_request_payload)
-        write_json(llm_response_path, llm_response_payload)
 
         prompt_hash = sha1_text("\n".join(prompt_hash_parts))
         return CreationStageResult(
@@ -1545,6 +1571,10 @@ class CandidateGenerator(BaseLlmGenerator):
             except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
                 response_entry["error_kind"] = "design_contract_parse_failed"
+                response_entry["expected_contract"] = (
+                    "sectioned genetic_code with CORE_GENES, INTERACTION_NOTES, COMPUTE_NOTES, CHANGE_DESCRIPTION"
+                )
+                response_entry["failure_diagnostics"] = _parse_failure_diagnostics_payload(design_text)
                 request_entry["status"] = "failed"
                 request_entry["error_msg"] = error_msg
                 response_entry["status"] = "failed"
@@ -1673,6 +1703,8 @@ class CandidateGenerator(BaseLlmGenerator):
                 except Exception as exc:  # noqa: BLE001
                     error_msg = f"{type(exc).__name__}: {exc}"
                     novelty_response_entry["error_kind"] = "novelty_judgment_parse_failed"
+                    novelty_response_entry["expected_contract"] = "NOVELTY_VERDICT, REJECTION_REASON, SECTIONS_AT_ISSUE"
+                    novelty_response_entry["failure_diagnostics"] = _parse_failure_diagnostics_payload(novelty_text)
                     novelty_request_entry["status"] = "failed"
                     novelty_request_entry["error_msg"] = error_msg
                     novelty_response_entry["status"] = "failed"
@@ -1824,6 +1856,8 @@ class CandidateGenerator(BaseLlmGenerator):
             except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
                 compatibility_response_entry["error_kind"] = "compatibility_judgment_parse_failed"
+                compatibility_response_entry["expected_contract"] = "COMPATIBILITY_VERDICT, REJECTION_REASON"
+                compatibility_response_entry["failure_diagnostics"] = _parse_failure_diagnostics_payload(compatibility_text)
                 compatibility_request_entry["status"] = "failed"
                 compatibility_request_entry["error_msg"] = error_msg
                 compatibility_response_entry["status"] = "failed"
@@ -1910,129 +1944,16 @@ class CandidateGenerator(BaseLlmGenerator):
         implementation_system_prompt = prepared_implementation.system_prompt
         implementation_user_prompt = prepared_implementation.user_prompt
         prompt_hash_parts.extend((implementation_system_prompt, implementation_user_prompt))
-        llm_request_payload["implementation"] = {
-            "route_id": route_id,
-            "system_prompt": implementation_system_prompt,
-            "user_prompt": implementation_user_prompt,
-            "request": None,
-            "status": "in_flight",
-            "error_msg": None,
-            **_implementation_request_metadata(prepared_implementation.compilation_plan),
-        }
-        llm_response_payload["implementation"] = {
-            "route_id": route_id,
-            "text": None,
-            "response": None,
-            "usage": None,
-            "started_at": None,
-            "finished_at": None,
-            "status": "awaiting_response",
-            "error_msg": None,
-        }
-        write_json(llm_request_path, llm_request_payload)
-        write_json(llm_response_path, llm_response_payload)
-
-        _announce(f"organism {organism_id} -> route {route_id}: calling implementation stage")
-        try:
-            implementation_response = self._call_llm_stage(
-                route_id,
-                "implementation",
-                implementation_system_prompt,
-                implementation_user_prompt,
-                organism_id=organism_id,
-                generation=generation,
-                extra_metadata={"implementation_template": self.prompt_bundle.implementation_template},
-            )
-        except Exception as exc:  # noqa: BLE001
-            error_msg = f"{type(exc).__name__}: {exc}"
-            llm_request_payload["implementation"]["status"] = "failed"
-            llm_request_payload["implementation"]["error_msg"] = error_msg
-            llm_response_payload["implementation"]["status"] = "failed"
-            llm_response_payload["implementation"]["error_msg"] = error_msg
-            llm_response_payload["implementation"]["error_kind"] = "provider_failure"
-            write_json(llm_request_path, llm_request_payload)
-            write_json(llm_response_path, llm_response_payload)
-            _announce(f"organism {organism_id} implementation stage failed (route={route_id}): {error_msg}")
-            raise
-
-        implementation_text = _structured_response_text(implementation_response)
-        llm_request_payload["implementation"] = {
-            "route_id": route_id,
-            "provider": implementation_response.provider,
-            "provider_model_id": implementation_response.provider_model_id,
-            "system_prompt": implementation_system_prompt,
-            "user_prompt": implementation_user_prompt,
-            "request": implementation_response.raw_request,
-            "status": "completed",
-            "error_msg": None,
-            **_implementation_request_metadata(prepared_implementation.compilation_plan),
-        }
-        llm_response_payload["implementation"] = {
-            "route_id": route_id,
-            "provider": implementation_response.provider,
-            "provider_model_id": implementation_response.provider_model_id,
-            "text": implementation_response.text,
-            **_structured_response_fields(implementation_text),
-            "response": implementation_response.raw_response,
-            "usage": implementation_response.usage,
-            "started_at": implementation_response.started_at,
-            "finished_at": implementation_response.finished_at,
-            "status": "completed",
-            "error_msg": None,
-        }
-        llm_request_payload["provider"] = implementation_response.provider
-        llm_request_payload["provider_model_id"] = implementation_response.provider_model_id
-        llm_response_payload["provider"] = implementation_response.provider
-        llm_response_payload["provider_model_id"] = implementation_response.provider_model_id
-        write_json(llm_request_path, llm_request_payload)
-        write_json(llm_response_path, llm_response_payload)
-
-        try:
-            implementation_code = self._extract_implementation_stage_code(
-                implementation_text.parse_text,
-                prepared=prepared_implementation,
-            )
-        except Exception as exc:  # noqa: BLE001
-            error_msg = f"{type(exc).__name__}: {exc}"
-            llm_response_payload["implementation"]["error_kind"] = "implementation_extract_failed"
-            llm_request_payload["implementation"]["status"] = "failed"
-            llm_request_payload["implementation"]["error_msg"] = error_msg
-            llm_response_payload["implementation"]["status"] = "failed"
-            llm_response_payload["implementation"]["error_msg"] = error_msg
-            write_json(llm_request_path, llm_request_payload)
-            write_json(llm_response_path, llm_response_payload)
-            _announce(
-                f"organism {organism_id} implementation stage produced unusable code "
-                f"(route={route_id}): {error_msg}"
-            )
-            LOGGER.warning(
-                "Implementation extraction failed organism=%s route=%s expected_mode=%s expected_regions=%s first_non_empty_line=%r %s %s error=%s",
-                organism_id,
-                route_id,
-                (
-                    prepared_implementation.compilation_plan.compilation_mode
-                    if prepared_implementation.compilation_plan is not None
-                    else "legacy_full_source"
-                ),
-                (
-                    list(prepared_implementation.compilation_plan.changed_sections)
-                    if prepared_implementation.compilation_plan is not None
-                    else None
-                ),
-                _first_non_empty_line(implementation_text.parse_text),
-                _response_summary(
-                    text=implementation_response.text,
-                    raw_response=implementation_response.raw_response,
-                    usage=implementation_response.usage,
-                ),
-                _parse_failure_diagnostics(implementation_text),
-                error_msg,
-            )
-            raise
-
-        llm_response_payload["implementation"]["text"] = implementation_code
-        write_json(llm_request_path, llm_request_payload)
-        write_json(llm_response_path, llm_response_payload)
+        implementation_code = self._run_implementation_stage_with_retries(
+            route_id=route_id,
+            prepared=prepared_implementation,
+            llm_request_path=llm_request_path,
+            llm_response_path=llm_response_path,
+            llm_request_payload=llm_request_payload,
+            llm_response_payload=llm_response_payload,
+            organism_id=organism_id,
+            generation=generation,
+        )
 
         return CreationStageResult(
             parsed_design=accepted_parsed_design,

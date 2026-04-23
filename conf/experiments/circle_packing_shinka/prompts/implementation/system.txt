@@ -26,8 +26,9 @@ Scaffold discipline:
 
 Maternal inheritance rules:
 - when maternal base code is supplied, treat it as the concrete parent program
-- preserve inherited behavior outside the changed sections unless the child genes require a coordinated adjustment
-- preserve inherited high-score maternal behavior whenever the changed sections do not require altering it
+- preserve inherited behavior outside the changed sections unless the child genes require a coordinated adjustment or a distinct packing regime
+- when the changed sections still imply the same phenotype family, preserve strong inherited maternal behavior; if the child genes require a distinct packing regime or phenotype shift, rewrite enough of the maternal behavior to realize that shift faithfully
+- do not silently keep the maternal radius, layout, or repair regime when the child genes call for role-based radii, a new center family, a structural defect, or another distinct score-bearing mechanism
 - do not compensate for unchanged genes by rewriting unrelated behavior
 
 Single rewrite contract:

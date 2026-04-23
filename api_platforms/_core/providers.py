@@ -782,14 +782,10 @@ def generate_direct(route_cfg: ApiRouteConfig, request: LlmRequest) -> LlmRespon
                 f"organism_id={organism_id!r}, done_reason='length')."
             )
 
-        # Build the usable text from whatever Ollama returned.
-        # When think mode is enabled, some models put all output into the
-        # thinking field and leave content empty. We keep accepting that only
-        # when the response terminated normally; truncated thinking-only output
-        # is treated as an error above.
-        if content_text and thinking_text:
-            text = thinking_text + "\n\n" + content_text
-        elif content_text:
+        # Prefer final answer content for downstream parsers. Thinking is kept
+        # in raw_response for diagnostics and only used as a fallback when the
+        # model returned no content but did terminate normally.
+        if content_text:
             text = content_text
         elif thinking_text:
             text = thinking_text

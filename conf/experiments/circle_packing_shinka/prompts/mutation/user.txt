@@ -36,6 +36,8 @@ The result may revise several coupled sections when the mechanism requires it.
 Keep the mutation small in causal scope even when it spans multiple sections.
 Do not solve uncertainty by adding extra support genes everywhere; only add the minimum support needed for the new mechanism to make sense.
 Prefer edits that materially change the operating regime, not merely wording changes or cosmetic parameter nudges.
+A pure coefficient retuning is weak unless it clearly pushes the organism into a different packing family, radius regime, or repair regime.
+State how the child should differ in expected packing family or operating regime, and why the change is not merely the same one-radius layout with different repair tuning.
 Do NOT replace the core algorithmic structure — refine it.
 The result must be a full sectioned genetic code in the canonical format, not a partial diff.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing the parent.

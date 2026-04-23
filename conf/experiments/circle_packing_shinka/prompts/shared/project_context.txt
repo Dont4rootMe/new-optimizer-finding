@@ -79,6 +79,11 @@ If a score-bearing mechanism couples multiple sections, keep those sections coor
 
 Each organism should define a plausible causal path from its sectioned ideas to a higher packing score.
 Decorative section changes that do not alter the effective search or packing behavior are not enough.
+Textual novelty is not the same as phenotype novelty.
+Score-bearing novelty should plausibly change the expected packing family, radius regime, conflict dynamics, or another behavior-level operating regime.
+A new coefficient inside the same one-radius layout and repair regime is not a strong novelty claim by default.
+Uniform-radii organisms are allowed only when the genes explain why one shared radius should outperform a role-based or non-uniform regime for that packing family.
+Noise-like ingredients are supporting detail, not a valid main novelty by themselves.
 
 Lean-genome principle:
 - a stronger organism is not the one with the most section content

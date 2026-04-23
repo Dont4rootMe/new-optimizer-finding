@@ -24,6 +24,7 @@ Do:
 - the imported secondary module should usually modify at most one major causal block; do not use crossover as a license to rebuild the child into a dense multi-mechanism synthesis
 - if a transferred mechanism requires coordinated changes across multiple sections, perform those changes together
 - ensure the imported secondary module plausibly improves score when combined with the primary structure
+- ensure the imported secondary module changes the expected packing family, radius regime, geometry family, or repair/control regime rather than only the provenance story
 - avoid adding extra supporting detail just to make the imported module look more complete on paper; import only what is necessary for the mechanism to matter
 - prefer a secondary contribution that is easy to implement faithfully inside the primary structure over a verbally sophisticated but fragile recombination
 - compare parent scores in lineage to judge which parent's ideas contributed more value — lean toward preserving genes from the higher-scoring parent
@@ -42,6 +43,7 @@ Do not:
 - let either parent implementation override the selected child draft
 - turn the response into a direct solved arrangement instead of a sectioned gene-level design
 - force a coherent secondary module into isolated section fragments that lose causal meaning
+- present a recombination as strong when both parents still imply the same center family, the same radius regime, and the same repair/control regime with only wording drift or weak parameter movement
 - attribute a mechanism to the wrong parent or claim that crossover imported a module that the primary parent already contained
 - put a full end-to-end implementation in any genome section
 - put code in `CHANGE_DESCRIPTION`
@@ -85,8 +87,8 @@ State the computational style implied by the combined child design.
 Give one unified novelty summary describing what was inherited, synthesized, or redirected.
 Include:
 (1) which parent's ideas dominate and why
-(2) what the combined hypothesis is
+(2) what the combined hypothesis is and what new operating regime it should produce
 (3) what score improvement is expected and why
-Before finalizing it, audit that each provenance claim is supported by the parent genetic codes and that each mechanism claim is present in the child `CORE_GENES`.
+Before finalizing it, audit that each provenance claim is supported by the parent genetic codes, that each mechanism claim is present in the child `CORE_GENES`, and that the claimed improvement is not merely the same parent-shaped one-radius regime with a renamed imported module.
 The novelty summary should emphasize the one imported module and its effect, not produce a broad synthesis narrative.
 This must be plain-language only. No code, no code-like snippets, no implementation details.

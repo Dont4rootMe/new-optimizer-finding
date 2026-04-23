@@ -36,6 +36,8 @@ The result must be a full sectioned genetic code in the canonical format, intern
 The child remains a unit-square packing organism and must still produce exactly 26 total circles.
 Strengthen the child into a primary-parent-dominant organism with one coherent score-bearing imported module from the secondary parent if needed.
 If the child draft already contains too many partially merged ideas, simplify it toward one dominant primary structure plus one truly consequential secondary module.
+The imported module must change the expected packing family or operating regime, not only the provenance story.
+If both parents still imply the same phenotype family, reject weak recombination instead of assembling a cosmetic child.
 Do not preserve a weak recombination merely because it is coherent.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing one parent.
 Return the structured design directly. Do not add preface text before `## CORE_GENES`.

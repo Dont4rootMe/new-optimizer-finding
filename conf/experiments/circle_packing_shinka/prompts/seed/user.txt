@@ -19,5 +19,8 @@ Do not make the implementation stage choose among several possible constructions
 If the island style tempts a complex symmetry generator, prefer a simpler count-checked indexed-slot generator over D4 bookkeeping whose unique-center multiplicity is unclear.
 Do not output internal count-repair notes; the final `INIT_GEOMETRY` must contain one settled generator and one settled unique-center count.
 Prefer an organism whose sectioned hypothesis creates a plausible high-score packing mechanism, not just a formally complete genome.
+State one intended packing family and one intended radius regime.
+If you keep uniform radii, justify why that regime should outperform a role-based or non-uniform alternative for the intended family.
+Do not let a generic one-radius construction plus generic repair stand in for the actual score-bearing hypothesis.
 
 The final organism will later be implemented as code that must return a valid packing of 26 circles in the unit square.

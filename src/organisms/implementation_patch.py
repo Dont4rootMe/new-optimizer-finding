@@ -16,6 +16,7 @@ _SECTION_HINT_RE = re.compile(r"^[ \t]*# SECTION: ([A-Z][A-Z0-9_]*)[ \t]*$", re.
 _PATCH_NAMED_START_RE = re.compile(r"^REGION(?::[ \t]*|[ \t]+)([A-Z][A-Z0-9_]*)$")
 _PATCH_NAMED_END_RE = re.compile(r"^END_REGION(?::[ \t]*|[ \t]+)([A-Z][A-Z0-9_]*)$")
 _PATCH_SCAFFOLD_END_RE = re.compile(r"^[ \t]*# === END_REGION: ([A-Z][A-Z0-9_]*)(?: ===)?[ \t]*$")
+_PATCH_BARE_COMPILATION_RE = re.compile(r"^COMPILATION_MODE(?::[ \t]*|[ \t]+)?(FULL|PATCH)?$")
 
 
 @dataclass(frozen=True)
@@ -162,7 +163,9 @@ def parse_implementation_patch_response(
     if normalized_mode not in {_FULL_MODE, _PATCH_MODE}:
         raise ValueError("expected_mode must be FULL or PATCH.")
 
-    mode, region_bodies = _parse_patch_sections(text)
+    mode, region_bodies = _parse_patch_sections(
+        _normalize_implementation_patch_response_text(text, expected_mode=normalized_mode)
+    )
     if mode != normalized_mode:
         raise ValueError(f"Implementation patch mode must be {normalized_mode}, got {mode}.")
 
@@ -414,6 +417,65 @@ def _parse_patch_sections(text: str) -> tuple[str, tuple[tuple[str, str], ...]]:
         duplicates = sorted({name for name in actual_names if actual_names.count(name) > 1})
         raise ValueError(f"Implementation patch contains duplicate region(s): {', '.join(duplicates)}.")
     return mode, tuple(regions)
+
+
+def _normalize_implementation_patch_response_text(text: str, *, expected_mode: str) -> str:
+    """Convert common model artifact aliases into the canonical patch syntax."""
+
+    raw = str(text).replace("\r\n", "\n").replace("\r", "\n")
+    lines = raw.splitlines()
+    first_marker_index: int | None = None
+    first_marker_is_region = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if _is_compilation_mode_marker(stripped):
+            first_marker_index = index
+            break
+        if _is_region_marker(stripped):
+            first_marker_index = index
+            first_marker_is_region = True
+            break
+
+    if first_marker_index is None:
+        return raw.strip()
+
+    selected_lines = lines[first_marker_index:]
+    normalized_lines: list[str] = []
+    if first_marker_is_region:
+        normalized_lines.extend(("## COMPILATION_MODE", expected_mode, ""))
+
+    for line in selected_lines:
+        stripped = line.strip()
+        if stripped.startswith("##"):
+            normalized_lines.append(line)
+            continue
+        if _is_compilation_mode_marker(stripped):
+            normalized_lines.append("## " + stripped)
+            continue
+        if _is_region_marker(stripped):
+            if stripped.startswith("# === END_REGION:"):
+                normalized_lines.append(line)
+                continue
+            normalized_lines.append("## " + stripped)
+            continue
+        normalized_lines.append(line)
+
+    return "\n".join(normalized_lines).strip() + "\n"
+
+
+def _is_compilation_mode_marker(stripped_line: str) -> bool:
+    if stripped_line.startswith("## "):
+        stripped_line = stripped_line[3:].strip()
+    return _PATCH_BARE_COMPILATION_RE.match(stripped_line) is not None
+
+
+def _is_region_marker(stripped_line: str) -> bool:
+    if stripped_line.startswith("## "):
+        stripped_line = stripped_line[3:].strip()
+    return (
+        _parse_patch_region_name(stripped_line) is not None
+        or _parse_patch_end_region_name(stripped_line, stripped_line) is not None
+    )
 
 
 def _parse_inline_compilation_mode(header: str) -> str | None:

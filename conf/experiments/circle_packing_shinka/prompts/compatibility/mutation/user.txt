@@ -25,6 +25,8 @@ Decide whether the candidate is internally coherent as one organism and remains 
 The child must explicitly remain a unit-square packing design for exactly 26 total circles.
 Focus not only on contradiction-free structure, but on whether the sections define a plausible score-bearing mechanism worth implementing.
 Reject children whose changed sections are coherent on paper but too underconstrained or too over-elaborated to implement faithfully.
+Reject a candidate whose claimed improvement depends on a new geometry or radius regime but whose supporting sections still preserve the old phenotype family.
+Reject a mutation that leaves the same center family, the same radius regime, and the same repair/control regime in place while only changing story or support text.
 Focus on section completeness, cross-section consistency, support for the claimed hypothesis, and whether any code-like detail remains local rather than becoming a full implementation.
 Check `CHANGE_DESCRIPTION` against the parent, excluded ideas, and child sections: every claimed mutation must be visible in `CORE_GENES`, and no claim may describe retained or excluded material as a new mutation.
 Do not decide novelty here.

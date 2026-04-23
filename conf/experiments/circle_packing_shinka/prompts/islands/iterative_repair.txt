@@ -25,6 +25,8 @@ This island explores organisms that treat an initial hypothesis as something to 
 - Repairing overlaps by shrinking radii is safe but reduces the score; repairing by shifting positions preserves radii but may cascade
 - Rich multi-stage repair stacks can become implementation-heavy and score-destructive; prefer compact repair logic with clear priority rules
 - Avoid designs whose repair loop needs open-ended cascades, repeated alternative fallbacks, or implementation-time search to decide what the repair actually is
+- Repair-only refinement should lead to a distinguishable packing regime, not just a different convergence speed on the same phenotype family
+- Same center family, same global radius regime, and same repair loop with retuned constants is a weak direction unless the genes explain a genuine regime shift
 
 ## Design prompt
 
@@ -35,6 +37,7 @@ Good organisms on this island should specify:
 4. What the termination criterion is (max iterations, no violations, convergence tolerance)
 5. How radii are preserved during repair whenever possible
 6. One bounded repair loop that can be implemented directly without inventing additional machinery
+7. How the repair logic changes the feasible phenotype family rather than only the speed or tuning of convergence
 
 Do not treat this as a requirement to use any particular heuristic.
 The goal is a style of thinking, not a prescribed repair recipe.

@@ -336,6 +336,48 @@ def test_parse_implementation_patch_response_accepts_inline_compilation_mode_ali
     assert patch.region_bodies == (("PARAMETERS", "    init_radius = 0.02\n"),)
 
 
+def test_parse_implementation_patch_response_accepts_preamble_before_compilation_mode() -> None:
+    patch = parse_implementation_patch_response(
+        "Reasoning that should not be parsed as artifact.\n\n" + _patch_response("RADIUS_POLICY"),
+        expected_mode="PATCH",
+        expected_region_names=("RADIUS_POLICY",),
+    )
+
+    assert patch.compilation_mode == "PATCH"
+    assert patch.region_bodies == (("RADIUS_POLICY", "    # patched RADIUS_POLICY\n"),)
+
+
+def test_parse_implementation_patch_response_accepts_bare_compilation_mode_and_region_markers() -> None:
+    text = (
+        "COMPILATION_MODE: PATCH\n\n"
+        "REGION PARAMETERS\n"
+        "    init_radius = 0.02\n"
+        "END_REGION: PARAMETERS\n"
+    )
+
+    patch = parse_implementation_patch_response(
+        text,
+        expected_mode="PATCH",
+        expected_region_names=("PARAMETERS",),
+    )
+
+    assert patch.compilation_mode == "PATCH"
+    assert patch.region_bodies == (("PARAMETERS", "    init_radius = 0.02\n"),)
+
+
+def test_parse_implementation_patch_response_infers_expected_mode_from_bare_regions() -> None:
+    text = "REGION PARAMETERS\n    init_radius = 0.02\nEND_REGION\n"
+
+    patch = parse_implementation_patch_response(
+        text,
+        expected_mode="PATCH",
+        expected_region_names=("PARAMETERS",),
+    )
+
+    assert patch.compilation_mode == "PATCH"
+    assert patch.region_bodies == (("PARAMETERS", "    init_radius = 0.02\n"),)
+
+
 def test_parse_implementation_patch_response_accepts_scaffold_style_end_region_alias() -> None:
     text = (
         "## COMPILATION_MODE\n"

@@ -23,6 +23,7 @@ Reject the candidate if any of these are true:
 - a core quantitative definition in `CONFLICT_MODEL`, `RADIUS_POLICY`, or `EXPANSION_POLICY` is mathematically ill-posed or too vague to drive the claimed mechanism
 - `CONTROL_POLICY` introduces excessive orchestration relative to the actual mechanism, making the design fragile without adding a clear score-bearing role
 - the implementation would have to resolve multiple unstated alternatives, contradictory construction choices, or exploratory branches before it can produce code
+- the candidate falls back to a generic one-radius baseline without explaining why that radius regime should outperform plausible role-based or mixed-radius alternatives for the stated packing family
 - the candidate is formally coherent but score-inert, decorative, or does not define a plausible score-bearing mechanism worth implementing
 
 Reject only for one decisive reason. In `REJECTION_REASON`, write the shortest actionable plain-language fix target.

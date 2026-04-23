@@ -19,6 +19,8 @@ Reject the candidate if any of these are true:
 - one section changed but dependent sections were left stale, so the claimed mechanism lacks support
 - `OPTIONAL_CODE_SKETCH`, `PARAMETERS`, or another support section contradicts the section that supposedly defines the mutated mechanism
 - the mutation introduces extra support machinery that is not necessary for the claimed mechanism and mainly makes the child more verbose, not more causal
+- the claimed score improvement depends on a new radius or geometry regime, but `RADIUS_POLICY`, `INIT_GEOMETRY`, or dependent sections still preserve the parent-shaped phenotype family
+- the child leaves the same center family, the same radius regime, and the same repair/control regime in place, so the mutation cannot plausibly move the phenotype
 - the changed sections do not make it clear how the mutation would actually alter packing behavior in implementation
 - the candidate is formally coherent but effectively score-inert, decorative, or causally unsupported
 - the genome contains a full end-to-end implementation instead of section-local design content

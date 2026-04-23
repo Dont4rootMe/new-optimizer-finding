@@ -39,6 +39,7 @@ Fix the error while staying faithful to the genetic code.
 The full-file output format is only the repair interface contract; preserve unaffected scaffold regions and the inherited mechanism whenever possible.
 Repair the smallest affected code span consistent with the error history and preserve the current algorithm outside that span whenever possible.
 If the current implementation already realizes a strong mechanism imperfectly, repair it locally instead of replacing it with a weaker but safer generic algorithm.
+Do not repair the file by silently collapsing a distinct gene-implied phenotype back to a generic uniform safe layout when the genes call for a different radius or geometry regime.
 If the failure is that `run_packing()` does not return a 3-tuple, fix the return path first: compute arrays, compute `reported_sum = float(np.sum(radii))`, and return `centers, radii, reported_sum`.
 If the failure names specific entities, fix and re-check that exact local issue; if it reports a count or shape error, return exactly 26 final center/radius entries implied by the genes rather than repeated generated batches; if timeout appears, bound the implicated loop.
 Keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the file, and preserve code outside that block unless the file is too broken to keep safely.

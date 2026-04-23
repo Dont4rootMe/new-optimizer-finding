@@ -80,9 +80,28 @@ def test_parse_compatibility_judgment_rejects_malformed_verdict() -> None:
         )
 
 
-def test_parse_compatibility_judgment_rejects_missing_section() -> None:
-    with pytest.raises(ValueError, match="before the first section"):
-        parse_compatibility_judgment("COMPATIBILITY_ACCEPTED\nN/A\n")
+def test_parse_compatibility_judgment_accepts_compact_accepted_without_heading() -> None:
+    judgment = parse_compatibility_judgment("COMPATIBILITY_ACCEPTED\nN/A\n")
+
+    assert judgment.is_accepted is True
+    assert judgment.rejection_reason is None
+    assert judgment.sections_at_issue == ()
+
+
+def test_parse_compatibility_judgment_accepts_seed_log_compact_triplet() -> None:
+    judgment = parse_compatibility_judgment("COMPATIBILITY_ACCEPTED N/A NONE\n")
+
+    assert judgment.is_accepted is True
+    assert judgment.rejection_reason is None
+    assert judgment.sections_at_issue == ()
+
+
+def test_parse_compatibility_judgment_accepts_preamble_before_structured_artifact() -> None:
+    judgment = parse_compatibility_judgment("Reasoning that should be ignored.\n\n" + _accepted_text())
+
+    assert judgment.is_accepted is True
+    assert judgment.rejection_reason is None
+    assert judgment.sections_at_issue == ()
 
 
 def test_parse_compatibility_judgment_accepts_compacted_accepted_with_required_heading() -> None:

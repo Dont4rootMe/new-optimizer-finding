@@ -27,6 +27,7 @@ Do:
 - do not create fake locality by changing one section while leaving its dependencies stale
 - preserve the parent's core structural ideas — refine, extend, or tune them rather than replacing the paradigm
 - ensure the changed sections define a plausible causal route to higher score, not merely a different but coherent draft
+- ensure the changed sections imply a distinguishable packing family, radius regime, geometry family, or repair/control regime rather than only retuned coefficients inside the parent's phenotype
 - do not strengthen the child by adding explanatory redundancy or extra optional detail; strengthen it by sharpening the actual mechanism
 - make `CHANGE_DESCRIPTION` a claim-by-claim summary of the actual changed mechanism only; every named mechanism must appear in `CORE_GENES`
 - when describing provenance, distinguish inherited parent material from the new mutation and do not claim a mechanism was newly introduced if the child genes simply retained it
@@ -42,6 +43,7 @@ Do not:
 - force a coupled change into one section and leave supporting sections stale
 - backfill excluded ideas just to make the draft look more complete
 - reintroduce excluded ideas casually
+- present a coefficient-only retuning inside the same center family, same radius regime, and same repair loop as a major mutation unless the genes make a new operating regime explicit
 - attribute a mechanism to the mutation, to excluded material, or to the parent unless that attribution is directly supported by the child draft, parent genome, and changed sections
 - treat the implementation as the main artifact
 - output a ready-made full solution instead of a sectioned gene-level design
@@ -86,9 +88,9 @@ State the computational style implied by the child design.
 ## CHANGE_DESCRIPTION
 Give one unified novelty summary for the child relative to the parent.
 Include:
-(1) what hypothesis this mutation tests
+(1) what hypothesis this mutation tests and what new operating regime or packing family it should induce
 (2) why it should improve the score
 (3) what the expected failure mode is if it does not work
-Before finalizing it, audit that each mechanism named here is present in the relevant `CORE_GENES` section and that dependent sections were updated when the claim needs them.
+Before finalizing it, audit that each mechanism named here is present in the relevant `CORE_GENES` section, that dependent sections were updated when the claim needs them, and that the claim is not merely "the same one-radius layout with different repair tuning."
 `CHANGE_DESCRIPTION` should name one mechanism shift, not narrate every local edit.
 This must be plain-language only. No code, no code-like snippets, no implementation details.

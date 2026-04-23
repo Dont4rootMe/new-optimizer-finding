@@ -191,9 +191,8 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert set(cfg.experiments.keys()) == {"unit_square_26"}
     assert "safety" not in cfg
     assert set(cfg.api_platforms.keys()) == {
-        "ollama_qwen35_27b",
-        "ollama_gemma4_26b",
-        "ollama_nemotron_cascade_2_30b",
+        "ollama_gemma4_31b",
+        "ollama_qwen35_35b",
     }
     assert cfg.experiments.unit_square_26._target_ == "experiments.circle_packing_shinka.unit_square_26.UnitSquare26CirclePackingExperiment"
     assert cfg.experiments.unit_square_26.need_cuda is False
@@ -203,14 +202,14 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 20
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
-    assert cfg.evolver.max_generations == 50
-    assert cfg.evolver.max_organism_creations is False
+    assert cfg.evolver.max_generations is False
+    assert cfg.evolver.max_organism_creations == 150
     assert cfg.mode == "evolve"
     assert "organism_dir" not in cfg
-    assert cfg.evolver.creation.max_attempts_to_create_organism == 3
-    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
+    assert cfg.evolver.creation.max_attempts_to_create_organism == 1
+    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 3
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 1
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 1
     assert cfg.evolver.creation.max_parallel_organisms == 20
     assert cfg.evolver.prompts.genome_schema == "conf/experiments/circle_packing_shinka/prompts/shared/genome_schema.txt"
     assert cfg.evolver.prompts.compatibility_seed_system.endswith("/compatibility/seed/system.txt")
@@ -229,33 +228,31 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.reproduction.species_sampling.inter_island_crossover_softmax_temperature == 1.0
     assert "top_k_per_island" not in cfg.evolver.phases.simple
     assert cfg.evolver.phases.great_filter.top_h_per_island == 5
-    assert cfg.evolver.reproduction.offspring_per_generation == 8
+    assert cfg.evolver.reproduction.offspring_per_generation == 5
     assert set(cfg.evolver.llm.route_weights.keys()) == {
-        "ollama_qwen35_27b",
-        "ollama_gemma4_26b",
-        "ollama_nemotron_cascade_2_30b",
+        "ollama_gemma4_31b",
+        "ollama_qwen35_35b",
     }
-    assert cfg.evolver.llm.route_weights.ollama_qwen35_27b == 1.0
-    assert cfg.evolver.llm.route_weights.ollama_gemma4_26b == 1.0
-    assert cfg.evolver.llm.route_weights.ollama_nemotron_cascade_2_30b == 1.0
-    assert cfg.api_platforms.ollama_qwen35_27b.max_concurrency == 3
+    assert cfg.evolver.llm.route_weights.ollama_gemma4_31b == 1.0
+    assert cfg.evolver.llm.route_weights.ollama_qwen35_35b == 1.0
+    assert cfg.api_platforms.ollama_qwen35_35b.max_concurrency == 3
 
-    qwen_route = instantiate(cfg.api_platforms.ollama_qwen35_27b, _recursive_=False)
-    assert qwen_route.route_id == "ollama_qwen35_27b"
-    assert qwen_route.provider_model_id == "qwen3.5:27b"
-    assert qwen_route.base_url == "http://127.0.0.1:12436/api"
-    assert qwen_route.gpu_ranks
-    assert qwen_route.gpu_rank_groups == [list(qwen_route.gpu_ranks)]
+    qwen_route = instantiate(cfg.api_platforms.ollama_qwen35_35b, _recursive_=False)
+    assert qwen_route.route_id == "ollama_qwen35_35b"
+    assert qwen_route.provider_model_id == "qwen3.5:35b"
+    assert qwen_route.base_url == "http://127.0.0.1:12444/api"
+    assert qwen_route.gpu_ranks == [4, 5, 6, 7]
+    assert qwen_route.gpu_rank_groups == [[4], [5], [6], [7]]
     assert qwen_route.max_concurrency == 3
     assert qwen_route.max_output_tokens == 12288
     assert qwen_route.stage_options["design"]["think"] is False
-    assert qwen_route.stage_options["design"]["max_output_tokens"] == 6000
+    assert qwen_route.stage_options["design"]["max_output_tokens"] == 9000
     assert qwen_route.stage_options["implementation"]["think"] is False
-    assert qwen_route.stage_options["implementation"]["max_output_tokens"] == 6000
+    assert qwen_route.stage_options["implementation"]["max_output_tokens"] == 9000
     assert qwen_route.stage_options["repair"]["think"] is False
-    assert qwen_route.stage_options["repair"]["max_output_tokens"] == 6000
+    assert qwen_route.stage_options["repair"]["max_output_tokens"] == 9000
     assert qwen_route.stage_options["novelty_check"]["think"] is False
-    assert qwen_route.stage_options["novelty_check"]["max_output_tokens"] == 6000
+    assert qwen_route.stage_options["novelty_check"]["max_output_tokens"] == 9000
     assert qwen_route.request_options["num_ctx"] == 65536
 
 
@@ -269,10 +266,10 @@ def test_circle_packing_canonical_preset_accepts_standalone_validation_overrides
 
     assert cfg.mode == "run"
     assert cfg.organism_dir == "/tmp/organism"
-    assert cfg.evolver.creation.max_attempts_to_create_organism == 3
-    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
+    assert cfg.evolver.creation.max_attempts_to_create_organism == 1
+    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 3
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 1
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 1
     assert cfg.evolver.creation.max_parallel_organisms == 20
 
 

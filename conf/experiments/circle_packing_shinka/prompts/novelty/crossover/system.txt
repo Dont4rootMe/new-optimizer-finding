@@ -16,6 +16,9 @@ Reject the child if any of these are true:
 - it copies only a tiny compatible sentence or other weak fragment from the secondary parent without changing effective behavior
 - it is formally two-parental but the transferred secondary module is too small or inert to change behavior
 - the transferred secondary contribution is too weak to define a meaningful new operating regime
+- it preserves the same center-generation family, the same radius regime, and the same repair/control regime as the dominant parent while changing only provenance language or weak parameters
+- it retains a one-radius regime and parent-shaped packing family unless the transferred module clearly implies a different phenotype family
+- the transferred secondary contribution is only a coefficient retuning or support tweak without a plausible phenotype shift
 - it inflates the transferred secondary module with explanatory or supportive text but does not materially alter the child's behavior
 - the claimed novelty is vague or not reflected in the sectioned genes
 - `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
@@ -28,6 +31,7 @@ Accept the child if either:
 Important:
 - a faithful recombination across sections is valid novelty only when the combined child differs behaviorally, not just textually
 - a broad but shallow synthesis is not more novel than a compact but behavior-changing imported module
+- novelty is judged from the sectioned genes plus the expected operating regime or packing family they imply, not from wording alone
 - novelty is not created merely by changing wording, formatting, or section placement
 
 ## Output discipline

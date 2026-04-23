@@ -57,10 +57,20 @@ def parse_compatibility_judgment(
     """Parse compatibility-judge output into a strict verdict object."""
 
     _ = expected_section_names
-    try:
-        parsed = _parse_exact_judgment_sections(text, _COMPATIBILITY_SECTIONS)
-    except ValueError as exact_error:
-        return _parse_compact_compatibility_judgment(text, exact_error=exact_error)
+    exact_errors: list[ValueError] = []
+    for candidate_text in _compatibility_judgment_candidates(text):
+        try:
+            parsed = _parse_exact_judgment_sections(candidate_text, _COMPATIBILITY_SECTIONS)
+        except ValueError as exact_error:
+            exact_errors.append(exact_error)
+            continue
+        return _build_compatibility_judgment(parsed)
+
+    exact_error = exact_errors[-1] if exact_errors else ValueError("Compatibility judgment is empty.")
+    return _parse_compact_compatibility_judgment(text, exact_error=exact_error)
+
+
+def _build_compatibility_judgment(parsed: dict[str, str]) -> CompatibilityJudgment:
     verdict = require_response_section(parsed, "COMPATIBILITY_VERDICT").strip()
     if verdict not in {_COMPATIBILITY_ACCEPTED, _COMPATIBILITY_REJECTED}:
         raise ValueError(
@@ -87,13 +97,21 @@ def parse_compatibility_judgment(
     )
 
 
-def _parse_compact_compatibility_judgment(text: str, *, exact_error: ValueError) -> CompatibilityJudgment:
-    """Accept common Ollama compactions that still start with the required heading.
+def _compatibility_judgment_candidates(text: str) -> tuple[str, ...]:
+    raw = str(text).strip()
+    if not raw:
+        return ()
 
-    This is intentionally narrow: compact replies without the required markdown
-    heading remain invalid, but models that collapse the verdict/reason onto the
-    heading line no longer burn a full regeneration attempt.
-    """
+    candidates = [raw]
+    marker = "## COMPATIBILITY_VERDICT"
+    marker_index = raw.rfind(marker)
+    if marker_index > 0:
+        candidates.append(raw[marker_index:].strip())
+    return tuple(dict.fromkeys(candidates))
+
+
+def _parse_compact_compatibility_judgment(text: str, *, exact_error: ValueError) -> CompatibilityJudgment:
+    """Accept common compact verdict forms without relaxing the verdict contract."""
 
     lines = [line.strip() for line in str(text).splitlines() if line.strip()]
     if not lines:
@@ -105,6 +123,9 @@ def _parse_compact_compatibility_judgment(text: str, *, exact_error: ValueError)
     elif first.startswith("## COMPATIBILITY_VERDICT "):
         tail_parts = [first.removeprefix("## COMPATIBILITY_VERDICT ").strip(), *lines[1:]]
     else:
+        compact_from_tokens = _parse_tokenized_compact_compatibility_judgment(text)
+        if compact_from_tokens is not None:
+            return compact_from_tokens
         raise exact_error
 
     compact_text = "\n".join(tail_parts).strip()
@@ -131,6 +152,44 @@ def _parse_compact_compatibility_judgment(text: str, *, exact_error: ValueError)
             )
 
     raise exact_error
+
+
+def _parse_tokenized_compact_compatibility_judgment(text: str) -> CompatibilityJudgment | None:
+    tokens = str(text).strip().split()
+    verdict_positions = [
+        index for index, token in enumerate(tokens) if token in {_COMPATIBILITY_ACCEPTED, _COMPATIBILITY_REJECTED}
+    ]
+    if not verdict_positions:
+        return None
+
+    verdict_index = verdict_positions[-1]
+    verdict = tokens[verdict_index]
+    tail = tokens[verdict_index + 1 :]
+
+    if verdict == _COMPATIBILITY_ACCEPTED:
+        accepted_tail = [token for token in tail if token not in {"REJECTION_REASON", "SECTIONS_AT_ISSUE"}]
+        if not accepted_tail or all(token in {"N/A", "NONE"} for token in accepted_tail):
+            return CompatibilityJudgment(
+                verdict=_COMPATIBILITY_ACCEPTED,
+                rejection_reason=None,
+                sections_at_issue=(),
+            )
+        return None
+
+    if tail and tail[0] == "REJECTION_REASON":
+        tail = tail[1:]
+    if not tail or tail[0] == "N/A":
+        raise ValueError("Rejected compatibility judgments require a non-empty REJECTION_REASON.")
+    if "SECTIONS_AT_ISSUE" in tail:
+        tail = tail[: tail.index("SECTIONS_AT_ISSUE")]
+    reason = " ".join(tail).strip()
+    if not reason or reason == "N/A":
+        raise ValueError("Rejected compatibility judgments require a non-empty REJECTION_REASON.")
+    return CompatibilityJudgment(
+        verdict=_COMPATIBILITY_REJECTED,
+        rejection_reason=reason,
+        sections_at_issue=(),
+    )
 
 
 def _strip_reason_heading_alias(text: str) -> str:
