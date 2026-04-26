@@ -1,6 +1,5 @@
 defaults:
   - evolver: awtf2025_heuristic
-  - api_platforms@api_platforms.ollama_nemotron_cascade_2_30b: ollama_nemotron_cascade_2_30b
   - api_platforms@api_platforms.ollama_qwen35_35b: ollama_qwen35_35b
   - api_platforms@api_platforms.ollama_gemma4_31b: ollama_gemma4_31b
   - experiments@experiments.group_commands_and_wall_planning: awtf2025_heuristic/group_commands_and_wall_planning
