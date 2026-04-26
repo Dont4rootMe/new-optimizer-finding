@@ -961,6 +961,26 @@ class EvolutionLoop:
     def _plan_seed_population(self) -> list[PlannedOrganismCreation]:
         if self.seed_organisms_per_island <= 0:
             return []
+        target_by_island = {
+            island.island_id: self.seed_organisms_per_island for island in self.islands
+        }
+        return self._plan_seed_attempts(target_by_island)
+
+    def _plan_seed_attempts(
+        self,
+        target_by_island: dict[str, int],
+    ) -> list[PlannedOrganismCreation]:
+        """Plan a batch of seed attempts with a per-island target count.
+
+        Used both by the initial seed pass (each island gets ``seed_organisms_per_island``)
+        and by the top-up rounds in ``seed_population`` (each island gets only its current
+        deficit). Each planned attempt writes an ``organism.json`` stub, which means it is
+        counted by ``_organism_creation_attempt_count`` and consumes one slot of the
+        ``max_organism_creations`` budget regardless of whether the LLM creation later
+        succeeds or fails.
+        """
+        if not target_by_island or all(target <= 0 for target in target_by_island.values()):
+            return []
         remaining_budget = self._remaining_organism_creation_budget()
         if remaining_budget is not None and remaining_budget <= 0:
             return []
@@ -968,7 +988,8 @@ class EvolutionLoop:
         gen_dir = generation_dir(self.population_root, 0)
         planned_organisms: list[PlannedOrganismCreation] = []
         for island in self.islands:
-            for _ in range(self.seed_organisms_per_island):
+            target = max(0, int(target_by_island.get(island.island_id, 0)))
+            for _ in range(target):
                 if remaining_budget is not None and len(planned_organisms) >= remaining_budget:
                     return planned_organisms
                 organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=island.island_id)
@@ -1828,6 +1849,9 @@ class EvolutionLoop:
                 f"max_parallel_organisms={self.max_parallel_organisms})"
             )
             state = self._load_state()
+            all_planned: list[PlannedOrganismCreation] = []
+            all_newborns: list[OrganismMeta] = []
+
             if state is not None:
                 if isinstance(state.get("inflight_generation"), dict):
                     raise RuntimeError(
@@ -1835,26 +1859,110 @@ class EvolutionLoop:
                     )
                 inflight_seed = state.get("inflight_seed")
                 if isinstance(inflight_seed, dict):
-                    planned_organisms = self._restore_inflight_seed(inflight_seed)
+                    inflight_planned = self._restore_inflight_seed(inflight_seed)
+                    all_planned.extend(inflight_planned)
+                    inflight_newborns = await self._execute_planned_creations(
+                        inflight_planned, state_kind="seed"
+                    )
+                    all_newborns.extend(inflight_newborns)
                 else:
                     raise RuntimeError(
                         "Population is already initialized. Refusing to reseed an existing population root."
                     )
-            else:
-                planned_organisms = self._plan_seed_population()
 
-            newborns = await self._execute_planned_creations(planned_organisms, state_kind="seed")
+            target_per_island = self.seed_organisms_per_island
+            stop_reason: str | None = None
+            round_index = 0
+            while True:
+                round_index += 1
+
+                successful_by_island: dict[str, int] = {
+                    island.island_id: 0 for island in self.islands
+                }
+                for organism in all_newborns:
+                    if organism.island_id in successful_by_island:
+                        successful_by_island[organism.island_id] += 1
+
+                deficit_by_island = {
+                    island.island_id: max(
+                        0, target_per_island - successful_by_island.get(island.island_id, 0)
+                    )
+                    for island in self.islands
+                }
+                total_deficit = sum(deficit_by_island.values())
+                if total_deficit == 0:
+                    stop_reason = "target_reached"
+                    break
+
+                remaining_budget = self._remaining_organism_creation_budget()
+                if remaining_budget is not None and remaining_budget <= 0:
+                    stop_reason = f"max_organism_creations={self.max_organism_creations}"
+                    _announce(
+                        f"seed top-up: stopping before round {round_index} "
+                        f"because organism-creation budget is exhausted "
+                        f"(remaining_deficit={total_deficit}, deficit_by_island={deficit_by_island})"
+                    )
+                    break
+
+                _announce(
+                    f"seed round {round_index}: planning {total_deficit} attempt(s) "
+                    f"(target_per_island={target_per_island}, "
+                    f"successful_by_island={successful_by_island}, "
+                    f"deficit_by_island={deficit_by_island}, "
+                    f"remaining_budget={remaining_budget if remaining_budget is not None else 'unlimited'})"
+                )
+                planned_batch = self._plan_seed_attempts(deficit_by_island)
+                if not planned_batch:
+                    stop_reason = f"max_organism_creations={self.max_organism_creations}"
+                    _announce(
+                        f"seed top-up: cannot plan more attempts in round {round_index} "
+                        f"(budget cap reached, remaining_deficit={total_deficit})"
+                    )
+                    break
+                all_planned.extend(planned_batch)
+
+                pre_round_success = len(all_newborns)
+                batch_newborns = await self._execute_planned_creations(
+                    planned_batch, state_kind="seed"
+                )
+                all_newborns.extend(batch_newborns)
+                round_successes = len(all_newborns) - pre_round_success
+                _announce(
+                    f"seed round {round_index} done: planned={len(planned_batch)}, "
+                    f"succeeded={round_successes}, "
+                    f"cumulative_successes={len(all_newborns)}"
+                )
+                if round_successes == 0:
+                    stop_reason = "no_progress"
+                    _announce(
+                        f"seed top-up: stopping after round {round_index} because no organism "
+                        f"succeeded this round (remaining_deficit={total_deficit - 0}); "
+                        f"the LLM pipeline appears unable to produce a valid seed organism"
+                    )
+                    break
+
+            if stop_reason and stop_reason != "target_reached":
+                _announce(
+                    f"seed top-up finished with stop_reason={stop_reason}, "
+                    f"total_planned={len(all_planned)}, total_succeeded={len(all_newborns)}"
+                )
+            else:
+                _announce(
+                    f"seed top-up finished: every island reached target_per_island={target_per_island} "
+                    f"(total_planned={len(all_planned)}, total_succeeded={len(all_newborns)})"
+                )
+
             self.population = select_top_k_per_island(
-                newborns,
+                all_newborns,
                 self.max_organisms_per_island,
                 score_field="simple_score",
             )
-            if planned_organisms and not self.population:
-                failure_message = self._seed_failure_message(planned_organisms, newborns)
+            if all_planned and not self.population:
+                failure_message = self._seed_failure_message(all_planned, all_newborns)
                 _announce(failure_message)
-                self._persist_inflight_seed(planned_organisms)
+                self._persist_inflight_seed(all_planned)
                 raise RuntimeError(failure_message)
-            self._mark_eliminated(newborns, self.population)
+            self._mark_eliminated(all_newborns, self.population)
             for organism in self.population:
                 organism.current_generation_active = 0
                 write_organism_meta(organism)

@@ -28,68 +28,55 @@ paths:
   ollama_cache_root: ${oc.env:OLLAMA_MODELS,./ollama_cache}
 
 evolver:
-  creation:
-    max_parallel_organisms: 15
   llm:
     route_weights:
-      ollama_nemotron_cascade_2_30b: 1.0
-      ollama_qwen35_35b: 1.0
       ollama_gemma4_31b: 1.0
+      ollama_qwen35_35b: 1.0
 
 api_platforms:
-  ollama_nemotron_cascade_2_30b:
-    base_url: ${oc.env:OLLAMA_NEMOTRON_CASCADE_2_30B_BASE_URL,http://127.0.0.1:12439/api}
-    gpu_ranks: [5]
+  ollama_gemma4_31b:
+    base_url: ${oc.env:OLLAMA_GEMMA4_31B_BASE_URL,http://127.0.0.1:12454/api}
+    gpu_ranks: 
+      - [0]
+      - [1]
+      - [2]
+      - [3]
     max_concurrency: 3
     stage_options:
       design:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 9000
       implementation:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 9000
       repair:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 9000
       novelty_check:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 9000
 
   ollama_qwen35_35b:
-    base_url: ${oc.env:OLLAMA_QWEN35_35B_BASE_URL,http://127.0.0.1:12438/api}
-    gpu_ranks: [4]
+    base_url: ${oc.env:OLLAMA_QWEN35_35B_BASE_URL,http://127.0.0.1:12444/api}
+    gpu_ranks: 
+      - [4]
+      - [5]
+      - [6]
+      - [7]
     max_concurrency: 3
     stage_options:
       design:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 9000
       implementation:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 9000
       repair:
         think: false
-        max_output_tokens: 6000
+        max_output_tokens: 9000
       novelty_check:
         think: false
-        max_output_tokens: 6000
-
-  ollama_gemma4_31b:
-    base_url: ${oc.env:OLLAMA_GEMMA4_31B_BASE_URL,http://127.0.0.1:12437/api}
-    gpu_ranks: [3]
-    max_concurrency: 3
-    stage_options:
-      design:
-        think: false
-        max_output_tokens: 6000
-      implementation:
-        think: false
-        max_output_tokens: 6000
-      repair:
-        think: false
-        max_output_tokens: 6000
-      novelty_check:
-        think: false
-        max_output_tokens: 6000
+        max_output_tokens: 9000
 
 hydra:
   run:

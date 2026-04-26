@@ -10,7 +10,7 @@ creation:
   max_attempts_to_repair_organism_after_error: 2
   max_attempts_to_regenerate_organism_after_novelty_rejection: 2
   max_attempts_to_regenerate_organism_after_compatibility_rejection: 3
-  max_parallel_organisms: 8
+  max_parallel_organisms: 15
 
 islands:
   dir: conf/experiments/awtf2025_heuristic/prompts/islands
@@ -100,6 +100,5 @@ llm:
   seed: 123
 
   route_weights:
-    ollama_nemotron_cascade_2_30b: 1.0
-    ollama_qwen35_35b: 1.0
     ollama_gemma4_31b: 1.0
+    ollama_qwen35_35b: 1.0
