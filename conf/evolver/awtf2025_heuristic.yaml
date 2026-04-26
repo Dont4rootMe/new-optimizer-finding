@@ -14,8 +14,8 @@ creation:
 
 islands:
   dir: conf/experiments/awtf2025_heuristic/prompts/islands
-  seed_organisms_per_island: 10
-  max_organisms_per_island: 30
+  seed_organisms_per_island: 5
+  max_organisms_per_island: 10
 
 prompts:
   project_context: conf/experiments/awtf2025_heuristic/prompts/shared/project_context.txt
@@ -47,7 +47,7 @@ prompts:
   repair_user: conf/experiments/awtf2025_heuristic/prompts/repair/user.txt
 
 reproduction:
-  offspring_per_generation: 15
+  offspring_per_generation: 10
   operator_selection_strategy: random
   operator_weights:
     within_island_crossover: 0.7
