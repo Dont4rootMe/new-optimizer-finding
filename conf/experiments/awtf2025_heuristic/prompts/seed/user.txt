@@ -11,7 +11,15 @@ The schema below is authoritative for the structure and meaning of CORE_GENES.
 {genome_schema}
 
 Your task is to generate an idea set first.
-Do not optimize the wording toward a ready-made move script.
+Do not optimize the wording toward a ready-made move script or a ready-made wall pattern.
 Produce a full sectioned genetic code whose content obeys the schema and whose sections all appear in the required order.
+Prefer compact, implementable section content over ambitious but over-specified multi-part designs.
+Avoid wall, group, or routing rules whose feasibility depends on resolving an implicit planning puzzle at implementation time; define one compact deterministic construction path that consumes only the input parameters `N` and `K`, the parsed initial walls, and the parsed robot and target positions.
+If the island style tempts a complex multi-phase orchestration, prefer a simpler one-phase regime with a clear progress measure over a brittle stage chain whose stage transitions are unclear.
+Do not output internal planning notes; the final `MACRO_STRATEGY` must contain one settled global hypothesis and the later sections must remain consistent with it.
+Prefer an organism whose sectioned hypothesis creates a plausible score-reducing mechanism, not just a formally complete genome.
+State one intended wall family, one intended grouping family, and one intended routing family.
+If you keep every robot in its own group, justify why that regime should outperform a grouping that exploits shared progress for the intended routing family.
+Do not let a generic no-walls single-group default stand in for the actual score-bearing hypothesis.
 
-The final organism will later be implemented as code that must return a legal contest output string from `solve_case(input_text)`.
+The final organism will later be implemented as code that must return a contest-legal output string from `solve_case(input_text)` and respect the operation budget `T <= K * N * N`.

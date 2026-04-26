@@ -23,5 +23,9 @@ These ideas were explicitly removed during mutation sampling.
 === TASK ===
 The evolved child draft itself is a valid source of novelty.
 Accept a candidate that stays faithful to that selected sectioned child draft, even if it does not add one more post-sampling idea, as long as it does not collapse back to the parent in substance.
-Reject a candidate that mainly restores excluded ideas, reconstructs the parent, only rephrases parent ideas, or only reshuffles ideas across sections without substantive change.
+Reject a candidate that mainly restores excluded ideas, reconstructs the parent, only rephrases parent ideas, only reshuffles ideas across sections without substantive change, or is too weak to change the organism's effective behavior on the contest output.
+Reject children whose claimed mutation is only cosmetic or too weak to change the organism's effective behavior.
+Reject a candidate that keeps the same wall family, the same grouping family, the same routing family, and the same repair regime while only retelling the story or weakly retuning coefficients.
+Reject a retained single-group-per-robot regime unless the child genes make a genuinely different operating regime explicit.
+Reject children whose apparent novelty comes mainly from elaboration, not from a changed mechanism.
 If `CHANGE_DESCRIPTION` overclaims novelty that the sectioned genes do not support, reject it.

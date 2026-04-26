@@ -4,7 +4,9 @@ You are mutating one awtf2025 heuristic organism into a child.
 
 Mutation is hill climbing, not random restart.
 The parent already works and has a known score.
-Your job is to make ONE targeted improvement to the child draft: sharpen a parameter choice, add a refinement step, or swap ONE secondary mechanism.
+Your job is to make one coherent score-seeking hypothesis change to the child draft.
+This is not one literal tiny edit. If the mechanism is coupled, the change may span multiple sections.
+A multi-section mutation is still valid when it remains one coherent extension or refinement of the inherited organism rather than a hidden paradigm restart.
 Preserve the core heuristic paradigm of the parent and of the selected child draft.
 
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
@@ -17,21 +19,36 @@ Priority order:
 
 Do:
 - treat the child draft as the current research object
-- if the child draft already states a coherent full sectioned hypothesis, you may keep it essentially intact and only clarify or lightly tighten it
-- make the smallest change that could plausibly reduce the absolute score
-- preserve the parent's core structural ideas
-- prefer section-local mutation: change the smallest number of sections needed
+- strengthen the child draft into a more score-seeking organism instead of restarting from the parent
+- edit the smallest coherent module needed to test the new hypothesis
+- the coherent change should usually alter at most one causal module; avoid appending extra support machinery unless it is strictly required
+- if a real mechanism requires coordinated changes across multiple sections (for example, a new wall family that only pays off under a matching group definition and a matching staged release), make those changes together
+- if the mutation touches more than four sections, that is usually too broad unless the draft itself already tightly couples those sections
+- do not create fake locality by changing one section while leaving its dependencies stale
+- preserve the parent's core structural ideas — refine, extend, or tune them rather than replacing the paradigm
+- ensure the changed sections define a plausible causal route to a lower absolute score, not merely a different but coherent draft
+- ensure the changed sections imply a distinguishable wall family, grouping family, routing family, or repair regime rather than only retuned coefficients inside the parent's effective behavior
+- do not strengthen the child by adding explanatory redundancy or extra optional detail; strengthen it by sharpening the actual mechanism
+- never reintroduce hardcoded `N` or `K` constants; the mutation must remain input-parameterized
+- never propose a mechanism that would push `T` above the per-case budget `K * N * N`
+- make `CHANGE_DESCRIPTION` a claim-by-claim summary of the actual changed mechanism only; every named mechanism must appear in `CORE_GENES`
+- when describing provenance, distinguish inherited parent material from the new mutation and do not claim a mechanism was newly introduced if the child genes simply retained it
 - keep genes atomic within each section
 - if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
 - produce one unified novelty summary for lineage
 
 Do not:
 - replace the parent's core heuristic paradigm
-- make more than one major change at a time
-- rebuild the whole organism when a section-local edit is sufficient
+- make more than one major hypothesis change at a time
+- rebuild the whole organism when a coherent inherited refinement suffices
 - move ideas into a different section unless that move is genuinely required for coherence
+- force a coupled change into one section and leave supporting sections stale
 - backfill excluded ideas just to make the draft look more complete
-- output a ready-made full solution instead of a sectioned gene-level design
+- reintroduce excluded ideas casually
+- present a coefficient-only retuning inside the same wall, group, routing, and repair regime as a major mutation unless the genes make a new operating regime explicit
+- attribute a mechanism to the mutation, to excluded material, or to the parent unless that attribution is directly supported by the child draft, parent genome, and changed sections
+- treat the implementation as the main artifact
+- output a ready-made full move script instead of a sectioned gene-level design
 - put a full end-to-end implementation in any genome section
 - put code in `CHANGE_DESCRIPTION`
 
@@ -65,15 +82,17 @@ Rules for subsection bodies:
 - do not use nested headings inside subsection bodies
 
 ## INTERACTION_NOTES
-State what assumptions the child idea set makes, how the sectioned design works together, and where it is likely to help or fail.
+State what assumptions the child idea set makes, how the sectioned heuristic design works together, and where it is likely to help or fail.
 
 ## COMPUTE_NOTES
-State the computational style implied by the child design.
+State the computational style implied by the child design, including how it stays within `T <= K * N * N` and how it avoids unbounded loops.
 
 ## CHANGE_DESCRIPTION
 Give one unified novelty summary for the child relative to the parent.
 Include:
-(1) what hypothesis this mutation tests
-(2) why it should reduce the absolute score
+(1) what hypothesis this mutation tests and what new operating regime or wall, group, or routing family it should induce
+(2) why it should reduce the absolute contest score
 (3) what the expected failure mode is if it does not work
+Before finalizing it, audit that each mechanism named here is present in the relevant `CORE_GENES` section, that dependent sections were updated when the claim needs them, and that the claim is not merely "the same regime with different repair tuning."
+`CHANGE_DESCRIPTION` should name one mechanism shift, not narrate every local edit.
 This must be plain-language only. No code, no code-like snippets, no implementation details.

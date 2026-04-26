@@ -9,20 +9,21 @@ Argument:
   - `input_text`: the full contest input for exactly one case
 
 Return value:
-  - one string containing the full contest output for that case
+  - one string containing the full contest output for that case, formed by joining the four blocks below with newlines
 
 Required output structure:
-  1. `N` lines of vertical added-wall bits, each length `N - 1`
-  2. `N - 1` lines of horizontal added-wall bits, each length `N`
-  3. `K` integers assigning every robot to a group in `[0, K - 1]`
-  4. zero or more operations, each line formatted as `a b d`
+  1. `N` lines of vertical added-wall bits, each line a bitstring of length `N - 1` over `{{0, 1}}`
+  2. `N - 1` lines of horizontal added-wall bits, each line a bitstring of length `N` over `{{0, 1}}`
+  3. `K` lines of group ids, each line one integer in `[0, K - 1]`, where line `r` assigns robot `r` to a group
+  4. zero or more operation lines, each formatted as `a b d`
 
 Evaluator rules:
-  - added walls are merged with the original walls
+  - added walls are merged with the original walls; original walls are never deleted
   - operation type `a` must be `g` or `i`
   - direction `d` must be `U`, `D`, `L`, or `R`
   - the move count must be at most `K * N * N`
   - lower absolute score is better: `T + 100 * sum_k Manhattan(final_position_k, target_k)`
+  - `N` and `K` are read from the first input line; never hardcode their values
 
 === COMPILATION MODE ===
 {compilation_mode}
@@ -50,12 +51,17 @@ Produce scaffold region bodies for this organism.
 
 If COMPILATION_MODE is FULL:
 - compile all canonical regions from the scaffold
+- realize the supplied genes faithfully and preserve the score-seeking behavior they describe
 
 If COMPILATION_MODE is PATCH:
 - compile only the listed CHANGED_SECTIONS
 - do not compile any unchanged section
 - the repository will preserve unchanged maternal regions byte-for-byte
+- use CHANGED_SECTIONS as the main list of causal modules that must differ from the maternal implementation
+- preserve unaffected strong inherited behavior unless the child genes require a distinct heuristic regime or phenotype shift
+- if the child genes imply a distinct wall, grouping, routing, or repair regime, rewrite enough of the affected regions to realize that regime instead of preserving the old one silently
 
 Be faithful to the supplied sectioned genes and the change description.
 Do not output a full `implementation.py`.
 Return only the patch artifact in the required format.
+Do not output markdown fences or commentary.

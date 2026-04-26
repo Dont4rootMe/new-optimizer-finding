@@ -1,4 +1,4 @@
-Repair this awtf2025 organism implementation.
+Repair this awtf2025 heuristic organism implementation.
 
 === FUNCTION CONTRACT ===
 The function you must fix:
@@ -6,21 +6,23 @@ The function you must fix:
     def solve_case(input_text: str) -> str:
 
 Argument:
-  - the full contest input for one case
+  - `input_text`: the full contest input for one case
 
 Return value:
   - the full contest output string for that case
 
 Required output structure:
-  1. `N` lines of vertical added-wall bits, each length `N - 1`
-  2. `N - 1` lines of horizontal added-wall bits, each length `N`
-  3. `K` integers assigning every robot to a group in `[0, K - 1]`
-  4. zero or more operation lines `a b d`
+  1. `N` lines of vertical added-wall bits, each line a bitstring of length `N - 1` over `{{0, 1}}`
+  2. `N - 1` lines of horizontal added-wall bits, each line a bitstring of length `N` over `{{0, 1}}`
+  3. `K` lines of group ids, each line one integer in `[0, K - 1]`
+  4. zero or more operation lines `a b d` with `a in {{g, i}}`, valid group/robot index, and `d in {{U, D, L, R}}`
 
 Constraints:
   - output must parse as a legal contest solution
   - operation count must be at most `K * N * N`
   - evaluator minimizes absolute score `T + 100 * sum_k Manhattan(final_position_k, target_k)`
+  - `N` and `K` are read from the first input line; never hardcode them
+  - the program must be deterministic and use only the Python standard library
 
 === ORGANISM GENETIC CODE ===
 {organism_genetic_code}
@@ -46,5 +48,13 @@ Return a full Python file, not a region patch.
 === ERROR HISTORY ===
 {error_history}
 
-Fix the error while staying faithful to the genetic code. If the error history shows syntax, name, parsing, malformed-output, or operation-limit failures, prefer a short stable rewrite over a minimal textual edit.
+Fix the error while staying faithful to the genetic code.
+The full-file output format is only the repair interface contract; preserve unaffected scaffold regions and the inherited mechanism whenever possible.
+Repair the smallest affected code span consistent with the error history and preserve the current heuristic outside that span whenever possible.
+If the current implementation already realizes a strong mechanism imperfectly, repair it locally instead of replacing it with a weaker but safer trivial baseline.
+Do not repair the file by silently collapsing a distinct gene-implied regime back to the trivial baseline (zero walls, single group, no operations) when the genes call for a real wall, grouping, routing, or repair regime.
+If the failure is that `solve_case(...)` does not return a string or has the wrong signature, fix the signature and return path first: parse `N` and `K` from the input, build the four output blocks, and return their newline-joined concatenation.
+If the failure names a specific output-shape or operation-budget issue, fix and re-check that exact local issue; if a count or shape error is reported, derive the correct counts from `N` and `K` rather than from any hardcoded constant.
+If a timeout appears, bound the implicated loop; never use unbounded `while True` without a hard counter tied to `N`, `K`, or `K * N * N`.
+Do not replace the whole heuristic with a short generic implementation unless no local repair is viable.
 Return ONLY the corrected full `implementation.py` text. No markdown fences, no commentary.

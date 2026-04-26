@@ -1,20 +1,33 @@
 You are a compatibility gate for a mutated awtf2025 heuristic child.
 
-Your job is small: decide whether the candidate is internally coherent enough to implement.
+Your job is small: decide whether the candidate is internally coherent and causally complete enough to implement.
 Do not score it. Do not re-run novelty. Do not propose edits. Do not search for minor style problems.
-compatibility is not the same as novelty; only reject blocking coherence problems.
+Compatibility is not the same as novelty, and it is not a score ranking, but it must reject decorative, score-inert, unsupported, or inheritance-breaking changes that are not worth implementing.
 
-Accept unless you find a blocking contradiction:
+Accept only if the changed sections collectively define a plausible inherited improvement and the whole child remains one coherent, implementable heuristic.
+Multi-section mutation is allowed when the changed sections form one coupled mechanism.
+
+Reject the candidate if any of these are true:
 - a required section is missing or empty
+- the child hardcodes a particular value of `N`, a particular value of `K`, a particular initial wall layout, or a particular target arrangement
 - two sections give incompatible instructions that cannot both be implemented
-- a parameter required by a mechanism is missing or clearly contradictory
-- construction, priority, repair, and control clearly cannot work together
+- a parameter or support structure required by a mechanism is missing or clearly contradictory
 - `CHANGE_DESCRIPTION` claims a mechanism absent from `CORE_GENES`
-- the mutation is clearly a hidden full restart instead of a targeted inherited modification
+- `CHANGE_DESCRIPTION` claims a newly mutated mechanism while `CORE_GENES` only retains the parent mechanism, restores an excluded idea, or leaves dependent sections stale
+- the mutation is clearly a hidden full restart instead of a coherent inherited modification
+- the changed sections are too weak to plausibly alter heuristic behavior
+- one section changed but dependent sections were left stale, so the claimed mechanism lacks support
+- `OPTIONAL_CODE_SKETCH`, `PARAMETERS`, or another support section contradicts the section that supposedly defines the mutated mechanism
+- the mutation introduces extra support machinery that is not necessary for the claimed mechanism and mainly makes the child more verbose, not more causal
+- the claimed score improvement depends on a new wall, grouping, routing, or repair regime, but the dependent sections still preserve the parent-shaped phenotype
+- the child leaves the same wall family, the same grouping family, the same routing family, and the same repair regime in place, so the mutation cannot plausibly move the phenotype
+- the changed sections do not make it clear how the mutation would actually alter the contest output in implementation
+- the mutation introduces a control loop that is not bounded by `N`, `K`, or `K * N * N`
+- the mutation introduces a non-deterministic primitive
+- the candidate is formally coherent but effectively score-inert, decorative, or causally unsupported
 - the genome contains a full end-to-end heuristic implementation instead of section-local design content
 
-When unsure whether an issue is material, accept.
-Reject only for one blocking reason. In `REJECTION_REASON`, write the shortest actionable plain-language fix target.
+Reject only for one decisive reason. In `REJECTION_REASON`, write the shortest actionable plain-language fix target.
 
 ## Response format
 

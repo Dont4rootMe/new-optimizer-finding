@@ -1,24 +1,30 @@
 You are participating in an automated evolutionary search for better awtf2025 heuristic organisms.
 
-Task:
-- Solve AtCoder World Tour Finals 2025 Heuristic: Group Commands and Wall Planning
-- For each input, output added walls, robot groups, and an operation sequence
-- Minimize the absolute score `T + 100 * sum_k Manhattan(final_position_k, target_k)`
+Task context:
+- evolve better organisms for the AtCoder World Tour Finals 2025 Heuristic problem `Group Commands and Wall Planning`
+- explicit task contract: every valid organism must produce a contest-legal output for any input case, parameterized only by the input
+- minimize the absolute score `T + 100 * sum_k Manhattan(final_position_k, target_k)`; lower is better; repo fitness equals `-mean_absolute_score` over the configured corpus
+- do not introduce hidden evaluator constants, hardcoded board sizes, hardcoded robot counts, or solutions targeted at a particular known input beyond what the input itself and this contract provide
 
-## Primary Research Artifact
+## Primary research artifact
 
 The primary object is the organism's genetic code.
 
 Genetic code is not decoration. It is the canonical set of ideas that defines the organism:
-- how the organism represents the board, robots, targets, groups, walls, and derived state
+- how the organism represents the board, robots, targets, groups, walls, and derived planning state
 - what macro decomposition or routing strategy it uses
-- how it constructs an initial or ongoing solution
+- how it constructs added walls, group assignments, and the operation sequence
 - what priority logic decides which robot, group, route, or defect is processed next
-- what local repair and control principles it relies on
+- what local repair and outer control principles it relies on
 
 `implementation.py` is secondary. It is only the concrete realization of the genetic code.
 
-## Evolution Setting
+`CHANGE_DESCRIPTION` is also first-class:
+- it must summarize the single main novelty of the new organism
+- it is later written into lineage
+- it should describe the unified idea of the child, not a changelog of tiny edits
+
+## Evolution setting
 
 Organisms are created by:
 - seed
@@ -28,49 +34,50 @@ Organisms are created by:
 Creation is staged:
 1. design stage: sectioned genetic code, interaction notes, compute notes, novelty summary
 2. validation stage: novelty and compatibility checks where configured
-3. implementation stage: faithful compilation into `implementation.py`
+3. implementation stage: faithful realization of that design as `implementation.py`
 
 In mutation and crossover, evolutionary sampling already proposes a child-side genetic draft.
 That draft is the main object you must work on.
 Parent code and parent lineage are reference context only.
 
-## Runtime Contract
+## Output format contract
 
-The final program must define:
+The implementation must define `solve_case(input_text: str) -> str` exactly.
+The returned string is the full contest output for one input case, formed by joining four blocks with newlines, in this exact order:
+1. exactly `N` lines of vertical added-wall bits, each line a bitstring of length `N - 1` over `{0, 1}`
+2. exactly `N - 1` lines of horizontal added-wall bits, each line a bitstring of length `N` over `{0, 1}`
+3. exactly `K` lines of group assignments, each line one integer in `[0, K - 1]`, where line `r` assigns robot `r` to a group
+4. zero or more operation lines, each of the form `a b d` where `a` is one of `g` (group command) or `i` (individual command), `b` is a valid group index in `[0, K - 1]` for `a = g` or a valid robot index in `[0, K - 1]` for `a = i`, and `d` is one of `U`, `D`, `L`, `R`
 
-`solve_case(input_text: str) -> str`
+Hard output invariants:
+- `N` and `K` are read from the first input line; they must never be hardcoded into the design or the implementation
+- the total operation count `T` must satisfy `T <= K * N * N`
+- added walls are merged with the original walls; original walls must never be deleted by the output
+- moves are simulated by the official ordering rules for group commands; the implementation does not need to simulate them but must respect their semantics when planning
+- broken output, wrong function signature, wrong number of lines, wrong bitstring length, out-of-range group or robot index, illegal direction, or `T > K * N * N` is treated as evaluation failure
 
-The returned string is the full contest output for exactly one input case:
-1. `N` lines of vertical added-wall bits, each of length `N - 1`
-2. `N - 1` lines of horizontal added-wall bits, each of length `N`
-3. `K` integers assigning every robot to a group in `[0, K - 1]`
-4. zero or more operations, each as `a b d`
+## Implementation interface discipline
 
-Operation semantics:
-- `a = g` means a group command on group `b`
-- `a = i` means an individual command on robot `b`
-- `d` is one of `U`, `D`, `L`, `R`
-- the move count must be at most `K * N * N`
+The concrete implementation interface is supplied by the implementation and repair prompts.
+Do not copy hidden task facts into implementation reasoning.
+If a quantitative limit, formula, or feasibility rule is required, it must come from the supplied input, the supplied genes, or the operator prompt, not from shared prompt doctrine.
 
-Evaluator rules:
-- output must parse as a legal contest solution
-- added walls are merged with the original walls
-- moves are simulated with the official ordering rules for group commands
-- broken output, wrong function signature, parse failure, or runtime failure is treated as evaluation failure
+Optimization principle:
+- minimize the absolute score subject to validity
+- validity is a hard constraint, not the optimization target by itself
+- do not prefer the trivial all-zero-walls, all-group-zero, no-operations baseline over a real planning organism merely because it is simpler; that baseline only achieves `T + 100 * initial_total_Manhattan` and is a floor to beat, not a target
+- do not prefer a safe but obviously stuck construction over a feasible structure that could plausibly reduce the Manhattan sum
+- implementations and repairs should preserve the organism's score-bearing mechanism whenever possible
 
-Score:
-- per case absolute score is `T + 100 * sum_k Manhattan(final_position_k, target_k)`
-- lower is better
-- repo fitness is `-mean_absolute_score` across the configured fixed corpus
+## Hard constraints
 
-## Hard Constraints
+- Use only the Python standard library; no `numpy`, no third-party packages, no external solvers
+- No file I/O, subprocesses, network calls, or stdin/stdout side effects
+- Keep the program deterministic: do not use seeded or unseeded random sources, time-based decisions, or hash-order dependencies in ways that change behavior across runs
+- Return only the required output string from `solve_case(input_text)`; do not print, log, or write to disk
+- Use bounded loops only; never `while True` without a hard counter tied to `K * N * N` or another input-derived budget
 
-- Use only Python standard library
-- No file I/O, subprocesses, network calls, or external solvers
-- Keep the program deterministic
-- Return only the required output string from `solve_case`
-
-## Genetic Code Rule
+## Genetic code rule
 
 Think in genes first, implementation second.
 
@@ -80,11 +87,33 @@ The section names and their order are defined by the genome section schema artif
 Each gene must live in the correct genome section.
 Do not replace the idea set with a hand-crafted answer.
 Do not treat parent code as the truth.
-Do not skip idea formation and jump straight to a full command script.
+Do not skip idea formation and jump straight to a finished move script or a finished wall pattern.
 
 The section schema is authoritative about what kind of content belongs in each section.
 If a section allows only plain language, graph reasoning, mathematical descriptions, or pseudocode-like descriptions, obey that restriction.
 If a section allows localized procedural detail, numeric parameterization, or a narrow local code-like sketch, keep that content local to the section and local to the mechanism it describes.
+
+One coherent hypothesis may require coordinated edits across multiple sections.
+Section boundaries organize the genome; they do not force every good change to stay one-section-local.
+If a score-bearing mechanism couples multiple sections (for example, a wall plan that only pays off under a matching group definition and a matching staged release), keep those sections coordinated.
+
+Each organism should define a plausible causal path from its sectioned ideas to a lower absolute score.
+Decorative section changes that do not alter the effective wall plan, group structure, routing regime, repair behavior, or control schedule are not enough.
+Textual novelty is not the same as phenotype novelty.
+Score-bearing novelty should plausibly change the expected wall family, grouping family, routing family, repair regime, or control regime, not just the surface wording.
+A new coefficient inside the same wall, grouping, routing, and repair regime is not a strong novelty claim by default.
+Single-group-per-robot organisms are allowed only when the genes explain why no shared group commands could outperform that regime.
+Trivial fallbacks (no walls, all robots in group zero, no operations) are baselines only and are not a self-justifying mechanism.
+
+Lean-genome principle:
+- a stronger organism is not the one with the most section content
+- prefer the smallest set of genes that defines a real score-bearing mechanism
+- avoid decorative elaboration, redundant restatements, and explanatory padding
+
+Implementation realism:
+- a good design should not only be coherent on paper, but should plausibly admit a compact faithful deterministic implementation in pure standard-library Python
+- avoid designs whose success depends on too many loosely specified interacting mechanisms
+- avoid designs whose required global search would not finish within the per-case operation budget `K * N * N`
 
 `CHANGE_DESCRIPTION` remains a plain-language idea-level artifact:
 - it must summarize the single main novelty of the new organism
@@ -95,7 +124,7 @@ If a section allows localized procedural detail, numeric parameterization, or a 
 No genome section may contain a full end-to-end implementation or a full `implementation.py`.
 Local procedural detail is allowed only when it fits the section description and remains narrowly scoped.
 
-## Gene Atomicity
+## Gene atomicity
 
 Each bullet within a genome section must express exactly one independent, testable idea.
 

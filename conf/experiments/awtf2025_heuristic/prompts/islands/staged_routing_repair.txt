@@ -9,6 +9,7 @@ This island explores organisms that treat an initial routing or grouping hypothe
 - Deterministic local repair: apply short individual-command repairs when a group-level plan creates deadlock or regressions
 - Progress accounting: track whether each stage is reducing remaining target distance or merely shuffling robots
 - Reversible scheduling: use short exploratory stages that can be redirected when the current plan stops making progress
+- Triggered escalation: switch from coarse group commands to fine-grained individual commands only when measurable stalling criteria are met
 
 ## Promising formal directions
 
@@ -17,21 +18,31 @@ This island explores organisms that treat an initial routing or grouping hypothe
 - Distance-priority staging: order groups by remaining distance, target depth, or expected blocking impact
 - Triggered repair loops: run deterministic repair only when measurable stalling criteria are met
 - Hybrid group/individual control: use group commands for bulk transport and individual commands only to resolve specific conflicts
+- Bounded local backtracking: allow a small number of reversal steps when a robot enters a confirmed dead end, capped by a hard counter
 
 ## Reality checks
 
 - Overusing individual repairs can erase the main advantage of group commands
 - Staged scheduling helps only if the stage boundaries reflect real interference structure
 - Local fixes can create regressions for robots that were already near their targets
-- Deterministic repair loops need clear termination rules to avoid wasting the move budget
+- Deterministic repair loops need clear termination rules to avoid wasting the move budget; every loop must be bounded by an explicit counter or a budget derived from `K * N * N`
+- Excessive individual moves accumulate quickly toward the operation budget `T <= K * N * N` and can starve later stages of room to act
+- Repair stages without barrier discipline can cause cross-stage deadlocks that no later repair can fix
+- Repair-only refinement should lead to a distinguishable operating regime, not just a different convergence speed on the same routing family
+- Same routing family, same grouping family, and same repair loop with retuned constants is a weak direction unless the genes explain a genuine regime shift
+- The repair policy must be deterministic and parameterized only by the input and the genes; never hardcode a particular `N`, `K`, or stall threshold without expressing it as a function of the input
 
 ## Design prompt
 
 Good organisms on this island should specify:
-1. What the initial routing or grouping plan is
-2. What defines a stall, conflict, or repair trigger
-3. What the repair operator actually changes
-4. What termination or stage-transition criterion is used
+1. What the initial routing or grouping plan is and how it is constructed deterministically from the input
+2. What defines a stall, conflict, or repair trigger in measurable terms
+3. What the repair operator actually changes (a single robot's command, a group's release schedule, a chosen lane assignment)
+4. What termination or stage-transition criterion is used and how it is bounded by `N`, `K`, or `K * N * N`
+5. How the design stays within the total operation budget `T <= K * N * N` even after repairs
+6. How the repair logic changes the effective routing or repair regime rather than only the speed or tuning of convergence
 
 Do not treat this as a requirement to use any particular repair script.
+Do not propose repair loops that lack a hard counter or whose termination is uncertain.
+Do not let the count-safe trivial fallback (single group, no operations) become the default answer; use it only when no real staged-repair structure is justified, and in that case explain that it is a fallback baseline.
 The goal is a style of thinking, not a prescribed control policy.

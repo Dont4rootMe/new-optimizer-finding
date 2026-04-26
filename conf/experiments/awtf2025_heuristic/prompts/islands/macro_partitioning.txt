@@ -5,10 +5,11 @@ This island explores organisms that begin from deliberate wall planning, macro p
 ## Mathematical DNA to build from
 
 - Corridor decomposition: add a small number of walls to create directional corridors or chambers that reduce interference between unrelated robot flows
-- Target-side partitioning: group robots by destination-side locality, shared corridor usage, or common bottlenecks
+- Target-side partitioning: group robots by destination-side locality, shared corridor usage, or common bottlenecks rather than by initial position alone
 - Boundary-aware staging: treat corners, edges, and central lanes as distinct routing resources with different congestion costs
 - Separator planning: use added walls to break harmful cycles or to isolate especially crowded subproblems before synchronized motion begins
 - Sparse structure bias: prefer a compact wall plan that creates leverage without over-constraining the board
+- Region-aligned grouping: form groups whose synchronized moves are aligned with the region structure imposed by the wall plan
 
 ## Promising formal directions
 
@@ -17,6 +18,7 @@ This island explores organisms that begin from deliberate wall planning, macro p
 - Goal-compatible grouping: form groups whose synchronized moves are aligned with similar target-side progress
 - Phaseable partitions: choose walls and groups so that the run can be decomposed into a few clean stages with limited cross-stage interference
 - Defect containment: explicitly isolate the hardest robots or densest bottlenecks instead of optimizing only average flow
+- Wall-and-group co-design: pick the wall plan and the grouping together so each pays off only because the other is in place
 
 ## Reality checks
 
@@ -24,14 +26,24 @@ This island explores organisms that begin from deliberate wall planning, macro p
 - Group commands are powerful only when grouped robots benefit from moving in the same direction at the same time
 - A partition that looks clean at the macro level can still fail because of local blocking near narrow passages
 - Too much structure can create brittle plans that fail on small geometry changes
+- The wall plan must be deterministic and parameterized only by `N`, `K`, the parsed initial walls, and the parsed robot/target positions; never hardcode a particular `N` or `K`
+- The total operation count `T` must remain within `K * N * N`; macro partitioning that requires excessive group cycling can break this budget without producing real progress
+- Added walls are merged with original walls; the design must account for the original walls already present and must not assume an empty board
+- A wall plan that only emits the trivial baseline (zero added walls plus single-group routing) is a fallback baseline, not a structural hypothesis; it must be explained as a fallback and not as a self-justifying mechanism
+- Same wall family, same grouping family, and same routing family with retuned constants is a weak direction unless the genes explain a genuine regime shift
 
 ## Design prompt
 
 Good organisms on this island should specify:
-1. What macro structure is imposed on the board
-2. How groups are defined relative to that structure
-3. How synchronized moves are expected to benefit from the structure
-4. Where the structure may break down and how that risk is contained
+1. What macro structure is imposed on the board (corridors, chambers, separators, lanes)
+2. How the wall plan is constructed deterministically from the input
+3. How groups are defined relative to that structure and how group ids stay within `[0, K - 1]`
+4. How synchronized moves are expected to benefit from the structure
+5. Where the structure may break down and how that risk is contained
+6. How the design stays within the operation budget `T <= K * N * N`
+7. How the regime would differ behaviorally from the trivial all-zero-walls single-group baseline
 
 Do not treat this as a requirement to use any particular wall pattern.
+Do not propose wall plans that contradict the original walls or that would block all paths to some target.
+Do not let the count-safe trivial fallback (zero added walls, single group, no operations) become the default answer; use it only when no real macro structure is justified, and in that case explain that it is a fallback baseline.
 The goal is a style of thinking, not a prescribed layout family.

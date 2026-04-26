@@ -1,7 +1,7 @@
 You are in the implementation stage for an awtf2025 heuristic organism.
 
 You will receive:
-- the function contract and legal output format
+- the function contract and the legal output format
 - the sectioned organism genetic code
 - the organism novelty summary
 - the canonical section-aligned implementation scaffold
@@ -11,13 +11,17 @@ You will receive:
 
 Your task is to compile the organism by producing code bodies for scaffold regions.
 
-Important:
+Core rules:
 - do not output a full `implementation.py`
-- do not rewrite the scaffold
+- do not rewrite the scaffold, the FIXED blocks, or the function signature
 - do not output any text outside the required patch artifact
 - do not invent new major ideas at implementation time
-- if the design is ambiguous, choose the most conservative implementation that still matches the supplied genes
+- if the design is ambiguous, choose the strongest deterministic interpretation that still matches the supplied genes and remains valid at return time
 - if there is any tradeoff between ambition and validity, prefer the simplest fully valid deterministic implementation
+- do not collapse an ambitious but feasible design into the trivial baseline (no walls, all robots in group `0`, no operations) unless the implicated logic is unsalvageable and the genes truly support that fallback
+- never hardcode `N`, `K`, the number of robots, the number of targets, an initial wall layout, or a target arrangement; the implementation must read everything from `input_text`
+- never use random sources, time-dependent decisions, or hash-order dependencies; the program must be deterministic
+- never introduce file I/O, subprocesses, network calls, third-party packages, or `numpy`; only the Python standard library is allowed
 - the scaffold markers beginning with `# ===` are not output markers; never copy any `# === REGION` or `# === END_REGION` line into your answer
 
 Patch discipline:
@@ -27,28 +31,32 @@ Patch discipline:
 - do not try to compensate for unchanged regions by rewriting behavior elsewhere
 - keep each region body faithful to its matching genome section
 - no region may contain a hidden full heuristic implementation
-- `OPTIONAL_CODE_SKETCH` may contain localized procedural code, but it must remain local
+- `OPTIONAL_CODE_SKETCH` may contain localized procedural code, but it must remain local and must not override the whole heuristic
 
 Execution-order discipline:
 - region bodies execute top-to-bottom in the scaffold order, exactly as written
+- the canonical scaffold order is `STATE_REPRESENTATION`, `MACRO_STRATEGY`, `CONSTRUCTION_POLICY`, `PRIORITY_MODEL`, `LOCAL_REPAIR_POLICY`, `CONTROL_POLICY`, `PARAMETERS`, `OPTIONAL_CODE_SKETCH`
 - `PARAMETERS` and `OPTIONAL_CODE_SKETCH` occur late in the scaffold, after the main heuristic regions
-- do not put variables in `PARAMETERS` if any earlier region needs them
+- do not put variables in `PARAMETERS` if any earlier region needs them; assign shared values before first use
 - every variable must be assigned before first use in the same region or an earlier region
 - if a numeric constant is needed early, define it early or use a literal; do not reference a later parameter name
 - use short ASCII identifiers only, and avoid names that can be confused with numbers or units
 - keep FULL-mode implementations compact; long search procedures are more likely to be truncated or invalid
 
-All scaffold regions live inside `solve_case(...)`.
-Therefore, code emitted for a region body must be valid as inserted directly between that region's markers in the final file.
-Every non-empty Python code line inside an awtf2025 heuristic region must start with four spaces, because the body is inserted inside `solve_case()`.
-Prefer simple straight-line code over nested helper functions or classes.
-If you define a helper anyway, every helper line must still be indented correctly inside `solve_case()`.
+Indentation discipline:
+- all scaffold regions live inside `solve_case(input_text: str) -> str`
+- code emitted for a region body must be valid as inserted directly between that region's markers in the final file
+- every non-empty Python code line inside a region must start with four spaces, because the body is inserted inside `solve_case()`
+- prefer simple straight-line code over nested helper functions or classes
+- if you define a helper function or class inside `solve_case()`, every helper line must still be indented correctly inside `solve_case()`
 
 Heuristic validity discipline:
 - validity beats ambition; a legal low-scoring output is better than an invalid one
-- preserve the scaffold's default legal output unless a region has a clearly safe improvement
-- keep operation generation bounded by `K * N * N`
-- do not introduce file I/O, subprocesses, network calls, or random behavior
+- the scaffold's default legal output is exactly the trivial baseline (no walls, every robot in its own group via `[str(i) for i in range(k)]`, no operations); preserve this default unless a region has a clearly safe improvement
+- always emit exactly `N` vertical-wall lines of length `N - 1`, exactly `N - 1` horizontal-wall lines of length `N`, and exactly `K` group-id lines, no matter what the design says
+- keep operation generation bounded by `K * N * N`; never emit an operation list whose length is not provably within that bound
+- every direction symbol must be one of `U`, `D`, `L`, `R`; every operation type must be `g` or `i`; every group or robot index must be in `[0, K - 1]`
+- use bounded loops only; never `while True` without a hard counter and a guaranteed-progress invariant
 
 ## Output format
 
@@ -126,8 +134,18 @@ Rules:
 - in PATCH mode, include only the changed regions and omit the unchanged ones entirely
 - region headings must use the exact canonical names from the schema
 - region bodies must be raw Python lines exactly as they should appear between the scaffold markers
-- every non-empty raw Python line must already include the required indentation
-- do not start with `REGION ...`; region headings must start with `## REGION `
+- every non-empty raw Python line must already include the required four-space indentation
+- do not start a region heading with `REGION ...`; region headings must start with `## REGION `
 - do not output text before `## COMPILATION_MODE`
 - do not repeat the scaffold markers inside a region body
 - do not emit commentary, analysis, or prose
+
+## Pre-output checklist
+
+Before emitting your artifact, mentally verify:
+1. The first line is exactly `## COMPILATION_MODE`.
+2. `FULL` or `PATCH` is the only token on the next non-empty line.
+3. Every region body is valid Python when inserted between four-space-indented scaffold markers inside `solve_case`.
+4. The combined effect of all regions still constructs `vertical` as `N` strings of length `N - 1`, `horizontal` as `N - 1` strings of length `N`, `groups` as `K` single-integer strings in `[0, K - 1]`, and `operations` as a list of valid `a b d` strings whose total length is bounded by `K * N * N`.
+5. No region writes to disk, opens a subprocess, imports a non-stdlib module, or uses random or time-based primitives.
+6. No region copies a `# === REGION` or `# === END_REGION` marker.

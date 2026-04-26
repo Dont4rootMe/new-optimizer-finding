@@ -1,4 +1,4 @@
-You are repairing an existing awtf2025 organism by rewriting its full `implementation.py`.
+You are repairing an existing awtf2025 heuristic organism by returning a corrected full `implementation.py`.
 
 You will receive:
 - the organism's canonical genetic code
@@ -9,30 +9,62 @@ You will receive:
 
 Your job is to return a corrected full `implementation.py` that fixes the reported failure while staying faithful to the organism design.
 
-Repair is a full-file rewrite, not a diff. Use the current file and the canonical scaffold as references, but do not preserve broken control flow, malformed identifiers, or late parameter assignments just because they appeared in the failed implementation.
+Use the current file and the canonical scaffold as structural references.
+The full-file output contract is an interface requirement, not a license to rewrite the whole heuristic.
+Repair the smallest affected code span necessary to fix the reported failure while preserving the organism's score-bearing mechanism.
+Prefer to preserve unaffected code when practical; do not collapse the organism into the trivial baseline (no walls, all robots in group `0`, no operations) unless the implicated logic is unsalvageable and the genes truly support that fallback.
+When the current file already contains a strong inherited mechanism, do not replace it with a short generic baseline merely because that baseline is easier to validate.
+Local repair is preferred, but do not silently collapse a distinct gene-implied regime back to the trivial baseline when the genes call for a real wall, grouping, routing, or repair regime.
 
 Requirements:
 - Return only Python code, no markdown fences
 - Do NOT add commentary before or after the file
-- The first non-empty line must be `from __future__ import annotations` or another valid Python import line
+- The first non-empty line must be `from __future__ import annotations` or another valid Python import line, never a markdown fence and never prose
 - Keep the code deterministic
-- Use only Python standard library
+- Use only the Python standard library; do not import `numpy` or any third-party package
 - The final module must define `solve_case(input_text: str) -> str`
-- The returned text must be legal contest output
-- Prefer the simplest complete valid rewrite that resolves the evaluator error
+- The returned text must be legal contest output for any input case: exactly `N` vertical-wall lines of length `N - 1`, exactly `N - 1` horizontal-wall lines of length `N`, exactly `K` group-id lines in `[0, K - 1]`, then zero or more `a b d` operation lines with `T <= K * N * N`
+- Preserve the task behavior, score-seeking mechanism, and validity discipline expressed by the genetic code and current implementation
+- Prefer the simplest repair that keeps the organism faithful, valid, and score-seeking
 - Do not invent a new major idea that is absent from the genes and novelty summary
 - Keep the repaired file compact; target fewer than 220 lines and never output unfinished code
 - Use ASCII identifiers only; do not use Unicode suffixes, copied mathematical symbols, or glued identifiers
 - Assign every local variable before first use; do not rely on a late `PARAMETERS` block to define values used earlier
-- If the failed code is long or fragile, replace the body of `solve_case(...)` with a short deterministic implementation instead of trying to patch every line
+- Focus first on the code span implicated by the error
+- Prefer repairing `CONTROL_POLICY`, `LOCAL_REPAIR_POLICY`, `PARAMETERS`, or `OPTIONAL_CODE_SKETCH` before rewriting state representation, macro strategy, or construction logic
+- Preserve inherited behavior outside the affected code whenever possible
+- Trivial-baseline fallback (zero walls, single group, no operations) is a last resort, not the default
 
 ## Common failure modes to check
 
 Before outputting the repaired code, verify:
 1. All parentheses, brackets, and strings are properly closed
-2. `solve_case(...)` always returns a string, not `None`
-3. The code always emits all required wall rows and all group ids
-4. Every operation line, if any, uses legal operation and direction symbols
-5. The number of operations cannot exceed `K * N * N`
-6. No file I/O, subprocesses, or network calls are introduced
-7. The code completes within the configured per-case timeout budget
+2. `solve_case(...)` always returns a string, never `None`
+3. The output begins with exactly `N` vertical-wall lines, each of length `N - 1`
+4. The output continues with exactly `N - 1` horizontal-wall lines, each of length `N`
+5. The output continues with exactly `K` group-id lines, each a single integer in `[0, K - 1]`
+6. Every operation line uses one of `g` or `i`, a valid group or robot index, and one of `U`, `D`, `L`, `R`
+7. The total operation count satisfies `T <= K * N * N`
+8. No file I/O, subprocess, network call, or third-party import is introduced
+9. Loops are bounded by an explicit counter or by a budget derived from `K * N * N`
+10. The code completes within the configured per-case timeout budget
+
+If the error history says `solve_case(...)` is missing or has the wrong signature, restore the exact signature `def solve_case(input_text: str) -> str:` before any other repair.
+If the error history says the output has the wrong number of lines, repair the output assembly so it always emits the four blocks in the required order with correct counts derived from the parsed `N` and `K`.
+If the error history says a bitstring has the wrong length, repair the wall row construction so each row is built from exactly `N - 1` (vertical) or `N` (horizontal) characters, using only `0` and `1`.
+If the error history says a group id is out of range, clamp every emitted group id to `[0, K - 1]` before joining.
+If the error history says an operation is illegal, validate every emitted operation against the legal alphabet before appending it.
+If the error history says the operation count exceeds `K * N * N`, cap the operation list at that bound and, when possible, prefer the highest-priority operations consistent with the genes' priority logic.
+If the error history mentions a timeout, remove unbounded loops; every loop must have a fixed cap derived from `N`, `K`, or `K * N * N`.
+If the error history contains markdown fence or non-Python preamble warnings, remove any non-Python preamble first.
+
+## Local repair strategy
+
+When repair is needed:
+- identify the smallest affected code span consistent with the error history
+- fix local syntax, name, control-flow, or contract issues in place when possible
+- for output-shape, parsing, or evaluator-contract failures, prefer local corrections that preserve the intended heuristic regime before simplifying
+- if simplification is necessary, limit it to the minimal local change needed for validity
+- if the genes imply a distinct wall, grouping, routing, or repair regime, preserve that regime instead of silently reverting to the trivial baseline
+- only replace the overall heuristic with a short generic implementation if no local repair can make the current organism viable
+- for seed organisms, preserve the original intended mechanism if it is locally repairable; do not downgrade to a generic baseline unless necessary

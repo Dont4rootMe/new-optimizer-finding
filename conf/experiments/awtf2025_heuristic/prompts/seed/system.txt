@@ -1,8 +1,8 @@
 You are designing one brand-new awtf2025 heuristic organism from scratch.
 
 Priority order:
-1. invent a coherent sectioned genetic code
-2. ensure each idea is placed in the correct heuristic genome section
+1. invent a coherent sectioned genetic code with a plausible score-reducing mechanism
+2. ensure each idea is placed in the correct genome section
 3. summarize the single defining novelty
 
 Think in genes first, implementation second.
@@ -11,12 +11,31 @@ The genome is sectioned. Every gene must live in the correct section of `## CORE
 The section schema is authoritative. Use each section only for the kind of heuristic content its description allows.
 
 Important:
-- design one coherent heuristic-level research direction
-- do not jump directly to a finished move script
-- do not replace the genetic code with a hand-tuned contest output
-- keep genes atomic within each section
+- the organism must produce a contest-legal output for any input case: exactly `N` lines of vertical added-wall bits of length `N - 1`, then exactly `N - 1` lines of horizontal added-wall bits of length `N`, then exactly `K` lines of group ids in `[0, K - 1]`, then zero or more operation lines `a b d` with `a in {g, i}` and `d in {U, D, L, R}`, with total operation count `T <= K * N * N`
+- the goal is still to design an organism at the level of ideas, assumptions, constructive principles, and local procedures
+- the organism must define a plausible causal route from state representation through macro strategy, construction, priority, repair, and control to a lower absolute score on the configured corpus
+- prefer a lean organism with one strong mechanism over a rich organism with many loosely coupled refinements
+- avoid introducing more than one main wall idea, one main grouping idea, one main routing idea, and one main repair idea unless tighter coupling is essential
+- avoid designs that make implementation solve a planning puzzle; any wall family, group structure, or routing schedule must be expressible as deterministic procedures that consume only the input and the genes
+- never hardcode a particular value of `N`, a particular value of `K`, a particular initial wall layout, a particular target arrangement, or any other input-derived constant; the organism must derive everything from the input and a small fixed parameter set
+- before finalizing any explicit count rule, schedule rule, or budget allocation, self-check that it stays within `T <= K * N * N` for any reasonable `N` and `K`; if it does not, choose a simpler control regime
+- do not include scratch arithmetic, abandoned alternatives, or self-corrections in the final genes; if a budget check fails, replace the regime before answering
+- do not propose strategies that require non-deterministic primitives such as unseeded random sampling or time-dependent decisions; the program must be deterministic
+- the trivial fallback (no added walls, all robots in group `0`, zero operations) is a baseline that scores `100 * initial_total_Manhattan`; an organism that effectively reduces to this baseline is not a valid hypothesis and must be replaced
+- a count-safe fallback is a valid baseline only when the genes still describe a real wall, group, or routing regime that beats the trivial baseline
+- specify one directly executable deterministic path, not a list of alternatives, fallback branches, or exploratory "try this then maybe that" choices
+- state one intended wall family, one intended grouping family, and one intended routing family; if the organism keeps every robot in its own group with only individual moves, justify why that regime should outperform a grouping that exploits shared progress
+- do not rely on generic single-group default plus generic individual-move repair as an implicit safe organism; the genes should explain what makes this organism's regime score-bearing
+- each required section should contribute to that route
+- section completeness alone is not enough; each required section should contribute to the effective routing or wall behavior
+- avoid organisms whose sections are formally coherent but behaviorally weak, generic, or decorative
+- do not fill sections with generic filler text; every non-optional section should change the effective contest output
+- do not jump directly to a finished move script or a finished wall pattern
+- do not replace the genetic code with a hand-tuned solved arrangement
+- do not treat the schema as decoration; it defines the structure of the genome
+- keep genes atomic within each section: one independent, testable idea per bullet
 - if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
-- no section may contain a full end-to-end implementation
+- no section may contain a full end-to-end implementation of `solve_case`
 - `CHANGE_DESCRIPTION` must remain plain-language only and must not contain code
 
 ## Response format
@@ -45,18 +64,22 @@ Rules for subsection bodies:
 - `STATE_REPRESENTATION` through `PARAMETERS` must each contain at least one `- ` bullet
 - `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
 - `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
+- use the fewest bullets needed to define the mechanism cleanly
+- avoid filling a section with multiple near-duplicate bullets
+- for seed organisms, prefer `- None.` in `OPTIONAL_CODE_SKETCH`; if it is used, keep it to at most two local pseudocode bullets and never use code fences
 - if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
 - do not use nested headings inside subsection bodies
 
 ## INTERACTION_NOTES
-State what assumptions the heuristic makes, how the sections work together, and where the design is likely to help or fail.
+State what assumptions the organism makes, how the sections work together, and where the design is likely to help or fail.
 
 ## COMPUTE_NOTES
-State the computational style implied by the design.
+State the computational style implied by the design, including how it stays within the per-case operation budget `K * N * N` and how it avoids unbounded loops.
 
 ## CHANGE_DESCRIPTION
-Give one unified novelty summary for this heuristic.
+Give one unified novelty summary for this organism.
 Include:
-(1) what core hypothesis this organism tests
-(2) why this approach should reduce the absolute contest score
+(1) what core hypothesis and routing or wall family this organism tests
+(2) why this approach should reduce the absolute contest score below the trivial baseline
+Before writing it, check that every named mechanism in `CHANGE_DESCRIPTION` appears in the relevant `CORE_GENES` section and is not contradicted by another section, and that the named score path is not merely a generic single-group all-individual fallback plus minor repair tuning.
 This must be plain-language only. No code, no code-like snippets, no implementation dump.

@@ -25,14 +25,21 @@ Use this only to understand where the child draft came from.
 
 === PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
 Use this only to understand past idea changes and outcomes.
-Scores in lineage: higher is better.
+Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
 {parent_lineage_summary}
 
 === TASK ===
 The parent organism already works and has been evaluated.
-Your goal: make ONE small, targeted improvement to the child draft that could push the score higher.
-Do NOT replace the core heuristic structure. Refine it.
+Your goal: make one coherent score-seeking hypothesis change to the child draft that could push the absolute contest score lower.
+The child remains an awtf2025 heuristic organism and must still produce a contest-legal output that respects the explicit output shape and the operation budget `T <= K * N * N`.
+The result may revise several coupled sections when the mechanism requires it.
+Keep the mutation small in causal scope even when it spans multiple sections.
+Do not solve uncertainty by adding extra support genes everywhere; only add the minimum support needed for the new mechanism to make sense.
+Prefer edits that materially change the operating regime, not merely wording changes or cosmetic parameter nudges.
+A pure coefficient retuning is weak unless it clearly pushes the organism into a different wall, grouping, routing, or repair regime.
+State how the child should differ in expected operating regime, and why the change is not merely the same regime with different repair tuning.
+Do NOT replace the core heuristic structure — refine it.
 The result must be a full sectioned genetic code in the canonical format, not a partial diff.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing the parent.
-If the child draft is already coherent and viable, keep it mostly intact rather than rebuilding the parent.
+Do not preserve the child draft merely because it is coherent; strengthen it until the changed sections define a plausible route to a lower score.
 Return the structured design directly. Do not add preface text before `## CORE_GENES`.
