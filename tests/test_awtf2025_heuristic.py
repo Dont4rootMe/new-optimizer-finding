@@ -119,7 +119,7 @@ def test_awtf2025_config_composes() -> None:
     assert cfg.resources.evaluation.cpu_parallel_jobs == 25
     assert cfg.evolver.prompts.project_context == "conf/experiments/awtf2025_heuristic/prompts/shared/project_context.txt"
     assert cfg.evolver.prompts.genome_schema == "conf/experiments/awtf2025_heuristic/prompts/shared/genome_schema.txt"
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 1
     assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
 
 

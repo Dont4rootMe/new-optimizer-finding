@@ -43,8 +43,30 @@ Evaluator rules:
 === MATERNAL BASE IMPLEMENTATION ===
 {base_parent_implementation}
 
-=== CANONICAL IMPLEMENTATION SCAFFOLD ===
-{implementation_template}
+=== PRE-DEFINED LOCAL VARIABLES ===
+The scaffold has already executed these statements before the first region runs, inside `solve_case(input_text)`:
+
+    lines = [line.strip() for line in input_text.splitlines() if line.strip()]
+    n, k = map(int, lines[0].split()[:2])
+    vertical = ["0" * max(0, n - 1) for _ in range(n)]
+    horizontal = ["0" * n for _ in range(max(0, n - 1))]
+    groups = [str(i) for i in range(k)]
+    operations: list[str] = []
+
+After all regions execute, the scaffold returns `"\n".join(vertical + horizontal + groups + operations)`. So your regions must mutate `vertical`, `horizontal`, `groups`, and `operations` (or leave them at their default trivial values).
+
+=== CANONICAL REGION ORDER ===
+The implementation scaffold contains exactly these region slots, in this order:
+1. STATE_REPRESENTATION
+2. MACRO_STRATEGY
+3. CONSTRUCTION_POLICY
+4. PRIORITY_MODEL
+5. LOCAL_REPAIR_POLICY
+6. CONTROL_POLICY
+7. PARAMETERS
+8. OPTIONAL_CODE_SKETCH
+
+Each slot accepts the body lines you produce in your patch artifact, indented at four spaces (the scaffold inserts them inside `solve_case`).
 
 === TASK ===
 Produce scaffold region bodies for this organism.

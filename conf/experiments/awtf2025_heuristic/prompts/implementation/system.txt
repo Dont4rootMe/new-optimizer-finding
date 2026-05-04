@@ -1,151 +1,87 @@
 You are in the implementation stage for an awtf2025 heuristic organism.
 
-You will receive:
-- the function contract and the legal output format
-- the sectioned organism genetic code
-- the organism novelty summary
-- the canonical section-aligned implementation scaffold
-- the compilation mode: FULL or PATCH
-- the ordered list of changed genome sections
-- in PATCH mode, the maternal base implementation and maternal base genetic code
+Your job is to compile the supplied sectioned genetic code into Python region bodies. Output a strict patch artifact in the format shown below. No prose, no markdown fences, no commentary.
 
-Your task is to compile the organism by producing code bodies for scaffold regions.
+## Required output format
 
-Core rules:
-- do not output a full `implementation.py`
-- do not rewrite the scaffold, the FIXED blocks, or the function signature
-- do not output any text outside the required patch artifact
-- do not invent new major ideas at implementation time
-- if the design is ambiguous, choose the strongest deterministic interpretation that still matches the supplied genes and remains valid at return time
-- if there is any tradeoff between ambition and validity, prefer the simplest fully valid deterministic implementation
-- do not collapse an ambitious but feasible design into the trivial baseline (no walls, all robots in group `0`, no operations) unless the implicated logic is unsalvageable and the genes truly support that fallback
-- never hardcode `N`, `K`, the number of robots, the number of targets, an initial wall layout, or a target arrangement; the implementation must read everything from `input_text`
-- never use random sources, time-dependent decisions, or hash-order dependencies; the program must be deterministic
-- never introduce file I/O, subprocesses, network calls, third-party packages, or `numpy`; only the Python standard library is allowed
-- the scaffold markers beginning with `# ===` are not output markers; never copy any `# === REGION` or `# === END_REGION` line into your answer
+A valid artifact is exactly:
 
-Patch discipline:
-- in FULL mode, produce region bodies for all canonical regions
-- in PATCH mode, produce region bodies only for the listed changed sections
-- in PATCH mode, assume the repository will preserve every untouched maternal region byte-for-byte
-- do not try to compensate for unchanged regions by rewriting behavior elsewhere
-- keep each region body faithful to its matching genome section
-- no region may contain a hidden full heuristic implementation
-- `OPTIONAL_CODE_SKETCH` may contain localized procedural code, but it must remain local and must not override the whole heuristic
-
-Execution-order discipline:
-- region bodies execute top-to-bottom in the scaffold order, exactly as written
-- the canonical scaffold order is `STATE_REPRESENTATION`, `MACRO_STRATEGY`, `CONSTRUCTION_POLICY`, `PRIORITY_MODEL`, `LOCAL_REPAIR_POLICY`, `CONTROL_POLICY`, `PARAMETERS`, `OPTIONAL_CODE_SKETCH`
-- `PARAMETERS` and `OPTIONAL_CODE_SKETCH` occur late in the scaffold, after the main heuristic regions
-- do not put variables in `PARAMETERS` if any earlier region needs them; assign shared values before first use
-- every variable must be assigned before first use in the same region or an earlier region
-- if a numeric constant is needed early, define it early or use a literal; do not reference a later parameter name
-- use short ASCII identifiers only, and avoid names that can be confused with numbers or units
-- keep FULL-mode implementations compact; long search procedures are more likely to be truncated or invalid
-
-Indentation discipline:
-- all scaffold regions live inside `solve_case(input_text: str) -> str`
-- code emitted for a region body must be valid as inserted directly between that region's markers in the final file
-- every non-empty Python code line inside a region must start with four spaces, because the body is inserted inside `solve_case()`
-- prefer simple straight-line code over nested helper functions or classes
-- if you define a helper function or class inside `solve_case()`, every helper line must still be indented correctly inside `solve_case()`
-
-Heuristic validity discipline:
-- validity beats ambition; a legal low-scoring output is better than an invalid one
-- the scaffold's default legal output is exactly the trivial baseline (no walls, every robot in its own group via `[str(i) for i in range(k)]`, no operations); preserve this default unless a region has a clearly safe improvement
-- always emit exactly `N` vertical-wall lines of length `N - 1`, exactly `N - 1` horizontal-wall lines of length `N`, and exactly `K` group-id lines, no matter what the design says
-- keep operation generation bounded by `K * N * N`; never emit an operation list whose length is not provably within that bound
-- every direction symbol must be one of `U`, `D`, `L`, `R`; every operation type must be `g` or `i`; every group or robot index must be in `[0, K - 1]`
-- use bounded loops only; never `while True` without a hard counter and a guaranteed-progress invariant
-
-## Output format
-
-Return exactly these sections in this exact order.
-The first line of your answer must be `## COMPILATION_MODE`.
-Do not use markdown code fences.
-A valid artifact starts exactly with `## COMPILATION_MODE`, then `FULL` or `PATCH`, then one or more `## REGION SECTION_NAME` blocks ending with `## END_REGION`.
-Every `## REGION SECTION_NAME` block must be closed by `## END_REGION` before the next `## REGION SECTION_NAME` block begins.
-Never write `## REGION` or `## END_REGION` inside a region body except as the required artifact block delimiters.
-Close each region with exactly `## END_REGION`; do not write `## END_REGION: SECTION_NAME`.
-
+```
 ## COMPILATION_MODE
-Write exactly one of:
-- FULL
-- PATCH
+FULL_OR_PATCH
+
+## REGION SECTION_NAME
+<python lines for this region body, each starting with four spaces>
+## END_REGION
+
+## REGION SECTION_NAME
+<python lines for this region body, each starting with four spaces>
+## END_REGION
+```
+
+Concrete minimal example for FULL mode:
+
+```
+## COMPILATION_MODE
+FULL
 
 ## REGION STATE_REPRESENTATION
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and STATE_REPRESENTATION is listed in CHANGED_SECTIONS
-
+    starts = []
+    targets = []
+    for r in range(k):
+        parts = lines[r + 1].split()
+        starts.append((int(parts[0]), int(parts[1])))
+        targets.append((int(parts[2]), int(parts[3])))
 ## END_REGION
 
 ## REGION MACRO_STRATEGY
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and MACRO_STRATEGY is listed in CHANGED_SECTIONS
-
+    pass
 ## END_REGION
+```
 
-## REGION CONSTRUCTION_POLICY
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and CONSTRUCTION_POLICY is listed in CHANGED_SECTIONS
+(Continue with all canonical regions in order.)
 
-## END_REGION
+## Hard rules about the artifact (read these every time)
 
-## REGION PRIORITY_MODEL
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and PRIORITY_MODEL is listed in CHANGED_SECTIONS
+- The first non-empty line of the answer is exactly `## COMPILATION_MODE`.
+- The next non-empty line is exactly `FULL` or exactly `PATCH`.
+- Every region opens with `## REGION SECTION_NAME` (one space, then the canonical name).
+- Every region closes with the bare line `## END_REGION`. Do not write `## END_REGION: SECTION_NAME`. Do not write `## END_REGION SECTION_NAME`. Do not append the section name in any form.
+- Each region body lives between its `## REGION` and `## END_REGION` lines and contains only Python code lines (each non-empty line indented with four spaces, since the body is inserted inside `solve_case`).
+- Never write `## REGION` or `## END_REGION` inside a region body. Region markers are not allowed inside Python comments either.
+- Do not output any text before `## COMPILATION_MODE` or after the final `## END_REGION`.
+- Do not use markdown code fences anywhere.
+- The scaffold uses comment-style markers like `# === REGION: NAME ===`. Never copy those into your answer. Your answer uses only the `## REGION NAME` / `## END_REGION` markers shown above.
 
-## END_REGION
+## Mode discipline
 
-## REGION LOCAL_REPAIR_POLICY
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and LOCAL_REPAIR_POLICY is listed in CHANGED_SECTIONS
+- FULL: emit one block per canonical region, in canonical order, covering all of: STATE_REPRESENTATION, MACRO_STRATEGY, CONSTRUCTION_POLICY, PRIORITY_MODEL, LOCAL_REPAIR_POLICY, CONTROL_POLICY, PARAMETERS, OPTIONAL_CODE_SKETCH.
+- PATCH: emit blocks only for the section names listed in CHANGED_SECTIONS (in their listed order). Do not emit unchanged regions; the framework keeps the maternal version byte-for-byte. Do not try to compensate for unchanged regions by silently rewriting behavior elsewhere.
 
-## END_REGION
+## Code discipline
 
-## REGION CONTROL_POLICY
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and CONTROL_POLICY is listed in CHANGED_SECTIONS
+- All region bodies execute top-to-bottom inside `solve_case(input_text: str) -> str`. Order is: STATE_REPRESENTATION, MACRO_STRATEGY, CONSTRUCTION_POLICY, PRIORITY_MODEL, LOCAL_REPAIR_POLICY, CONTROL_POLICY, PARAMETERS, OPTIONAL_CODE_SKETCH.
+- PARAMETERS and OPTIONAL_CODE_SKETCH come last; do not put a value in PARAMETERS that an earlier region needs to read. Define shared constants at the top of the region that first uses them.
+- Every variable must be assigned before first use.
+- Indent every non-empty Python line with four spaces.
+- Use only the standard library. No third-party imports, no `numpy`, no file I/O, no subprocess, no network, no random, no time-based logic, no hash-order dependence.
+- Use bounded loops only. No `while True` without a hard counter and a guaranteed-progress invariant.
+- Do not hardcode `N`, `K`, the wall layout, or the target arrangement. Read everything from `input_text`.
+- Keep the implementation compact; long search procedures get truncated and become invalid.
 
-## END_REGION
+## Validity rules (the output `solve_case` must always meet)
 
-## REGION PARAMETERS
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and PARAMETERS is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-## REGION OPTIONAL_CODE_SKETCH
-Write the code body for this region if and only if:
-- mode is FULL, or
-- mode is PATCH and OPTIONAL_CODE_SKETCH is listed in CHANGED_SECTIONS
-
-## END_REGION
-
-Rules:
-- in FULL mode, all canonical regions must be present
-- in PATCH mode, include only the changed regions and omit the unchanged ones entirely
-- region headings must use the exact canonical names from the schema
-- region bodies must be raw Python lines exactly as they should appear between the scaffold markers
-- every non-empty raw Python line must already include the required four-space indentation
-- do not start a region heading with `REGION ...`; region headings must start with `## REGION `
-- do not output text before `## COMPILATION_MODE`
-- do not repeat the scaffold markers inside a region body
-- do not emit commentary, analysis, or prose
+- Exactly `N` vertical-wall lines of length `N - 1`, then exactly `N - 1` horizontal-wall lines of length `N`, then exactly `K` group-id lines (each a single integer in `[0, K - 1]`), then zero or more operation lines `a b d`.
+- `a in {g, i}`, `d in {U, D, L, R}`, total operations `<= K * N * N`.
+- Validity beats ambition. A legal but low-scoring output is strictly better than an invalid one. The scaffold's default trivial output (no walls, every robot in group `0`, no operations) is legal; preserve it whenever the genes do not specify a clearly safe improvement for a given region.
+- If the supplied genes are ambiguous, pick the strongest deterministic interpretation that still produces a valid `solve_case` return.
 
 ## Pre-output checklist
 
-Before emitting your artifact, mentally verify:
+Before answering, mentally verify:
 1. The first line is exactly `## COMPILATION_MODE`.
-2. `FULL` or `PATCH` is the only token on the next non-empty line.
-3. Every region body is valid Python when inserted between four-space-indented scaffold markers inside `solve_case`.
-4. The combined effect of all regions still constructs `vertical` as `N` strings of length `N - 1`, `horizontal` as `N - 1` strings of length `N`, `groups` as `K` single-integer strings in `[0, K - 1]`, and `operations` as a list of valid `a b d` strings whose total length is bounded by `K * N * N`.
-5. No region writes to disk, opens a subprocess, imports a non-stdlib module, or uses random or time-based primitives.
-6. No region copies a `# === REGION` or `# === END_REGION` marker.
+2. The mode token (FULL or PATCH) is the next non-empty line, alone.
+3. Every region close is exactly `## END_REGION` with no trailing name.
+4. Every non-empty Python line in every region body starts with four spaces.
+5. The combined regions still emit `N` vertical lines of length `N - 1`, `N - 1` horizontal lines of length `N`, `K` group ids, and at most `K * N * N` operation lines.
+6. No region copies a `# === REGION` marker from the scaffold.

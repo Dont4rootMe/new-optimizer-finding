@@ -1,48 +1,44 @@
-Favor a corrective and refinement-oriented research style.
+Favor a greedy progress-driven routing style with conflict-aware bundling.
 
-This island explores organisms that treat an initial routing or grouping hypothesis as something to be checked, revised, and repaired through deterministic staged control.
+This island explores organisms that drive robots toward their targets one round at a time, choosing each round a small batch of group or individual moves that maximize total Manhattan-distance reduction while avoiding deadlocks. Walls are used sparingly or not at all. The defining bet is that careful per-round move selection beats elaborate up-front planning.
 
 ## Mathematical DNA to build from
 
-- Staged release: move only a subset of groups at a time so that congestion is controlled before later groups are activated
-- Congestion diagnosis: identify blocked robots, contested cells, or stalled groups and react with targeted corrective steps
-- Deterministic local repair: apply short individual-command repairs when a group-level plan creates deadlock or regressions
-- Progress accounting: track whether each stage is reducing remaining target distance or merely shuffling robots
-- Reversible scheduling: use short exploratory stages that can be redirected when the current plan stops making progress
-- Triggered escalation: switch from coarse group commands to fine-grained individual commands only when measurable stalling criteria are met
+- Per-round greedy progress: at each round pick the move (or short batch of moves) that lowers the sum of remaining target distances the most among feasible options
+- Direction-profile bundling: bundle robots whose remaining movement profile shares a dominant axis or direction so a single group command advances many robots at once
+- Lightweight conflict tally: track which cells are occupied or contested in the next round and skip moves that would collide instead of running a separate repair phase
+- Stuck-robot escalation: when a robot has not advanced for a small fixed number of rounds, fall back to one targeted individual move that breaks the local jam
+- Minimal walls: no added walls in the default regime; use walls only as a thin barrier to fence off a known interference pattern, never as a structural plan
+- Operation-budget pacing: each round consumes at most one group command per active group plus a small fixed number of individual moves, so total operations stay well within `T <= K * N * N`
 
 ## Promising formal directions
 
-- Bottleneck-first control: repair the most constraining robot or passage before resuming bulk synchronized motion
-- Layered routing: first align robots with coarse lanes, then refine local placement near targets
-- Distance-priority staging: order groups by remaining distance, target depth, or expected blocking impact
-- Triggered repair loops: run deterministic repair only when measurable stalling criteria are met
-- Hybrid group/individual control: use group commands for bulk transport and individual commands only to resolve specific conflicts
-- Bounded local backtracking: allow a small number of reversal steps when a robot enters a confirmed dead end, capped by a hard counter
+- Group-by-direction: at the start of each round form groups out of robots whose next-needed direction is identical, then issue one group command per such direction
+- Distance-weighted priority: among competing same-round moves prefer the one that lowers `sum_k Manhattan(pos_k, target_k)` the most, breaking ties on the largest individual distance
+- Bounded round counter: cap total rounds at a function of `N` and `K` (for example `4 * N`) and stop early when no robot moved in a round
+- Local detour: when a robot is blocked by an occupied cell on the direct path, allow at most one perpendicular individual step before resuming axis-aligned progress
+- Lookahead-1 collision check: before issuing a group command, simulate it against the current occupancy map and skip the command if more than a small fraction of the group would actually move
 
 ## Reality checks
 
-- Overusing individual repairs can erase the main advantage of group commands
-- Staged scheduling helps only if the stage boundaries reflect real interference structure
-- Local fixes can create regressions for robots that were already near their targets
-- Deterministic repair loops need clear termination rules to avoid wasting the move budget; every loop must be bounded by an explicit counter or a budget derived from `K * N * N`
-- Excessive individual moves accumulate quickly toward the operation budget `T <= K * N * N` and can starve later stages of room to act
-- Repair stages without barrier discipline can cause cross-stage deadlocks that no later repair can fix
-- Repair-only refinement should lead to a distinguishable operating regime, not just a different convergence speed on the same routing family
-- Same routing family, same grouping family, and same repair loop with retuned constants is a weak direction unless the genes explain a genuine regime shift
-- The repair policy must be deterministic and parameterized only by the input and the genes; never hardcode a particular `N`, `K`, or stall threshold without expressing it as a function of the input
+- Greedy per-round selection can stall when several robots all need the same scarce passage; the stuck-robot escalation must actually unblock, not just retry the same direction
+- Direction-profile bundling pays off only when many robots share an axis; for diffuse target distributions individual moves dominate and that is fine
+- A round counter that is too small starves the schedule; a counter that is too large wastes budget — express it as a function of `N` and `K`, never a constant
+- Walls cannot be removed once added; if the design uses any walls, they must remain useful for the full run, not for a single round
+- "Repair" here means choosing the next round's moves well, not running a separate repair phase after a failed plan; do not reintroduce a multi-phase plan-then-repair structure
+- The operation total must stay within `T <= K * N * N` for every input; per-round caps must be expressed as functions of `K`, not constants
+- The trivial fallback (no walls, all robots in group `0`, no operations) is a valid safety net only if the genes still describe a real per-round move-selection rule that beats it
 
 ## Design prompt
 
 Good organisms on this island should specify:
-1. What the initial routing or grouping plan is and how it is constructed deterministically from the input
-2. What defines a stall, conflict, or repair trigger in measurable terms
-3. What the repair operator actually changes (a single robot's command, a group's release schedule, a chosen lane assignment)
-4. What termination or stage-transition criterion is used and how it is bounded by `N`, `K`, or `K * N * N`
-5. How the design stays within the total operation budget `T <= K * N * N` even after repairs
-6. How the repair logic changes the effective routing or repair regime rather than only the speed or tuning of convergence
+1. How groups are formed at the start of each round from the current state
+2. What scoring rule selects which group command (or individual move) is issued in a given round
+3. How collisions and out-of-bounds attempts are detected and skipped without invoking a separate repair pass
+4. What stuck-robot trigger and what targeted unblocking move are used when a robot fails to advance
+5. How the round count and per-round operation cap are expressed as functions of `N` and `K` so total operations stay within `K * N * N`
 
-Do not treat this as a requirement to use any particular repair script.
-Do not propose repair loops that lack a hard counter or whose termination is uncertain.
-Do not let the count-safe trivial fallback (single group, no operations) become the default answer; use it only when no real staged-repair structure is justified, and in that case explain that it is a fallback baseline.
-The goal is a style of thinking, not a prescribed control policy.
+Do not propose a separate plan-then-repair architecture; the round loop is the only loop.
+Do not add walls unless the genes give one concrete reason a specific wall pattern reduces interference.
+Do not let the trivial fallback become the actual answer; the per-round rule must produce real progress on typical inputs.
+The goal is a style of thinking, not a prescribed move script.

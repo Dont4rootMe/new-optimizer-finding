@@ -211,6 +211,40 @@ def _format_parsed_design_as_genetic_code_markdown(parsed_design: dict[str, str]
     return "\n\n".join(f"## {name}\n{str(parsed_design[name]).strip()}" for name in section_names) + "\n"
 
 
+def _append_rejected_candidate_repair_block(
+    user_prompt: str,
+    *,
+    last_rejected_design: dict[str, str] | None,
+    last_rejection_summary: str,
+) -> str:
+    """Append the previously rejected candidate as a targeted-repair block.
+
+    Without seeing its prior output the model tends to redesign from scratch
+    on every retry, which is what produced ~125 of the 313 atcoder-run
+    creation failures. Showing the rejected candidate plus the verdict
+    converts the retry from "blind redesign" into "patch this specific
+    object," which is much cheaper and more likely to recover the lineage.
+    """
+
+    if last_rejected_design is None:
+        return user_prompt
+    try:
+        formatted_candidate = _format_parsed_design_as_genetic_code_markdown(last_rejected_design)
+    except Exception:  # noqa: BLE001
+        return user_prompt
+    summary = str(last_rejection_summary).strip() or "(no rejection text available)"
+    repair_block = (
+        "\n\n=== PRIOR CANDIDATE TO REPAIR ===\n"
+        "Your previous design (below) was rejected for the reason listed above. "
+        "Your job now is to revise THIS candidate to address that critique. "
+        "Do not redesign from scratch; preserve every section the critique did not flag, "
+        "and edit the smallest set of bullets needed to remove the rejection.\n\n"
+        f"Critique to address: {summary}\n\n"
+        f"{formatted_candidate}"
+    )
+    return user_prompt + repair_block
+
+
 def _validate_assembled_python_source(source_text: str) -> str:
     """Validate already-assembled Python without altering its bytes."""
 
@@ -487,6 +521,16 @@ class CandidateGenerator(BaseLlmGenerator):
                 region_order=implementation_regions,
             )
             maternal_base_required = True
+            # PATCH mode loses to FULL mode when nearly every region is touched: the
+            # token budget is the same, the parser is more brittle, and the LLM has
+            # to track changed-section bookkeeping it would otherwise skip. Snap to
+            # FULL once at most one region would stay unchanged.
+            if not full_source_rewrite and len(changed_sections) >= len(implementation_regions) - 1:
+                compilation_mode = "FULL"
+                changed_sections = implementation_regions
+                base_parent_implementation = "NONE"
+                base_source_text = None
+                maternal_base_required = False
 
         system_prompt, user_prompt = build_implementation_prompt(
             genetic_code=child_genetic_code,
@@ -1002,6 +1046,7 @@ class CandidateGenerator(BaseLlmGenerator):
 
         max_design_attempts = 1 + self._resolve_max_novelty_regeneration_attempts()
         rejection_feedback: list[str] = []
+        last_rejected_design: dict[str, str] | None = None
         prompt_hash_parts: list[str] = []
         design_requests: list[dict[str, object]] = llm_request_payload["design_attempts"]  # type: ignore[assignment]
         design_responses: list[dict[str, object]] = llm_response_payload["design_attempts"]  # type: ignore[assignment]
@@ -1017,6 +1062,11 @@ class CandidateGenerator(BaseLlmGenerator):
             else:
                 current_design_system_prompt, current_design_user_prompt = novelty_context.build_design_prompts(
                     rejection_feedback
+                )
+                current_design_user_prompt = _append_rejected_candidate_repair_block(
+                    current_design_user_prompt,
+                    last_rejected_design=last_rejected_design,
+                    last_rejection_summary=rejection_feedback[-1] if rejection_feedback else "",
                 )
             prompt_hash_parts.extend((current_design_system_prompt, current_design_user_prompt))
 
@@ -1319,6 +1369,7 @@ class CandidateGenerator(BaseLlmGenerator):
 
             rejection_reason = judgment.rejection_reason or "Novelty check rejected the candidate."
             rejection_feedback.append(rejection_reason)
+            last_rejected_design = parsed_design
             _announce(
                 f"organism {organism_id} novelty_check rejected design attempt {attempt}/{max_design_attempts} "
                 f"(route={route_id}): {rejection_reason}"
@@ -1420,6 +1471,8 @@ class CandidateGenerator(BaseLlmGenerator):
         max_design_attempts = 1 + novelty_retry_budget + compatibility_retry_budget
         novelty_rejection_feedback: list[str] = []
         compatibility_rejections = []
+        last_rejected_design: dict[str, str] | None = None
+        last_rejection_summary: str = ""
         prompt_hash_parts: list[str] = []
         design_requests: list[dict[str, object]] = llm_request_payload["design_attempts"]  # type: ignore[assignment]
         design_responses: list[dict[str, object]] = llm_response_payload["design_attempts"]  # type: ignore[assignment]
@@ -1442,6 +1495,11 @@ class CandidateGenerator(BaseLlmGenerator):
                 current_design_system_prompt, current_design_user_prompt = compatibility_context.build_design_prompts(
                     novelty_rejection_feedback,
                     compatibility_rejections,
+                )
+                current_design_user_prompt = _append_rejected_candidate_repair_block(
+                    current_design_user_prompt,
+                    last_rejected_design=last_rejected_design,
+                    last_rejection_summary=last_rejection_summary,
                 )
             prompt_hash_parts.extend((current_design_system_prompt, current_design_user_prompt))
 
@@ -1739,6 +1797,8 @@ class CandidateGenerator(BaseLlmGenerator):
                 if not novelty_judgment.is_accepted:
                     rejection_reason = novelty_judgment.rejection_reason or "Novelty check rejected the candidate."
                     novelty_rejection_feedback.append(rejection_reason)
+                    last_rejected_design = parsed_design
+                    last_rejection_summary = f"NOVELTY: {rejection_reason}"
                     _announce(
                         f"organism {organism_id} novelty_check rejected design attempt "
                         f"{attempt}/{max_design_attempts} (route={route_id}): {rejection_reason}"
@@ -1906,6 +1966,8 @@ class CandidateGenerator(BaseLlmGenerator):
             if pipeline_state_callback is not None:
                 pipeline_state_callback("creating")
             rejection_reason = compatibility_judgment.rejection_reason or "Compatibility check rejected the candidate."
+            last_rejected_design = parsed_design
+            last_rejection_summary = f"COMPATIBILITY: {rejection_reason}"
             LOGGER.info(
                 "Compatibility rejected organism=%s route=%s model=%s operator=%s design_attempt=%d/%d reason=%s",
                 organism_id,

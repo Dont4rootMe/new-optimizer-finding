@@ -401,8 +401,11 @@ def test_awtf2025_canonical_preset_accepts_standalone_validation_overrides() -> 
 
     assert cfg.mode == "run"
     assert cfg.organism_dir == "/tmp/organism"
-    assert cfg.evolver.creation.max_attempts_to_create_organism == 3
+    # Retry budgets were tightened in the P3 fix from the atcoder-run post-mortem:
+    # the cascading retries multiplied wasted LLM calls without lifting the
+    # per-organism success rate, so they were cut to (2, 2, 1, 1).
+    assert cfg.evolver.creation.max_attempts_to_create_organism == 2
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 1
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 1
     assert cfg.evolver.creation.max_parallel_organisms == 15

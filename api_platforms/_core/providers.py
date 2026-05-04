@@ -170,7 +170,20 @@ def _extract_template_region_names(text: str) -> tuple[str, ...]:
     legacy_names = tuple(re.findall(r"# === REGION: ([A-Z][A-Z0-9_]*) ===", text))
     if legacy_names:
         return legacy_names
-    return tuple(re.findall(r"^[ \t]*# SECTION: ([A-Z][A-Z0-9_]*)[ \t]*$", text, flags=re.MULTILINE))
+    section_hint_names = tuple(re.findall(r"^[ \t]*# SECTION: ([A-Z][A-Z0-9_]*)[ \t]*$", text, flags=re.MULTILINE))
+    if section_hint_names:
+        return section_hint_names
+    # awtf2025_heuristic stopped showing the raw scaffold to the LLM after the
+    # 426-organism atcoder run (small models were copying the scaffold markers
+    # into their answer). The user prompt now lists region names as a numbered
+    # block under === CANONICAL REGION ORDER ===; the mock route reads the
+    # canonical region order from that list.
+    region_block = _extract_prompt_block(text, "CANONICAL REGION ORDER")
+    if region_block:
+        numbered_names = tuple(re.findall(r"^\s*\d+\.\s*([A-Z][A-Z0-9_]*)\s*$", region_block, flags=re.MULTILINE))
+        if numbered_names:
+            return numbered_names
+    return ()
 
 
 def _extract_prompt_block(text: str, heading: str) -> str:

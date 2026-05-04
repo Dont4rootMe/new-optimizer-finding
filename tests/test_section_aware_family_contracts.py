@@ -94,7 +94,10 @@ def test_family_config_exposes_section_aware_surface(family: str) -> None:
     assert cfg.evolver.prompts.compatibility_mutation_user.endswith("/compatibility/mutation/user.txt")
     assert cfg.evolver.prompts.compatibility_crossover_system.endswith("/compatibility/crossover/system.txt")
     assert cfg.evolver.prompts.compatibility_crossover_user.endswith("/compatibility/crossover/user.txt")
-    expected_compatibility_retries = 1 if family == "circle_packing_shinka" else 3
+    # awtf2025_heuristic was reduced to 1 retry as part of the post-mortem on the
+    # 426-organism atcoder run: cascading retries multiplied wasted LLM calls
+    # without lifting the per-organism success rate.
+    expected_compatibility_retries = 1 if family in {"circle_packing_shinka", "awtf2025_heuristic"} else 3
     assert (
         cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection
         == expected_compatibility_retries
@@ -163,6 +166,17 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
         assert "treat it as the concrete parent program" in bundle.implementation_system
         assert "EVOLVE-BLOCK-START" in bundle.implementation_system
         assert "do not output a full `implementation.py`" not in bundle.implementation_system
+    elif family == "awtf2025_heuristic":
+        # The awtf2025_heuristic implementation prompt was rewritten after the
+        # 426-organism atcoder run: small local models were tripping on the
+        # multi-convention markup (## END_REGION: NAME and similar). The new
+        # contract leads with a concrete artifact example and forbids the
+        # decorated end marker outright.
+        assert "## COMPILATION_MODE" in bundle.implementation_system
+        assert "The first non-empty line of the answer is exactly `## COMPILATION_MODE`." in bundle.implementation_system
+        assert "Every region closes with the bare line `## END_REGION`." in bundle.implementation_system
+        assert "Do not write `## END_REGION: SECTION_NAME`." in bundle.implementation_system
+        assert "Concrete minimal example for FULL mode" in bundle.implementation_system
     else:
         assert "## COMPILATION_MODE" in bundle.implementation_system
         assert "The first line of your answer must be `## COMPILATION_MODE`." in bundle.implementation_system
@@ -177,7 +191,14 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
     assert "=== CHANGED_SECTIONS ===" in bundle.implementation_user
     assert "=== MATERNAL BASE GENETIC CODE ===" in bundle.implementation_user
     assert "=== MATERNAL BASE IMPLEMENTATION ===" in bundle.implementation_user
-    assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.implementation_user
+    if family == "awtf2025_heuristic":
+        # The atcoder rewrite replaced the raw scaffold display with a structured
+        # region-order list to keep the LLM from copying the # === REGION ===
+        # markers verbatim into its artifact.
+        assert "=== CANONICAL REGION ORDER ===" in bundle.implementation_user
+        assert "=== PRE-DEFINED LOCAL VARIABLES ===" in bundle.implementation_user
+    else:
+        assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.implementation_user
     assert "Do NOT add commentary before or after the file" in bundle.repair_system
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.repair_user
 

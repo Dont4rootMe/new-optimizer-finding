@@ -2,6 +2,8 @@
 
 This file applies to the whole repository unless a deeper `AGENTS.md` overrides it.
 
+For a deep walkthrough of the evolutionary pipeline (organism lifecycle, validators, operators, islands, retry/repair logic, recent fixes from the atcoder post-mortem), read `FRAMEWORK.md` at the repo root. Use it as the canonical reference whenever the question is "how does the framework actually behave."
+
 ## What This Repo Contains
 
 - `src/`: task-blind runtime, validation worker, and organism-first evolution engine

@@ -1196,7 +1196,14 @@ def test_run_creation_stages_with_novelty_retries_design_before_implementation(
     assert len(llm_request["design_attempts"]) == 2
     assert len(llm_request["novelty_checks"]) == 2
     assert llm_response["novelty_checks"][0]["rejection_reason"] == "Too close to the parent."
-    assert llm_request["design"]["user_prompt"] == "retry prompt :: Too close to the parent."
+    # The retry prompt is the operator's regular feedback prompt with a targeted
+    # repair block appended (the rejected candidate plus the critique). This
+    # converts the retry from a blind redesign into a targeted patch — see the
+    # P6 fix in the post-mortem of the 426-organism atcoder run.
+    retry_user_prompt = llm_request["design"]["user_prompt"]
+    assert retry_user_prompt.startswith("retry prompt :: Too close to the parent.")
+    assert "=== PRIOR CANDIDATE TO REPAIR ===" in retry_user_prompt
+    assert "First candidate change." in retry_user_prompt
 
 
 def test_run_creation_stages_with_novelty_rejection_exhaustion_is_terminal(
