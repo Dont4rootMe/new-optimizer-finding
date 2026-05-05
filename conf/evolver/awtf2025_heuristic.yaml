@@ -101,4 +101,3 @@ llm:
 
   route_weights:
     ollama_gemma4_31b: 1.0
-    ollama_qwen35_35b: 1.0
