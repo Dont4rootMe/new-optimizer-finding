@@ -29,9 +29,9 @@ Requirements:
 - Do not invent a new major idea that is absent from the genes and novelty summary
 - Keep the repaired file compact; target fewer than 220 lines and never output unfinished code
 - Use ASCII identifiers only; do not use Unicode suffixes, copied mathematical symbols, or glued identifiers
-- Assign every local variable before first use; do not rely on a late `PARAMETERS` block to define values used earlier
+- Assign every local variable before first use; define shared constants and parameters at the top of the region that first uses them rather than relying on a later region
 - Focus first on the code span implicated by the error
-- Prefer repairing `CONTROL_POLICY`, `LOCAL_REPAIR_POLICY`, `PARAMETERS`, or `OPTIONAL_CODE_SKETCH` before rewriting state representation, macro strategy, or construction logic
+- Prefer repairing `LOCAL_REPAIR_POLICY` or `OPTIONAL_CODE_SKETCH` before rewriting state representation, macro strategy, or construction logic
 - Preserve inherited behavior outside the affected code whenever possible
 - Trivial-baseline fallback (zero walls, single group, no operations) is a last resort, not the default
 

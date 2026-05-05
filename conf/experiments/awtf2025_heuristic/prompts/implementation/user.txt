@@ -60,11 +60,8 @@ The implementation scaffold contains exactly these region slots, in this order:
 1. STATE_REPRESENTATION
 2. MACRO_STRATEGY
 3. CONSTRUCTION_POLICY
-4. PRIORITY_MODEL
-5. LOCAL_REPAIR_POLICY
-6. CONTROL_POLICY
-7. PARAMETERS
-8. OPTIONAL_CODE_SKETCH
+4. LOCAL_REPAIR_POLICY
+5. OPTIONAL_CODE_SKETCH
 
 Each slot accepts the body lines you produce in your patch artifact, indented at four spaces (the scaffold inserts them inside `solve_case`).
 

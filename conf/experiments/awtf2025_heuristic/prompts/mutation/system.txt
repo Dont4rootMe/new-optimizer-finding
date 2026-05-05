@@ -12,6 +12,8 @@ Preserve the core heuristic paradigm of the parent and of the selected child dra
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
 The section schema is authoritative. Use each section only for the kind of heuristic content its description allows.
 
+Code, pseudocode, and Python fragments are welcome in any section the schema permits (every section except `MACRO_STRATEGY`). Do not water a clear procedural mutation down to prose when a few lines of code would express the change better. Equally, a textual mutation is fully valid when the change is naturally a story-level idea — pick whichever form locks the new mechanism in most clearly.
+
 Priority order:
 1. analyze the child genetic code draft selected by evolution
 2. use excluded genes and lineage as context
@@ -23,7 +25,7 @@ Do:
 - edit the smallest coherent module needed to test the new hypothesis
 - the coherent change should usually alter at most one causal module; avoid appending extra support machinery unless it is strictly required
 - if a real mechanism requires coordinated changes across multiple sections (for example, a new wall family that only pays off under a matching group definition and a matching staged release), make those changes together
-- if the mutation touches more than four sections, that is usually too broad unless the draft itself already tightly couples those sections
+- if the mutation touches more than three sections, that is usually too broad unless the draft itself already tightly couples those sections
 - do not create fake locality by changing one section while leaving its dependencies stale
 - preserve the parent's core structural ideas — refine, extend, or tune them rather than replacing the paradigm
 - ensure the changed sections define a plausible causal route to a lower absolute score, not merely a different but coherent draft
@@ -34,7 +36,8 @@ Do:
 - make `CHANGE_DESCRIPTION` a claim-by-claim summary of the actual changed mechanism only; every named mechanism must appear in `CORE_GENES`
 - when describing provenance, distinguish inherited parent material from the new mutation and do not claim a mechanism was newly introduced if the child genes simply retained it
 - keep genes atomic within each section
-- if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
+- when a section accepts code or pseudocode, keep that detail focused on the mechanism the section is responsible for; cross-section helpers belong in `OPTIONAL_CODE_SKETCH`
+- inline parameter changes (thresholds, schedules, ratios, iteration caps) directly inside the section that uses them, expressed in terms of `N` and `K`; there is no separate parameter section
 - produce one unified novelty summary for lineage
 
 Do not:
@@ -68,16 +71,13 @@ Inside `## CORE_GENES`, return exactly these subsection headings, in this exact 
 ### STATE_REPRESENTATION
 ### MACRO_STRATEGY
 ### CONSTRUCTION_POLICY
-### PRIORITY_MODEL
 ### LOCAL_REPAIR_POLICY
-### CONTROL_POLICY
-### PARAMETERS
 ### OPTIONAL_CODE_SKETCH
 
 Rules for subsection bodies:
-- `STATE_REPRESENTATION` through `PARAMETERS` must each contain at least one `- ` bullet
+- `STATE_REPRESENTATION` through `LOCAL_REPAIR_POLICY` must each contain at least one `- ` bullet
 - `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
-- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
+- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH` and is fully valid when no code-shaped detail is helpful
 - if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
 - do not use nested headings inside subsection bodies
 

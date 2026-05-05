@@ -10,14 +10,17 @@ Think in genes first, implementation second.
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
 The section schema is authoritative. Use each section only for the kind of heuristic content its description allows.
 
+Code, pseudocode, and Python fragments are welcome wherever they sharpen the mechanism. Do not water a clear procedural idea down to prose when a few lines of pseudocode or Python would express it better. Equally, plain-text ideas are fully valid — do not pad with code when a textual rule is naturally compact. The schema spells out which sections accept code: only `MACRO_STRATEGY` is plain-language only.
+
 Important:
 - the organism must produce a contest-legal output for any input case: exactly `N` lines of vertical added-wall bits of length `N - 1`, then exactly `N - 1` lines of horizontal added-wall bits of length `N`, then exactly `K` lines of group ids in `[0, K - 1]`, then zero or more operation lines `a b d` with `a in {g, i}` and `d in {U, D, L, R}`, with total operation count `T <= K * N * N`
 - the goal is still to design an organism at the level of ideas, assumptions, constructive principles, and local procedures
-- the organism must define a plausible causal route from state representation through macro strategy, construction, priority, repair, and control to a lower absolute score on the configured corpus
+- the organism must define a plausible causal route from state representation through macro strategy, construction (including ranking and priority), local repair (including outer control), and optional code-sketch detail to a lower absolute score on the configured corpus
 - prefer a lean organism with one strong mechanism over a rich organism with many loosely coupled refinements
 - avoid introducing more than one main wall idea, one main grouping idea, one main routing idea, and one main repair idea unless tighter coupling is essential
 - avoid designs that make implementation solve a planning puzzle; any wall family, group structure, or routing schedule must be expressible as deterministic procedures that consume only the input and the genes
 - never hardcode a particular value of `N`, a particular value of `K`, a particular initial wall layout, a particular target arrangement, or any other input-derived constant; the organism must derive everything from the input and a small fixed parameter set
+- inline parameter choices (thresholds, schedules, ratios, iteration caps, group counts as a function of `K`, wall-density targets as a function of `N`, operation budgets as a fraction of `K * N * N`) directly inside the section that uses them, expressed in terms of `N` and `K` rather than raw numbers; there is no separate parameter section
 - before finalizing any explicit count rule, schedule rule, or budget allocation, self-check that it stays within `T <= K * N * N` for any reasonable `N` and `K`; if it does not, choose a simpler control regime
 - do not include scratch arithmetic, abandoned alternatives, or self-corrections in the final genes; if a budget check fails, replace the regime before answering
 - do not propose strategies that require non-deterministic primitives such as unseeded random sampling or time-dependent decisions; the program must be deterministic
@@ -34,7 +37,7 @@ Important:
 - do not replace the genetic code with a hand-tuned solved arrangement
 - do not treat the schema as decoration; it defines the structure of the genome
 - keep genes atomic within each section: one independent, testable idea per bullet
-- if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
+- when a section accepts code or pseudocode, keep that detail focused on the mechanism the section is responsible for; cross-section helpers belong in `OPTIONAL_CODE_SKETCH`
 - no section may contain a full end-to-end implementation of `solve_case`
 - `CHANGE_DESCRIPTION` must remain plain-language only and must not contain code
 
@@ -54,19 +57,15 @@ Inside `## CORE_GENES`, return exactly these subsection headings, in this exact 
 ### STATE_REPRESENTATION
 ### MACRO_STRATEGY
 ### CONSTRUCTION_POLICY
-### PRIORITY_MODEL
 ### LOCAL_REPAIR_POLICY
-### CONTROL_POLICY
-### PARAMETERS
 ### OPTIONAL_CODE_SKETCH
 
 Rules for subsection bodies:
-- `STATE_REPRESENTATION` through `PARAMETERS` must each contain at least one `- ` bullet
+- `STATE_REPRESENTATION` through `LOCAL_REPAIR_POLICY` must each contain at least one `- ` bullet
 - `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
-- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
+- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH` and is fully valid when no code-shaped detail is helpful
 - use the fewest bullets needed to define the mechanism cleanly
 - avoid filling a section with multiple near-duplicate bullets
-- for seed organisms, prefer `- None.` in `OPTIONAL_CODE_SKETCH`; if it is used, keep it to at most two local pseudocode bullets and never use code fences
 - if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
 - do not use nested headings inside subsection bodies
 

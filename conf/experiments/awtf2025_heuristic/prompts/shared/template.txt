@@ -22,17 +22,8 @@ def solve_case(input_text: str) -> str:
     # === REGION: CONSTRUCTION_POLICY ===
     # === END_REGION: CONSTRUCTION_POLICY ===
 
-    # === REGION: PRIORITY_MODEL ===
-    # === END_REGION: PRIORITY_MODEL ===
-
     # === REGION: LOCAL_REPAIR_POLICY ===
     # === END_REGION: LOCAL_REPAIR_POLICY ===
-
-    # === REGION: CONTROL_POLICY ===
-    # === END_REGION: CONTROL_POLICY ===
-
-    # === REGION: PARAMETERS ===
-    # === END_REGION: PARAMETERS ===
 
     # === REGION: OPTIONAL_CODE_SKETCH ===
     # === END_REGION: OPTIONAL_CODE_SKETCH ===

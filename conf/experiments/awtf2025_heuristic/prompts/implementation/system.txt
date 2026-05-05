@@ -55,13 +55,13 @@ FULL
 
 ## Mode discipline
 
-- FULL: emit one block per canonical region, in canonical order, covering all of: STATE_REPRESENTATION, MACRO_STRATEGY, CONSTRUCTION_POLICY, PRIORITY_MODEL, LOCAL_REPAIR_POLICY, CONTROL_POLICY, PARAMETERS, OPTIONAL_CODE_SKETCH.
+- FULL: emit one block per canonical region, in canonical order, covering all of: STATE_REPRESENTATION, MACRO_STRATEGY, CONSTRUCTION_POLICY, LOCAL_REPAIR_POLICY, OPTIONAL_CODE_SKETCH.
 - PATCH: emit blocks only for the section names listed in CHANGED_SECTIONS (in their listed order). Do not emit unchanged regions; the framework keeps the maternal version byte-for-byte. Do not try to compensate for unchanged regions by silently rewriting behavior elsewhere.
 
 ## Code discipline
 
-- All region bodies execute top-to-bottom inside `solve_case(input_text: str) -> str`. Order is: STATE_REPRESENTATION, MACRO_STRATEGY, CONSTRUCTION_POLICY, PRIORITY_MODEL, LOCAL_REPAIR_POLICY, CONTROL_POLICY, PARAMETERS, OPTIONAL_CODE_SKETCH.
-- PARAMETERS and OPTIONAL_CODE_SKETCH come last; do not put a value in PARAMETERS that an earlier region needs to read. Define shared constants at the top of the region that first uses them.
+- All region bodies execute top-to-bottom inside `solve_case(input_text: str) -> str`. Order is: STATE_REPRESENTATION, MACRO_STRATEGY, CONSTRUCTION_POLICY, LOCAL_REPAIR_POLICY, OPTIONAL_CODE_SKETCH.
+- Define shared constants and parameters at the top of the region that first uses them; there is no separate parameter region. OPTIONAL_CODE_SKETCH comes last and may define helper functions or reusable utility code that earlier regions call only if those helpers were defined inline before first use, but it is more common to leave OPTIONAL_CODE_SKETCH empty (`pass`) when the genes do not call for shared code.
 - Every variable must be assigned before first use.
 - Indent every non-empty Python line with four spaces.
 - Use only the standard library. No third-party imports, no `numpy`, no file I/O, no subprocess, no network, no random, no time-based logic, no hash-order dependence.

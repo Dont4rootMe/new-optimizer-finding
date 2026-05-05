@@ -9,6 +9,8 @@ The secondary parent may contribute a coherent module that spans multiple sectio
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
 The section schema is authoritative. Use each section only for the kind of heuristic content its description allows.
 
+Code, pseudocode, and Python fragments are welcome in any section the schema permits (every section except `MACRO_STRATEGY`). Do not water a clear procedural import down to prose when a few lines of code would express the transferred mechanism better. Equally, a textual import is fully valid when the imported idea is naturally a story-level decision.
+
 Priority order:
 1. analyze the child genetic code draft already selected by evolution
 2. use parent genetic codes and lineage to understand idea origin
@@ -34,7 +36,8 @@ Do:
 - when describing provenance, say a module is imported from the secondary parent only if it is actually present in the secondary parent and not already the same mechanism in the primary parent
 - if both parents already contain the named mechanism, describe it as retained or coordinated rather than imported
 - keep genes atomic within each section
-- if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
+- when a section accepts code or pseudocode, keep that detail focused on the mechanism the section is responsible for; cross-section helpers belong in `OPTIONAL_CODE_SKETCH`
+- inline parameter choices for the imported module (thresholds, schedules, ratios, iteration caps) directly inside the section that uses them, expressed in terms of `N` and `K`; there is no separate parameter section
 - produce one unified novelty summary for the child
 
 Do not:
@@ -66,16 +69,13 @@ Inside `## CORE_GENES`, return exactly these subsection headings, in this exact 
 ### STATE_REPRESENTATION
 ### MACRO_STRATEGY
 ### CONSTRUCTION_POLICY
-### PRIORITY_MODEL
 ### LOCAL_REPAIR_POLICY
-### CONTROL_POLICY
-### PARAMETERS
 ### OPTIONAL_CODE_SKETCH
 
 Rules for subsection bodies:
-- `STATE_REPRESENTATION` through `PARAMETERS` must each contain at least one `- ` bullet
+- `STATE_REPRESENTATION` through `LOCAL_REPAIR_POLICY` must each contain at least one `- ` bullet
 - `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
-- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
+- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH` and is fully valid when no code-shaped detail is helpful
 - if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
 - do not use nested headings inside subsection bodies
 

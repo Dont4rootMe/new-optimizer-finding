@@ -13,6 +13,7 @@ The schema below is authoritative for the structure and meaning of CORE_GENES.
 Your task is to generate an idea set first.
 Do not optimize the wording toward a ready-made move script or a ready-made wall pattern.
 Produce a full sectioned genetic code whose content obeys the schema and whose sections all appear in the required order.
+Code, pseudocode, and Python fragments are welcome wherever they sharpen the mechanism (every section except `MACRO_STRATEGY` accepts them), and equally a textual idea is fully valid when prose expresses it best — let each gene pick the form that locks in the meaning most clearly.
 Prefer compact, implementable section content over ambitious but over-specified multi-part designs.
 Avoid wall, group, or routing rules whose feasibility depends on resolving an implicit planning puzzle at implementation time; define one compact deterministic construction path that consumes only the input parameters `N` and `K`, the parsed initial walls, and the parsed robot and target positions.
 If the island style tempts a complex multi-phase orchestration, prefer a simpler one-phase regime with a clear progress measure over a brittle stage chain whose stage transitions are unclear.
