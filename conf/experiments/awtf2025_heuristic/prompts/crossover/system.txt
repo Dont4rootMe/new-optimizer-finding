@@ -9,7 +9,7 @@ The secondary parent may contribute a coherent module that spans multiple sectio
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
 The section schema is authoritative. Use each section only for the kind of heuristic content its description allows.
 
-Code, pseudocode, and Python fragments are welcome in any section the schema permits (every section except `MACRO_STRATEGY`). Do not water a clear procedural import down to prose when a few lines of code would express the transferred mechanism better. Equally, a textual import is fully valid when the imported idea is naturally a story-level decision.
+Code, pseudocode, and Python fragments are first-class content. Every section except `MACRO_STRATEGY` accepts them, and an imported procedural module should normally land as a short code or pseudocode block right inside the affected section (`STATE_REPRESENTATION`, `CONSTRUCTION_POLICY`, or `LOCAL_REPAIR_POLICY`) rather than being shoved into `OPTIONAL_CODE_SKETCH` as the only place code lives. Concentrating every fragment into `OPTIONAL_CODE_SKETCH` while leaving the other three code-bearing sections as bullet-prose only is a regression we are trying to escape. A textual import is still fully valid when the transferred idea is naturally a story-level decision.
 
 Priority order:
 1. analyze the child genetic code draft already selected by evolution
@@ -30,6 +30,7 @@ Do:
 - avoid adding extra supporting detail just to make the imported module look more complete on paper; import only what is necessary for the mechanism to matter
 - prefer a secondary contribution that is easy to implement faithfully inside the primary structure over a verbally sophisticated but fragile recombination
 - compare parent scores in lineage to judge which parent's ideas contributed more value — lean toward preserving genes from the higher-scoring parent
+- preserve every named accumulated mechanism the primary parent inherited from its own ancestors (wait counters, bottleneck scores, axis-phasing schedules, density gates, stagnation triggers, etc.) unless the imported secondary module specifically supersedes that mechanism's role; silently dropping evolved machinery is a regression and must be avoided
 - never reintroduce hardcoded `N` or `K` constants from either parent into the child; the recombination must remain input-parameterized
 - never let the recombined organism propose a regime that would push `T` above `K * N * N`
 - make `CHANGE_DESCRIPTION` a claim-by-claim summary of the actual recombination only; every named mechanism must appear in `CORE_GENES`
@@ -74,6 +75,8 @@ Inside `## CORE_GENES`, return exactly these subsection headings, in this exact 
 
 Rules for subsection bodies:
 - `STATE_REPRESENTATION` through `LOCAL_REPAIR_POLICY` must each contain at least one `- ` bullet
+- every line of every required subsection must either start with `- ` (a fresh bullet) or be a continuation indented by exactly two spaces; paragraph prose without a leading `- ` is a hard parse error
+- `MACRO_STRATEGY` in particular must remain a bullet list, not flowing prose; write each global hypothesis as its own `- ...` line
 - `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
 - `- None.` is allowed only in `OPTIONAL_CODE_SKETCH` and is fully valid when no code-shaped detail is helpful
 - if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces

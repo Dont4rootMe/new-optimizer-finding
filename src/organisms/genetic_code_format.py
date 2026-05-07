@@ -315,14 +315,25 @@ def _parse_sectioned_core_genes(
 
         if not line.strip():
             continue
-        if current_name == _OPTIONAL_CODE_SKETCH_SECTION and line.strip().startswith("```"):
-            flush_entry()
-            current_entry_lines = [line.rstrip()]
-            if line.strip().count("```") >= 2:
+        if current_name == _OPTIONAL_CODE_SKETCH_SECTION:
+            # Detect a fenced ``` opener, which LLMs commonly emit either
+            # bare on its own line ("```python") or wrapped inside a bullet
+            # ("- ```python"). Both must enter fenced-collection mode so that
+            # the matching closing ``` is recognized correctly on reread.
+            stripped = line.strip()
+            fenced_payload: str | None = None
+            if stripped.startswith("```"):
+                fenced_payload = stripped
+            elif stripped.startswith("- ```"):
+                fenced_payload = stripped[2:]
+            if fenced_payload is not None:
                 flush_entry()
-            else:
-                inside_optional_code_fence = True
-            continue
+                current_entry_lines = [line.rstrip()]
+                if fenced_payload.count("```") >= 2:
+                    flush_entry()
+                else:
+                    inside_optional_code_fence = True
+                continue
         if line.startswith("- "):
             flush_entry()
             current_entry_lines = [line[2:].strip()]

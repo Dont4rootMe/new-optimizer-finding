@@ -12,7 +12,7 @@ Preserve the core heuristic paradigm of the parent and of the selected child dra
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
 The section schema is authoritative. Use each section only for the kind of heuristic content its description allows.
 
-Code, pseudocode, and Python fragments are welcome in any section the schema permits (every section except `MACRO_STRATEGY`). Do not water a clear procedural mutation down to prose when a few lines of code would express the change better. Equally, a textual mutation is fully valid when the change is naturally a story-level idea — pick whichever form locks the new mechanism in most clearly.
+Code, pseudocode, and Python fragments are first-class content. Every section except `MACRO_STRATEGY` accepts them, and a mutation that adds or sharpens a procedural mechanism should normally land as a short code or pseudocode block right inside the affected section (`STATE_REPRESENTATION`, `CONSTRUCTION_POLICY`, or `LOCAL_REPAIR_POLICY`) rather than being shoved into `OPTIONAL_CODE_SKETCH` as the only place code lives. Concentrating every fragment into `OPTIONAL_CODE_SKETCH` while leaving the other three code-bearing sections as bullet-prose only is a regression we are trying to escape. A textual mutation is still fully valid when the change is naturally a story-level decision — pick whichever form locks the new mechanism in most clearly.
 
 Priority order:
 1. analyze the child genetic code draft selected by evolution
@@ -33,6 +33,8 @@ Do:
 - do not strengthen the child by adding explanatory redundancy or extra optional detail; strengthen it by sharpening the actual mechanism
 - never reintroduce hardcoded `N` or `K` constants; the mutation must remain input-parameterized
 - never propose a mechanism that would push `T` above the per-case budget `K * N * N`
+- preserve every named accumulated mechanism the parent inherited from its own ancestors (wait counters, bottleneck scores, axis-phasing schedules, density gates, stagnation triggers, etc.) unless the new mutation specifically supersedes that mechanism's role; silently dropping evolved machinery is a regression and must be avoided
+- if the parent population has converged on a no-added-walls regime and the island style permits walls, a mutation that introduces a small concrete wall pattern (one corridor, one separator, one bottleneck divider) and ties it to the existing routing or grouping mechanism is a particularly useful direction; do not propose walls in the abstract without a deterministic construction
 - make `CHANGE_DESCRIPTION` a claim-by-claim summary of the actual changed mechanism only; every named mechanism must appear in `CORE_GENES`
 - when describing provenance, distinguish inherited parent material from the new mutation and do not claim a mechanism was newly introduced if the child genes simply retained it
 - keep genes atomic within each section
@@ -76,6 +78,8 @@ Inside `## CORE_GENES`, return exactly these subsection headings, in this exact 
 
 Rules for subsection bodies:
 - `STATE_REPRESENTATION` through `LOCAL_REPAIR_POLICY` must each contain at least one `- ` bullet
+- every line of every required subsection must either start with `- ` (a fresh bullet) or be a continuation indented by exactly two spaces; paragraph prose without a leading `- ` is a hard parse error
+- `MACRO_STRATEGY` in particular must remain a bullet list, not flowing prose; write each global hypothesis as its own `- ...` line
 - `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
 - `- None.` is allowed only in `OPTIONAL_CODE_SKETCH` and is fully valid when no code-shaped detail is helpful
 - if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces

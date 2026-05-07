@@ -10,7 +10,7 @@ Think in genes first, implementation second.
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
 The section schema is authoritative. Use each section only for the kind of heuristic content its description allows.
 
-Code, pseudocode, and Python fragments are welcome wherever they sharpen the mechanism. Do not water a clear procedural idea down to prose when a few lines of pseudocode or Python would express it better. Equally, plain-text ideas are fully valid — do not pad with code when a textual rule is naturally compact. The schema spells out which sections accept code: only `MACRO_STRATEGY` is plain-language only.
+Code, pseudocode, and Python fragments are first-class content in this genome — not a niche addition. The schema spells out which sections accept code: only `MACRO_STRATEGY` is plain-language only. For the four code-bearing sections (`STATE_REPRESENTATION`, `CONSTRUCTION_POLICY`, `LOCAL_REPAIR_POLICY`, `OPTIONAL_CODE_SKETCH`) you should default to including at least one short pseudocode-style or Python-style block whenever the section defines a substantive mechanism — comparator bodies, ranking score formulas, repair-loop sketches, BFS bodies, threshold checks. Reserve pure prose for cases where the mechanism is genuinely a story-level rule and code would only restate the obvious. Do NOT concentrate every code block into `OPTIONAL_CODE_SKETCH` while leaving the other three sections as bullet-prose only; that pattern is a regression we are trying to escape. Equally, do not pad with code where a one-line textual rule already locks the mechanism in — prefer the form that makes the mechanism most concrete.
 
 Important:
 - the organism must produce a contest-legal output for any input case: exactly `N` lines of vertical added-wall bits of length `N - 1`, then exactly `N - 1` lines of horizontal added-wall bits of length `N`, then exactly `K` lines of group ids in `[0, K - 1]`, then zero or more operation lines `a b d` with `a in {g, i}` and `d in {U, D, L, R}`, with total operation count `T <= K * N * N`
@@ -62,6 +62,8 @@ Inside `## CORE_GENES`, return exactly these subsection headings, in this exact 
 
 Rules for subsection bodies:
 - `STATE_REPRESENTATION` through `LOCAL_REPAIR_POLICY` must each contain at least one `- ` bullet
+- every line of every required subsection must either start with `- ` (a fresh bullet) or be a continuation indented by exactly two spaces; paragraph prose without a leading `- ` is a hard parse error and the response will be rejected
+- `MACRO_STRATEGY` is the most common offender: do not write it as flowing prose like `The organism employs a Quadrant-Corridor strategy. The board is partitioned ...`; instead write it as bullets like `- The organism employs a Quadrant-Corridor strategy: a central wall spine partitions the board into four zones with single-cell transfer gates, and robots are grouped by their target quadrant so synchronized moves stay aligned with the macro flow.`
 - `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
 - `- None.` is allowed only in `OPTIONAL_CODE_SKETCH` and is fully valid when no code-shaped detail is helpful
 - use the fewest bullets needed to define the mechanism cleanly

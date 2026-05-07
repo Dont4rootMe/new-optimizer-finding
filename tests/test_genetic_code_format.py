@@ -245,6 +245,45 @@ def test_sectioned_parser_accepts_fenced_optional_code_sketch_block() -> None:
     )
 
 
+def test_sectioned_parser_accepts_bullet_wrapped_fenced_optional_code_sketch_block() -> None:
+    """Real-world LLM output wraps fenced code blocks inside a bullet, e.g.
+
+        - BFS for distance:
+        - ```python
+          def get_dist_map(...):
+              ...
+          ```
+
+    The original parser only recognized fenced openers when the line started
+    with a bare ``` (no bullet wrapper), so the closing ``` was misinterpreted
+    as a fresh fenced opener and the parser raised
+    ``unterminated fenced code block`` on rereads of the saved genetic_code.md.
+    This regression test pins the relaxed behavior.
+    """
+    text = SECTIONED_GENETIC_CODE.replace(
+        "### OPTIONAL_CODE_SKETCH\n- None.",
+        (
+            "### OPTIONAL_CODE_SKETCH\n"
+            "- BFS for distance:\n"
+            "- ```python\n"
+            "  def get_dist_map(N, start_node):\n"
+            "      dist = {start_node: 0}\n"
+            "      return dist\n"
+            "  ```"
+        ),
+    )
+
+    parsed = parse_genetic_code_text(text, expected_section_names=SCHEMA_SECTION_NAMES)
+
+    assert parsed.core_gene_sections is not None
+    optional = parsed.core_gene_sections[-1]
+    assert optional.name == "OPTIONAL_CODE_SKETCH"
+    assert len(optional.entries) == 2
+    assert optional.entries[0].text == "BFS for distance:"
+    assert "def get_dist_map" in optional.entries[1].text
+    assert optional.entries[1].text.strip().endswith("```")
+
+
 def test_sectioned_parser_uses_arbitrary_schema_section_names() -> None:
     core = "\n\n".join(
         f"### {name}\n- "

@@ -20,6 +20,7 @@ Reject the candidate if any of these are true:
 - the imported secondary module does not change the expected wall, grouping, routing, or repair regime enough to move the child into a different phenotype family
 - the imported secondary module becomes too broad, too diffuse, or too richly described to preserve as one coherent inherited module
 - the child introduces many new role distinctions, region labels, or staging conditions without a clear compact mechanism that justifies them
+- the recombination silently drops one or more named accumulated mechanisms from the primary parent (e.g. a wait-counter, a bottleneck-score, an axis-phasing schedule) without replacing them with something that subsumes their role; preserving the primary parent's evolved machinery is the default unless the imported module specifically supersedes it
 - `OPTIONAL_CODE_SKETCH` or another section contradicts the section that supposedly defines the imported module
 - the recombination introduces a repair-and-control loop that is not bounded by `N`, `K`, or `K * N * N`
 - the recombination introduces a non-deterministic primitive that was not present in either parent
