@@ -151,6 +151,14 @@ def dump_organism(org_dir: Path, out_dir: Path) -> dict[str, Any]:
     ):
         lines.append(_dump_stage(f"repair_attempts[{i}]", ra, rb))
 
+    genetic_code = org_dir / "genetic_code.md"
+    if genetic_code.exists():
+        try:
+            gc_text = genetic_code.read_text()
+        except Exception as e:
+            gc_text = f"(failed to read genetic_code.md: {e})"
+        lines.append("\n\n## genetic_code.md\n\n" + gc_text)
+
     creation_err = org_dir / "logs" / "creation.err"
     if creation_err.exists():
         lines.append("\n\n## LOG: logs/creation.err\n```\n" + creation_err.read_text() + "\n```")
