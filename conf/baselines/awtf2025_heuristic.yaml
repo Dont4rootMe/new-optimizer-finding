@@ -1,0 +1,17 @@
+defaults:
+  - /config_awtf2025_heuristic
+  - _self_
+
+shinka_evolve:
+  enabled: true
+  initial_program_path: experiments/awtf2025_heuristic/_baselines/shinka/initial_program.py
+  evaluate_program_path: experiments/awtf2025_heuristic/_baselines/shinka/evaluate.py
+  results_dir: ${oc.env:SHINKA_RESULTS_DIR,./shinka_runs/awtf2025_heuristic}
+  num_generations: 50
+  num_islands: 4
+  max_parallel_jobs: 4
+  llm_dynamic_selection: ucb1
+  cost_aware_coef: 0.0
+  llm_models: null
+  embedding_model: null
+  extra_runner_kwargs: {}

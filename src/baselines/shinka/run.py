@@ -1,0 +1,196 @@
+"""ShinkaEvolve baseline entry-point.
+
+Reads a Hydra config (`baselines/<experiment>` by convention), pulls the
+`shinka_evolve:` block + the project's `evolver.llm.route_weights`/`api_platforms.*`
+sections, builds the appropriate ShinkaEvolve dataclasses, and runs the loop.
+
+Invoked from `scripts/run_shinka_baseline.sh` after Ollama instances are up.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from dataclasses import asdict, is_dataclass
+from pathlib import Path
+from typing import Any
+
+from hydra import compose, initialize_config_dir
+from omegaconf import DictConfig, OmegaConf
+
+from src.baselines.shinka._evaluator import CONFIG_NAME_ENV, PROJECT_ROOT_ENV
+from src.baselines.shinka._models import build_shinka_model_urls
+
+
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run a ShinkaEvolve baseline using a Hydra config.")
+    parser.add_argument("--config-name", required=True, help="Hydra config name (e.g. baselines/awtf2025_heuristic).")
+    parser.add_argument(
+        "--project-root",
+        default=str(Path.cwd()),
+        help="Repository root that contains conf/ (defaults to cwd).",
+    )
+    parser.add_argument(
+        "overrides",
+        nargs="*",
+        help="Optional Hydra overrides forwarded to compose().",
+    )
+    return parser.parse_args(argv)
+
+
+def _resolve_path(value: str | os.PathLike[str], *, root: Path) -> Path:
+    path = Path(str(value)).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    return path.resolve()
+
+
+def _import_shinka() -> dict[str, Any]:
+    """Import ShinkaEvolve lazily and surface a friendly error if it's missing."""
+
+    try:
+        from shinka.core import EvolutionConfig, ShinkaEvolveRunner  # type: ignore
+        from shinka.database import DatabaseConfig  # type: ignore
+        from shinka.launch import LocalJobConfig  # type: ignore
+    except ImportError as err:
+        raise SystemExit(
+            "ShinkaEvolve is not installed. Install it with:\n"
+            "    pip install -e \".[shinka_baseline]\"\n"
+            "or follow the upstream guide at https://github.com/SakanaAI/ShinkaEvolve.\n"
+            f"(import error: {err})"
+        ) from err
+
+    return {
+        "EvolutionConfig": EvolutionConfig,
+        "ShinkaEvolveRunner": ShinkaEvolveRunner,
+        "DatabaseConfig": DatabaseConfig,
+        "LocalJobConfig": LocalJobConfig,
+    }
+
+
+def _build_evolution_config(
+    *,
+    EvolutionConfig: Any,
+    shinka_block: DictConfig,
+    project_root: Path,
+    llm_models: list[str],
+    results_dir: Path,
+) -> Any:
+    init_program_path = _resolve_path(shinka_block.initial_program_path, root=project_root)
+    if not init_program_path.exists():
+        raise FileNotFoundError(f"initial_program_path does not exist: {init_program_path}")
+
+    extra = shinka_block.get("extra_runner_kwargs") or {}
+    extra_dict = OmegaConf.to_container(extra, resolve=True) if isinstance(extra, DictConfig) else dict(extra)
+
+    kwargs: dict[str, Any] = {
+        "init_program_path": str(init_program_path),
+        "num_generations": int(shinka_block.num_generations),
+        "results_dir": str(results_dir),
+        "llm_models": llm_models,
+        "llm_dynamic_selection": str(shinka_block.get("llm_dynamic_selection") or "ucb1"),
+        "cost_aware_coef": float(shinka_block.get("cost_aware_coef") or 0.0),
+    }
+    embedding_model = shinka_block.get("embedding_model")
+    if embedding_model:
+        kwargs["embedding_model"] = str(embedding_model)
+    kwargs.update(extra_dict)
+
+    return EvolutionConfig(**kwargs)
+
+
+def _build_local_job_config(
+    *,
+    LocalJobConfig: Any,
+    shinka_block: DictConfig,
+    project_root: Path,
+) -> Any:
+    eval_program_path = _resolve_path(shinka_block.evaluate_program_path, root=project_root)
+    if not eval_program_path.exists():
+        raise FileNotFoundError(f"evaluate_program_path does not exist: {eval_program_path}")
+
+    return LocalJobConfig(
+        eval_program_path=str(eval_program_path),
+        max_parallel_jobs=int(shinka_block.get("max_parallel_jobs") or 1),
+    )
+
+
+def _build_database_config(
+    *,
+    DatabaseConfig: Any,
+    shinka_block: DictConfig,
+    results_dir: Path,
+) -> Any:
+    return DatabaseConfig(
+        db_path=str(results_dir / "shinka.db"),
+        num_islands=int(shinka_block.get("num_islands") or 1),
+    )
+
+
+def _populate_runtime_env(*, project_root: Path, config_name: str) -> None:
+    os.environ[PROJECT_ROOT_ENV] = str(project_root)
+    os.environ[CONFIG_NAME_ENV] = config_name
+    os.environ.setdefault("LOCAL_OPENAI_API_KEY", "local")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(list(sys.argv[1:] if argv is None else argv))
+    project_root = Path(args.project_root).expanduser().resolve()
+
+    with initialize_config_dir(config_dir=str(project_root / "conf"), version_base=None):
+        cfg = compose(config_name=args.config_name, overrides=list(args.overrides))
+
+    shinka_block = cfg.get("shinka_evolve")
+    if shinka_block is None:
+        raise SystemExit(
+            f"Config '{args.config_name}' has no top-level `shinka_evolve:` block; "
+            "this is required for the ShinkaEvolve baseline."
+        )
+
+    if not bool(shinka_block.get("enabled", True)):
+        print("[shinka_baseline] shinka_evolve.enabled=false; nothing to do.", file=sys.stderr)
+        return 0
+
+    explicit_models = shinka_block.get("llm_models")
+    if explicit_models:
+        llm_models = [str(item) for item in explicit_models]
+    else:
+        llm_models = build_shinka_model_urls(cfg)
+    print(f"[shinka_baseline] llm_models = {llm_models}", file=sys.stderr, flush=True)
+
+    results_dir = _resolve_path(shinka_block.results_dir, root=project_root)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    _populate_runtime_env(project_root=project_root, config_name=args.config_name)
+
+    shinka = _import_shinka()
+    evo_cfg = _build_evolution_config(
+        EvolutionConfig=shinka["EvolutionConfig"],
+        shinka_block=shinka_block,
+        project_root=project_root,
+        llm_models=llm_models,
+        results_dir=results_dir,
+    )
+    job_cfg = _build_local_job_config(
+        LocalJobConfig=shinka["LocalJobConfig"],
+        shinka_block=shinka_block,
+        project_root=project_root,
+    )
+    db_cfg = _build_database_config(
+        DatabaseConfig=shinka["DatabaseConfig"],
+        shinka_block=shinka_block,
+        results_dir=results_dir,
+    )
+
+    print(f"[shinka_baseline] results_dir = {results_dir}", file=sys.stderr, flush=True)
+    if is_dataclass(evo_cfg):
+        print(f"[shinka_baseline] EvolutionConfig: {asdict(evo_cfg)}", file=sys.stderr, flush=True)
+
+    runner = shinka["ShinkaEvolveRunner"](evo_config=evo_cfg, job_config=job_cfg, db_config=db_cfg)
+    runner.run()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
