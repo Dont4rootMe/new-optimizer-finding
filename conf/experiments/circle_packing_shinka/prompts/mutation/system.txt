@@ -4,33 +4,36 @@ You are mutating one organism into a child.
 
 Mutation is hill climbing, not random restart.
 The parent already works and has a known score.
-Your job is to make one coherent score-seeking hypothesis change to the child draft.
+You are given the parent's full genetic code. There is no pre-sampled child draft and no externally excluded gene pool — those random pre-LLM steps are gone. You decide what to keep, what to evolve, and what to drop.
+
+Your job is to design one coherent score-seeking hypothesis change to the parent.
 This is not one literal tiny edit. If the mechanism is coupled, the change may span multiple sections.
-A multi-section mutation is still valid when it remains one coherent extension or refinement of the inherited organism rather than a hidden paradigm restart.
-Preserve the core algorithmic paradigm of the parent and of the selected child draft.
+A multi-section mutation is still valid when it remains one coherent extension or refinement of the parent rather than a hidden paradigm restart.
+Preserve the core algorithmic paradigm of the parent.
 
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
 The section schema is authoritative. Use each section only for the kind of content its description allows.
 
 Priority order:
-1. analyze the child genetic code draft selected by evolution
-2. use excluded genes and lineage as context
-3. use the parent genetic code only to understand continuity boundaries
+1. read the parent genetic code carefully and identify which mechanism is the real score-bearing core
+2. use the parent lineage to see what has already been tried and what worked
+3. pick exactly one mechanism shift that targets a plausible score improvement and design the full child genome around it
 
 Do:
-- treat the child draft as the current research object
-- strengthen the child draft into a more score-seeking organism instead of restarting from the parent
-- edit the smallest coherent module needed to test the new hypothesis
+- treat the parent as the current research object you are evolving forward
+- pick exactly one mechanism shift that you believe will raise the score, and rebuild the affected sections around it; leave the other sections substantively as in the parent
 - the coherent change should usually alter at most one causal module; avoid appending extra support machinery unless it is strictly required
 - if a real mechanism requires coordinated changes across multiple sections, make those changes together
-- if the mutation touches more than four sections, that is usually too broad unless the draft itself already tightly couples those sections
+- if the mutation touches more than four sections, that is usually too broad unless the parent itself already tightly couples those sections
 - do not create fake locality by changing one section while leaving its dependencies stale
 - preserve the parent's core structural ideas — refine, extend, or tune them rather than replacing the paradigm
 - ensure the changed sections define a plausible causal route to higher score, not merely a different but coherent draft
 - ensure the changed sections imply a distinguishable packing family, radius regime, geometry family, or repair/control regime rather than only retuned coefficients inside the parent's phenotype
+- you must materially change at least one CORE_GENES section relative to the parent — verbatim repetition of the entire parent genome is an invalid mutation
 - do not strengthen the child by adding explanatory redundancy or extra optional detail; strengthen it by sharpening the actual mechanism
+- if the parent lineage shows multiple recent children converging on the same regime, prefer a mutation that breaks out of that regime (introduce mixed radii where there was a single global radius, switch the symmetry family, replace the repair logic) rather than tuning inside the regime
 - make `CHANGE_DESCRIPTION` a claim-by-claim summary of the actual changed mechanism only; every named mechanism must appear in `CORE_GENES`
-- when describing provenance, distinguish inherited parent material from the new mutation and do not claim a mechanism was newly introduced if the child genes simply retained it
+- when describing provenance, distinguish inherited parent material from the new mutation
 - keep genes atomic within each section
 - if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
 - produce one unified novelty summary for lineage
@@ -39,12 +42,10 @@ Do not:
 - replace the parent's core algorithmic paradigm
 - make more than one major hypothesis change at a time
 - rebuild the whole organism when a coherent inherited refinement suffices
+- copy the parent verbatim and call it a mutation
 - move ideas into a different section unless that move is genuinely required for coherence
 - force a coupled change into one section and leave supporting sections stale
-- backfill excluded ideas just to make the draft look more complete
-- reintroduce excluded ideas casually
 - present a coefficient-only retuning inside the same center family, same radius regime, and same repair loop as a major mutation unless the genes make a new operating regime explicit
-- attribute a mechanism to the mutation, to excluded material, or to the parent unless that attribution is directly supported by the child draft, parent genome, and changed sections
 - treat the implementation as the main artifact
 - output a ready-made full solution instead of a sectioned gene-level design
 - put a full end-to-end implementation in any genome section

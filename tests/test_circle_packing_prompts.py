@@ -175,19 +175,27 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     assert "when the changed sections still imply the same phenotype family, preserve strong inherited maternal behavior" in bundle.implementation_system
     assert "do not silently keep the maternal radius, layout, or repair regime" in bundle.implementation_system
     assert "Single rewrite contract:" in bundle.implementation_system
-    assert "child genetic code draft" in bundle.mutation_system.lower()
-    assert "child draft" in bundle.crossover_system.lower()
-    assert "smallest coherent module" in bundle.mutation_system
+    # Post `removing-genetic-sampling` branch: the LLM works directly from the
+    # parent's full genome. No child-draft / excluded-ideas framing.
+    assert "no pre-sampled child draft" in bundle.mutation_system.lower()
+    assert "no pre-sampled child draft" in bundle.crossover_system.lower()
+    assert "verbatim repetition of the entire parent genome is an invalid mutation" in bundle.mutation_system
+    assert "verbatim cloning of the primary parent is an invalid crossover" in bundle.crossover_system
+    # Lineage-aware diversification nudge.
+    assert "regime convergence" in bundle.mutation_user.lower()
     assert "alter at most one causal module" in bundle.mutation_system
     assert "same one-radius layout with different repair tuning" in bundle.mutation_system
     assert "one coherent imported secondary module" in bundle.crossover_system
     assert "modify at most one major causal block" in bundle.crossover_system
     assert "same parent-shaped one-radius regime with a renamed imported module" in bundle.crossover_system
-    assert "valid source of novelty" in bundle.mutation_novelty_user
+    # Post `removing-genetic-sampling`: novelty user prompts reframed —
+    # "valid source of novelty" / "preserves substantial material from both
+    # parents" replaced by explicit mechanism-shift requirements.
+    assert "coherent and visible mechanism shift relative to the parent" in bundle.mutation_novelty_user
     assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
     assert "supporting bullets around the same underlying mechanism" in bundle.mutation_novelty_system
     assert "same center-generation family, the same radius regime, and the same repair/control regime" in bundle.mutation_novelty_system
-    assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
+    assert "neither parent presents on its own" in bundle.crossover_novelty_user
     assert "same center-generation family, the same radius regime, and the same repair/control regime as the dominant parent" in bundle.crossover_novelty_system
     assert "## COMPATIBILITY_VERDICT" in bundle.compatibility_seed_system
     assert "score-inert" in bundle.compatibility_seed_system
@@ -504,22 +512,25 @@ def test_circle_packing_validation_prompts_are_section_schema_aware() -> None:
     assert "compatibility is not the same as novelty" in bundle.compatibility_crossover_system.lower()
     assert "{candidate_genetic_code}" in bundle.compatibility_seed_user
     assert "{candidate_change_description}" in bundle.compatibility_seed_user
+    # Post `removing-genetic-sampling`: validator user prompts no longer reference
+    # `{inherited_gene_pool}` / `{removed_gene_pool}` because the random pre-LLM
+    # gene-sampling step is gone.
     for placeholder in (
-        "{inherited_gene_pool}",
-        "{removed_gene_pool}",
         "{parent_genetic_code}",
         "{candidate_genetic_code}",
         "{candidate_change_description}",
     ):
         assert placeholder in bundle.compatibility_mutation_user
+    assert "{inherited_gene_pool}" not in bundle.compatibility_mutation_user
+    assert "{removed_gene_pool}" not in bundle.compatibility_mutation_user
     for placeholder in (
-        "{inherited_gene_pool}",
         "{mother_genetic_code}",
         "{father_genetic_code}",
         "{candidate_genetic_code}",
         "{candidate_change_description}",
     ):
         assert placeholder in bundle.compatibility_crossover_user
+    assert "{inherited_gene_pool}" not in bundle.compatibility_crossover_user
 
 
 def test_circle_packing_implementation_and_repair_prompts_do_not_require_genome_schema() -> None:
@@ -604,60 +615,56 @@ def test_circle_packing_seed_prompts_reject_ambiguous_26_circle_generators() -> 
     assert "same global radius regime, and same repair loop with retuned constants is a weak direction" in repair_island
 
 
-def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> None:
+def test_circle_packing_mutation_prompt_works_from_parent_full_genome(tmp_path: Path) -> None:
+    """Post `removing-genetic-sampling` branch: mutation prompt works from the
+    parent's full genome directly, no child-draft / excluded-ideas framing.
+    """
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
     parent = _make_parent(tmp_path, "parent_a", "symmetric_constructions")
 
     _, user_prompt = _build_mutate_prompt(
-        inherited_genes=[
-            "Child idea about structural organization",
-            "Child idea about feasibility preservation",
-            "Child idea about refinement logic",
-        ],
-        removed_genes=["Excluded idea about older organization"],
+        inherited_genes=[],
+        removed_genes=[],
         parent=parent,
         prompts=bundle,
     )
 
-    assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
-    assert "=== EXCLUDED IDEAS ===" in user_prompt
+    assert "=== PARENT GENETIC CODE ===" in user_prompt
+    assert "=== PARENT LINEAGE SUMMARY ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
-    assert "REFERENCE ONLY" in user_prompt
     assert "coherent score-seeking hypothesis change" in user_prompt
-    assert "Do not preserve the child draft merely because it is coherent" in user_prompt
+    # Old child-draft / excluded-ideas markers must not appear.
+    assert "CHILD GENETIC CODE DRAFT" not in user_prompt
+    assert "EXCLUDED IDEAS" not in user_prompt
+    assert "{inherited_gene_pool}" not in user_prompt
+    assert "{removed_gene_pool}" not in user_prompt
     assert "IMPLEMENTATION CODE" not in user_prompt
-    assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
-        "=== PARENT GENETIC CODE (REFERENCE ONLY) ==="
-    )
 
 
-def test_circle_packing_crossover_prompt_prioritizes_child_draft(tmp_path: Path) -> None:
+def test_circle_packing_crossover_prompt_works_from_two_parent_full_genomes(tmp_path: Path) -> None:
+    """Post `removing-genetic-sampling`: crossover prompt works from both parent
+    full genomes directly, no merged-child-draft framing.
+    """
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
     mother = _make_parent(tmp_path, "mother_a", "symmetric_constructions")
     father = _make_parent(tmp_path, "father_b", "iterative_repair")
 
     _, user_prompt = _build_crossbreed_prompt(
-        inherited_genes=[
-            "Merged child idea about overall construction",
-            "Merged child idea about feasibility maintenance",
-            "Merged child idea about refinement policy",
-        ],
+        inherited_genes=[],
         mother=mother,
         father=father,
         prompts=bundle,
     )
 
-    assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
+    assert "=== PRIMARY PARENT GENETIC CODE ===" in user_prompt
+    assert "=== SECONDARY PARENT GENETIC CODE ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
-    assert "REFERENCE ONLY" in user_prompt
     assert "primary-parent-dominant organism" in user_prompt
-    assert "Do not preserve a weak recombination merely because it is coherent." in user_prompt
+    assert "CHILD GENETIC CODE DRAFT" not in user_prompt
+    assert "{inherited_gene_pool}" not in user_prompt
     assert "IMPLEMENTATION CODE" not in user_prompt
-    assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
-        "=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ==="
-    )
 
 
 def test_circle_packing_prompt_surface_removes_safe_local_search_bias() -> None:

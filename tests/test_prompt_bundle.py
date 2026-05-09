@@ -114,14 +114,23 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
     assert "return ONLY the final full `implementation.py`" in bundle.implementation_system
     assert "treat it as the concrete parent program" in bundle.implementation_system
     assert "Validity preservation note" in bundle.implementation_user
-    assert "smallest coherent module" in bundle.mutation_system
+    # Post `removing-genetic-sampling` (circle_packing migration): mutation
+    # prompt no longer mentions "smallest coherent module" (that phrase referred
+    # to editing the random pre-sampled child draft); the new framing is "alter
+    # at most one causal module" working directly from the parent's full genome.
+    assert "alter at most one causal module" in bundle.mutation_system
+    assert "no pre-sampled child draft" in bundle.mutation_system.lower()
     assert "whether repaired regions can regrow" in bundle.genome_schema
     assert "Prefer low-parameter geometric structure" in bundle.genome_schema
     assert "one coherent imported secondary module" in bundle.crossover_system
     assert "primary-parent-dominant organism" in bundle.crossover_user
-    assert "valid source of novelty" in bundle.mutation_novelty_user
+    # Novelty user prompts reframed: the "valid source of novelty" framing made
+    # sense only when there was a pre-sampled child draft. Replaced with an
+    # explicit mechanism-shift requirement and a "neither parent presents on its
+    # own" rule for crossover.
+    assert "coherent and visible mechanism shift relative to the parent" in bundle.mutation_novelty_user
     assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
-    assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
+    assert "neither parent presents on its own" in bundle.crossover_novelty_user
     assert "## COMPATIBILITY_VERDICT" in bundle.compatibility_seed_system
     assert "score-inert" in bundle.compatibility_seed_system
     assert "too many loosely coupled mechanisms or role taxonomies" in bundle.compatibility_seed_system

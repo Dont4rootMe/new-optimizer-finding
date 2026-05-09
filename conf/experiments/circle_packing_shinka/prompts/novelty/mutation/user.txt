@@ -4,13 +4,6 @@ Evaluate whether this mutation child is meaningfully novel relative to its paren
 The schema below is authoritative for the structure and meaning of CORE_GENES.
 {genome_schema}
 
-=== CHILD GENETIC CODE DRAFT SELECTED BY EVOLUTION ===
-{inherited_gene_pool}
-
-=== EXCLUDED IDEAS ===
-These ideas were explicitly removed during mutation sampling.
-{removed_gene_pool}
-
 === PARENT GENETIC CODE ===
 {parent_genetic_code}
 
@@ -21,9 +14,8 @@ These ideas were explicitly removed during mutation sampling.
 {candidate_change_description}
 
 === TASK ===
-The evolved child draft itself is a valid source of novelty.
-Accept a candidate that stays faithful to that selected sectioned child draft, even if it does not add one more post-sampling idea, as long as it does not collapse back to the parent in substance.
-Reject a candidate that mainly restores excluded ideas, reconstructs the parent, only rephrases parent ideas, only reshuffles ideas across sections without substantive change, or is too weak to change the organism's effective behavior.
+Accept a candidate that introduces a coherent and visible mechanism shift relative to the parent — at least one CORE_GENES section must contain a substantive change that affects the effective center family, radius regime, geometry family, or repair/control regime.
+Reject a candidate that mainly reconstructs the parent verbatim, only rephrases parent ideas, only reshuffles ideas across sections without substantive change, or is too weak to change the organism's effective behavior.
 Reject children whose claimed mutation is only cosmetic or too weak to change the organism's effective behavior.
 Reject a candidate that keeps the same center-generation family, the same radius regime, and the same repair/control regime while only retelling the story or weakly retuning coefficients.
 Reject a retained one-radius regime unless the child genes make a genuinely different phenotype family explicit.
