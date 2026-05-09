@@ -284,6 +284,122 @@ def test_sectioned_parser_accepts_bullet_wrapped_fenced_optional_code_sketch_blo
     assert optional.entries[1].text.strip().endswith("```")
 
 
+AWTF_SECTION_NAMES = (
+    "STATE_REPRESENTATION",
+    "MACRO_STRATEGY",
+    "CONSTRUCTION_POLICY",
+    "LOCAL_REPAIR_POLICY",
+    "OPTIONAL_CODE_SKETCH",
+)
+
+AWTF_GENETIC_CODE = """## CORE_GENES
+### STATE_REPRESENTATION
+- Quadrant labels are derived from `N // 2` for both axes.
+
+### MACRO_STRATEGY
+- The organism partitions the board into four quadrants linked by a central hub.
+
+### CONSTRUCTION_POLICY
+- Walls are placed around the hub except near the center.
+
+### LOCAL_REPAIR_POLICY
+- Stuck robots retry with individual moves once group commands stall.
+
+### OPTIONAL_CODE_SKETCH
+- None.
+
+## INTERACTION_NOTES
+The quadrants and hub combine to bound concurrent flows.
+
+## COMPUTE_NOTES
+Construction is `O(K * N^2)` worst case.
+
+## CHANGE_DESCRIPTION
+Tests quadrant routing with a central hub.
+"""
+
+
+@pytest.mark.parametrize(
+    "section_name",
+    ["STATE_REPRESENTATION", "CONSTRUCTION_POLICY", "LOCAL_REPAIR_POLICY"],
+)
+def test_sectioned_parser_accepts_fenced_block_in_code_bearing_subsection(section_name: str) -> None:
+    """The 1516-organism post-mortem fix (P7) tolerated fenced code blocks only
+    in `OPTIONAL_CODE_SKETCH`. The 491-organism awtf2025 run produced 102
+    `failed_creation` cases (~20% of population) where the LLM emitted a fenced
+    block inside `STATE_REPRESENTATION` (and occasionally `CONSTRUCTION_POLICY`
+    or `LOCAL_REPAIR_POLICY`), parser raised "non-bullet text" and the organism
+    died at creation. The schema explicitly permits code in those sections, so
+    the parser tolerance now extends across all code-bearing subsections.
+    """
+    bullet_to_replace = {
+        "STATE_REPRESENTATION": "- Quadrant labels are derived from `N // 2` for both axes.",
+        "CONSTRUCTION_POLICY": "- Walls are placed around the hub except near the center.",
+        "LOCAL_REPAIR_POLICY": "- Stuck robots retry with individual moves once group commands stall.",
+    }[section_name]
+
+    text = AWTF_GENETIC_CODE.replace(
+        bullet_to_replace,
+        bullet_to_replace
+        + "\n```python\n"
+        + "# scratch sketch the LLM emitted inline\n"
+        + "def helper(n):\n"
+        + "    return n // 2\n"
+        + "```",
+    )
+
+    parsed = parse_genetic_code_text(text, expected_section_names=AWTF_SECTION_NAMES)
+
+    assert parsed.core_gene_sections is not None
+    target = next(section for section in parsed.core_gene_sections if section.name == section_name)
+    assert any("def helper" in entry.text for entry in target.entries)
+
+
+def test_sectioned_parser_accepts_bullet_wrapped_fenced_block_in_state_representation() -> None:
+    """Real awtf2025 organisms emitted bullet-wrapped fenced blocks in
+    `STATE_REPRESENTATION` (e.g. `- ```python ... ```` `). Mirrors the existing
+    OPTIONAL_CODE_SKETCH regression test for symmetry.
+    """
+    text = AWTF_GENETIC_CODE.replace(
+        "- Quadrant labels are derived from `N // 2` for both axes.",
+        (
+            "- Quadrant labels are derived from `N // 2` for both axes.\n"
+            "- ```python\n"
+            "  def get_quad(pos, n):\n"
+            "      r, c = pos\n"
+            "      return (r >= n // 2) * 2 + (c >= n // 2)\n"
+            "  ```"
+        ),
+    )
+
+    parsed = parse_genetic_code_text(text, expected_section_names=AWTF_SECTION_NAMES)
+
+    assert parsed.core_gene_sections is not None
+    state_section = parsed.core_gene_sections[0]
+    assert state_section.name == "STATE_REPRESENTATION"
+    assert len(state_section.entries) == 2
+    assert "def get_quad" in state_section.entries[1].text
+
+
+def test_sectioned_parser_still_rejects_fenced_block_in_macro_strategy() -> None:
+    """MACRO_STRATEGY must remain plain-language bullets; fenced blocks there
+    are a contract violation per the genome schema and remain a hard failure.
+    """
+    text = AWTF_GENETIC_CODE.replace(
+        "- The organism partitions the board into four quadrants linked by a central hub.",
+        (
+            "- The organism partitions the board into four quadrants linked by a central hub.\n"
+            "```python\n"
+            "for q in range(4):\n"
+            "    pass\n"
+            "```"
+        ),
+    )
+
+    with pytest.raises(ValueError, match="non-bullet text"):
+        parse_genetic_code_text(text, expected_section_names=AWTF_SECTION_NAMES)
+
+
 def test_sectioned_parser_uses_arbitrary_schema_section_names() -> None:
     core = "\n\n".join(
         f"### {name}\n- "

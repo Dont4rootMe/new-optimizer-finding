@@ -16,6 +16,19 @@ _SCHEMA_HEADER_RE = re.compile(r"^# ([A-Z][A-Z0-9_]*)$")
 _TOP_LEVEL_HEADER_RE = re.compile(r"^## ([A-Z_]+)$")
 _SUBSECTION_HEADER_RE = re.compile(r"^### ([A-Z][A-Z0-9_]*)$")
 _OPTIONAL_CODE_SKETCH_SECTION = "OPTIONAL_CODE_SKETCH"
+# Subsections that explicitly accept fenced code blocks per the genome schema.
+# `MACRO_STRATEGY` is intentionally excluded — it must remain plain-language bullets.
+# Other (non-awtf2025) families with different schemas use `OPTIONAL_CODE_SKETCH`-only
+# tolerance via `_OPTIONAL_CODE_SKETCH_SECTION`; this set adds the additional
+# code-bearing subsection names where local models reliably emit fenced blocks.
+_FENCED_CODE_TOLERANT_SECTIONS = frozenset(
+    {
+        "STATE_REPRESENTATION",
+        "CONSTRUCTION_POLICY",
+        "LOCAL_REPAIR_POLICY",
+        "OPTIONAL_CODE_SKETCH",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -258,7 +271,8 @@ def _parse_sectioned_core_genes(
     current_name: str | None = None
     current_entries: list[ParsedGeneEntry] = []
     current_entry_lines: list[str] | None = None
-    inside_optional_code_fence = False
+    inside_fenced_block = False
+    fenced_block_section: str | None = None
 
     def flush_entry() -> None:
         nonlocal current_entry_lines
@@ -282,12 +296,15 @@ def _parse_sectioned_core_genes(
         )
 
     for line_number, line in enumerate(core_text.splitlines(), start=1):
-        if inside_optional_code_fence:
+        if inside_fenced_block:
             if current_entry_lines is None:
-                raise ValueError("OPTIONAL_CODE_SKETCH fenced block lost its current entry state.")
+                raise ValueError(
+                    f"{fenced_block_section} fenced block lost its current entry state."
+                )
             current_entry_lines.append(line.rstrip())
             if line.strip().startswith("```"):
-                inside_optional_code_fence = False
+                inside_fenced_block = False
+                fenced_block_section = None
                 flush_entry()
             continue
 
@@ -315,11 +332,13 @@ def _parse_sectioned_core_genes(
 
         if not line.strip():
             continue
-        if current_name == _OPTIONAL_CODE_SKETCH_SECTION:
-            # Detect a fenced ``` opener, which LLMs commonly emit either
-            # bare on its own line ("```python") or wrapped inside a bullet
+        if current_name in _FENCED_CODE_TOLERANT_SECTIONS:
+            # Detect a fenced ``` opener, which LLMs commonly emit either bare
+            # on its own line ("```python") or wrapped inside a bullet
             # ("- ```python"). Both must enter fenced-collection mode so that
             # the matching closing ``` is recognized correctly on reread.
+            # Tolerance covers all code-bearing subsections per the genome
+            # schema; `MACRO_STRATEGY` is excluded and still rejects fences.
             stripped = line.strip()
             fenced_payload: str | None = None
             if stripped.startswith("```"):
@@ -332,7 +351,8 @@ def _parse_sectioned_core_genes(
                 if fenced_payload.count("```") >= 2:
                     flush_entry()
                 else:
-                    inside_optional_code_fence = True
+                    inside_fenced_block = True
+                    fenced_block_section = current_name
                 continue
         if line.startswith("- "):
             flush_entry()
@@ -350,8 +370,10 @@ def _parse_sectioned_core_genes(
             f"CORE_GENES subsection {current_name} contains non-bullet text at line {line_number}: {line!r}"
         )
 
-    if inside_optional_code_fence:
-        raise ValueError(f"CORE_GENES subsection {_OPTIONAL_CODE_SKETCH_SECTION} has an unterminated fenced code block.")
+    if inside_fenced_block:
+        raise ValueError(
+            f"CORE_GENES subsection {fenced_block_section} has an unterminated fenced code block."
+        )
 
     flush_section()
     if not sections:

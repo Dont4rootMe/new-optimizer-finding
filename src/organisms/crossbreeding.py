@@ -125,9 +125,12 @@ def build_crossover_prompt_from_artifacts(
 
 
 class CrossbreedingOperator:
-    """Two-phase crossbreeding: inherited pool + LLM rewrite."""
+    """Crossover operator: hand the LLM both parent genomes and let it design the child."""
 
     def __init__(self, p: float = 0.7, seed: int | None = None) -> None:
+        # `p` and `seed` are retained for backward compatibility with config/tests but
+        # the random gene-merging phase is disabled — the LLM now designs the crossover
+        # directly from both parents' full genomes.
         self.p = p
         self.rng = random.Random(seed)
 
@@ -143,19 +146,11 @@ class CrossbreedingOperator:
     ) -> OrganismMeta:
         """Create a child organism via crossbreeding."""
 
-        mother_genes = read_organism_genetic_code(mother).get("core_genes", [])
-        father_genes = read_organism_genetic_code(father).get("core_genes", [])
-        child_dna = merge_gene_pools(
-            mother_genes,
-            father_genes,
-            self.p,
-            self.rng,
-        )
+        child_dna: list[str] = []
         LOGGER.info(
-            "Crossbreed %s x %s -> %d genes",
+            "Crossbreed %s x %s: full-genome crossover (no pre-LLM gene merging)",
             mother.organism_id[:8],
             father.organism_id[:8],
-            len(child_dna),
         )
 
         system_prompt, user_prompt = _build_crossbreed_prompt(

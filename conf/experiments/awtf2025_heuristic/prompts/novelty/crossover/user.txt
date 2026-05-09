@@ -4,9 +4,6 @@ Evaluate whether this crossover child is meaningfully novel relative to its pare
 The schema below is authoritative for the structure and meaning of CORE_GENES.
 {genome_schema}
 
-=== CHILD GENETIC CODE DRAFT SELECTED BY EVOLUTION ===
-{inherited_gene_pool}
-
 === PRIMARY PARENT GENETIC CODE ===
 {mother_genetic_code}
 
@@ -20,9 +17,8 @@ The schema below is authoritative for the structure and meaning of CORE_GENES.
 {candidate_change_description}
 
 === TASK ===
-The evolved child draft itself can be valid novelty.
-Accept a coherent section-aware recombination that preserves substantial material from both parents, even if it does not add an extra beyond-parent invention.
-Reject a candidate that collapses back to one parent, drops the selected contribution from one side, only rephrases parent ideas, only rearranges parental content across sections, or is formally two-parental but too weak to define a meaningful new operating regime.
+Accept a coherent primary-parent-dominant recombination that imports one substantive module from the secondary parent and produces an organism that is materially different from each parent — at least one CORE_GENES section must contain a recombination that neither parent presents on its own.
+Reject a candidate that collapses back to one parent, drops any meaningful secondary contribution, only rephrases parent ideas, only rearranges parental content across sections, or is formally two-parental but too weak to define a meaningful new operating regime.
 Reject a child whose selected recombination is formally two-parental but too weak to define a meaningful new operating regime.
 Reject a child whose recombination looks richer only because it contains more section text rather than a stronger transferred mechanism.
 Reject a child that keeps the dominant parent's wall family, grouping family, routing family, and repair regime while only renaming the imported module or weakly retuning it.

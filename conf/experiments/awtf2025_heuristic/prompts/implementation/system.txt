@@ -85,3 +85,4 @@ Before answering, mentally verify:
 4. Every non-empty Python line in every region body starts with four spaces.
 5. The combined regions still emit `N` vertical lines of length `N - 1`, `N - 1` horizontal lines of length `N`, `K` group ids, and at most `K * N * N` operation lines.
 6. No region copies a `# === REGION` marker from the scaffold.
+7. Mechanic-to-code audit (silent, do not output): walk the genetic code's `CONSTRUCTION_POLICY` and `LOCAL_REPAIR_POLICY` sections. For every named substantive mechanism (a stage transition, a ranking rule, a stagnation trigger, a wall-cell scheduler, a mode-switch condition, a deadlock-resolution step), confirm there is an actual code path in the corresponding region that realizes it. If any named mechanism would have no executable code path, extend that region with the minimum code needed to realize it before returning. Do NOT add an audit listing to your output — this checklist is internal verification only.

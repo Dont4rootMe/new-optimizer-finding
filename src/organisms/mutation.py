@@ -114,9 +114,12 @@ def build_mutation_prompt_from_artifacts(
 
 
 class MutationOperator:
-    """Two-phase mutation: probabilistic gene removal + LLM rewrite."""
+    """Mutation operator: hand the LLM the parent's full genome and let it design the child."""
 
     def __init__(self, q: float = 0.2, seed: int | None = None) -> None:
+        # `q` and `seed` are retained for backward compatibility with config/tests but
+        # the random gene-pruning phase is disabled — the LLM now designs the mutation
+        # directly from the parent's full genome.
         self.q = q
         self.rng = random.Random(seed)
 
@@ -131,16 +134,9 @@ class MutationOperator:
     ) -> OrganismMeta:
         """Create a child organism via mutation."""
 
-        parent_genetic_code = read_organism_genetic_code(parent)
-        parent_genes = list(parent_genetic_code.get("core_genes", []))
-        inherited_genes, removed_genes = prune_gene_pool(parent_genes, self.q, self.rng)
-        LOGGER.info(
-            "Mutate %s: kept %d/%d genes, removed: %s",
-            parent.organism_id[:8],
-            len(inherited_genes),
-            len(parent_genes),
-            removed_genes or "(none)",
-        )
+        inherited_genes: list[str] = []
+        removed_genes: list[str] = []
+        LOGGER.info("Mutate %s: full-genome mutation (no pre-LLM gene pruning)", parent.organism_id[:8])
 
         system_prompt, user_prompt = _build_mutate_prompt(
             inherited_genes,
