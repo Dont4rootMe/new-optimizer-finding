@@ -225,6 +225,47 @@ Defined in `src/organisms/implementation_patch.py` and orchestrated in `src/evol
 
 A guard added in P5 promotes PATCH to FULL whenever `len(changed_sections) >= len(implementation_regions) - 1`. PATCH at near-full coverage was the worst of both worlds: same token cost as FULL plus more parser fragility.
 
+## Adaptive sampling (bandits)
+
+Three sampling decisions the loop makes per organism creation can run in either uniform or **adaptive bandit** mode:
+
+1. **LLM route** (which model the generator should call) — `BaseLlmGenerator.sample_route_id`
+2. **Parent island** (which island the new organism's primary parent comes from) — `EvolutionLoop._sample_island_ids` for all three reproduction routes
+3. **Cross-island partner island** (the secondary parent's island when `inter_island_crossover` was chosen) — same helper, conditional on the primary's island
+
+Default for all three is **uniform** (or `weighted_static` for routes — preserves the legacy `route_weights` semantics). The non-uniform mode is **discounted Thompson sampling** (Bayesian multi-armed bandit on Beta posteriors with a discount factor γ < 1). Each `update(arm, reward)` call applies `α ← α·γ + r` and `β ← β·γ + (1 − r)` so old observations fade — that's what keeps the bandit honest under non-stationary rewards (an underdog model or island can pull ahead later in a run as the population enters a regime that suits it).
+
+Reward signal is computed by `src.evolve.bandit.RewardComputer` with three modes:
+
+- `survival` — 1 if the organism reached `simple_score`, else 0
+- `score_quantile` (default) — quantile rank of the score within a sliding window of the last `reward_window` evaluated organisms; dead organisms get 0
+- `hybrid` — `survival_weight · 1[survived] + (1 − survival_weight) · quantile`
+
+The sliding window matters: the population's score distribution drifts over a run, so a global quantile would assign every late organism a high score regardless of its true contribution.
+
+Cross-island partner sampling uses a `ConditionalAdaptiveSampler`: one Thompson sampler **per origin island** so the bandit can learn that "from island A, partner B is good" without forcing "from island B, partner A is also good".
+
+When switching `route_sampling.strategy: weighted_static → bandit`, the existing `route_weights` are folded in as a Beta-prior bias: arms with higher weights start with proportionally larger α, so existing per-model tuning is not thrown away on the switch.
+
+Bandit state is serialized into `population_state.json` under the `bandit_state` key (parent-island / partner / route posteriors plus reward windows) so resume restores the bandit faithfully.
+
+Configuration lives under `evolver.{llm.route_sampling, reproduction.parent_island_sampling, reproduction.cross_island_partner_sampling}` per family (see `conf/evolver/<family>.yaml`):
+
+```yaml
+parent_island_sampling:
+  strategy: uniform                    # uniform | bandit
+  bandit:
+    algorithm: discounted_thompson
+    discount: 0.97
+    prior_alpha: 1.0
+    prior_beta: 1.0
+    reward_mode: score_quantile        # survival | score_quantile | hybrid
+    reward_window: 50
+    survival_weight: 0.3
+```
+
+Implementation: `src/evolve/bandit.py` is the single source of truth; `BaseLlmGenerator` and `EvolutionLoop` instantiate `AdaptiveSampler` / `ConditionalAdaptiveSampler` from the config, route ``select(...)`` through them, and call ``observe(arm, simple_score=...)`` exactly once per organism creation attempt (covers `simple_complete`, `failed_simple_eval`, and `failed_creation` outcomes — the helper is idempotent via `_bandit_arm_attribution`).
+
 ## Visualization & telemetry
 
 `src/evolve/visualization.py` renders a multi-group dashboard each generation. The legacy six-panel composite PNG (`evolution_overview.png`) still lands at the population root; the new `render_evolution_snapshot(...)` entry point also produces:

@@ -57,6 +57,39 @@ reproduction:
     within_island_crossover: unified
     inter_island_crossover: unified
     mutation: unified
+  # Adaptive parent-island sampling. `strategy: uniform` reproduces the
+  # legacy unified behaviour. `strategy: bandit` swaps in a discounted
+  # Thompson sampler that learns which islands are currently producing
+  # high-quality survivors and gradually shifts probability toward them
+  # while still exploring (Beta posteriors mean low-data arms still get
+  # picked sometimes). Reward = score quantile within a sliding window
+  # of recent evaluated organisms; dead organisms get 0. The discount
+  # factor γ controls how fast the bandit forgets old observations
+  # (γ=0.97 ≈ 33 effective recent observations per arm).
+  parent_island_sampling:
+    strategy: uniform                  # uniform | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile      # survival | score_quantile | hybrid
+      reward_window: 50
+      survival_weight: 0.3
+  # Adaptive partner-island sampling for inter_island_crossover. A
+  # *separate* Thompson sampler is kept per origin island, so the
+  # bandit can learn that "from island A, partner B is good" without
+  # forcing "from island B, partner A is also good".
+  cross_island_partner_sampling:
+    strategy: uniform                  # uniform | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile
+      reward_window: 50
+      survival_weight: 0.3
   species_sampling:
     strategy: weighted_rule
     weighted_rule_lambda: 1.0
@@ -101,3 +134,19 @@ llm:
 
   route_weights:
     ollama_gemma4_31b: 1.0
+
+  # Adaptive LLM-route sampling. `weighted_static` (default) keeps using
+  # the `route_weights` block above unchanged. `bandit` swaps in a
+  # discounted Thompson sampler keyed on the same routes; the existing
+  # `route_weights` are folded in as a Beta-prior bias so users keep
+  # their per-model tuning when switching modes.
+  route_sampling:
+    strategy: weighted_static          # uniform | weighted_static | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile      # survival | score_quantile | hybrid
+      reward_window: 50
+      survival_weight: 0.3

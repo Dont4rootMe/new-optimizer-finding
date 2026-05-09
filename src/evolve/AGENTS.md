@@ -16,6 +16,7 @@ Key modules:
 - `template_parser.py`: generic structured LLM response parsing
 - `storage.py`: canonical filesystem layout and strict resume helpers
 - `selection.py`: island-local survival and parent sampling helpers
+- `bandit.py`: discounted-Thompson multi-armed bandit + reward computer + persistence; backs `evolver.{llm.route_sampling, reproduction.parent_island_sampling, reproduction.cross_island_partner_sampling}`. Stateful — `state_dict()` / `load_state(...)` round-trip into `population_state.json` so resume restores the posteriors.
 
 ## Non-Negotiable Invariants
 
@@ -41,3 +42,4 @@ Key modules:
 - `pytest -q tests/test_evolution_resume.py`
 - `pytest -q tests/test_optimizer_generator.py`
 - `pytest -q tests/test_selection.py`
+- `pytest -q tests/test_bandit.py`

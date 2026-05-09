@@ -57,6 +57,26 @@ reproduction:
     within_island_crossover: unified
     inter_island_crossover: unified
     mutation: unified
+  parent_island_sampling:
+    strategy: uniform                  # uniform | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile
+      reward_window: 50
+      survival_weight: 0.3
+  cross_island_partner_sampling:
+    strategy: uniform                  # uniform | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile
+      reward_window: 50
+      survival_weight: 0.3
   species_sampling:
     strategy: weighted_rule
     weighted_rule_lambda: 1.0
@@ -121,3 +141,14 @@ llm:
   route_weights:
     mock: 1.0
   seed: 123
+
+  route_sampling:
+    strategy: weighted_static          # uniform | weighted_static | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile
+      reward_window: 50
+      survival_weight: 0.3

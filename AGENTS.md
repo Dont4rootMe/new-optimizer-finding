@@ -25,8 +25,9 @@ For a deep walkthrough of the evolutionary pipeline (organism lifecycle, validat
   - `summary.json`
   - `llm_request.json`
   - `llm_response.json`
-- Population resume state is stored in `population_state.json`.
+- Population resume state is stored in `population_state.json`. Bandit posteriors (per `src/evolve/bandit.py`) live inside that file under `bandit_state`; do not move them to a sibling file without updating both `read_population_state` and `EvolutionLoop._restore_bandit_state` together.
 - Optimization-specific contracts such as `build_optimizer(model, max_steps)` belong only under `experiments/optimization_survey/`.
+- Adaptive sampling (LLM route, parent island, cross-island partner) is configurable per family under `evolver.{llm.route_sampling, reproduction.parent_island_sampling, reproduction.cross_island_partner_sampling}`. All three default to `uniform` / `weighted_static` (legacy behaviour); `strategy: bandit` swaps in discounted Thompson sampling. See FRAMEWORK.md "Adaptive sampling (bandits)" for details.
 
 ## Editing Rules
 

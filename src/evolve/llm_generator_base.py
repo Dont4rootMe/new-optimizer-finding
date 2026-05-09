@@ -9,9 +9,10 @@ import random
 import re
 import threading
 
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from api_platforms import ApiPlatformRegistry
+from src.evolve.bandit import AdaptiveSampler, cfg_from_omega
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,6 +51,16 @@ class BaseLlmGenerator:
         self.registry.validate_route_weights(self.route_weights)
         self._rng = random.Random(self.seed)
         self._rng_lock = threading.Lock()
+
+        # Adaptive sampler over LLM routes. Default config keeps the legacy
+        # weighted-static behaviour: when `evolver.llm.route_sampling` is
+        # absent we fall back to weighted_static seeded with `route_weights`.
+        # When the user opts into `strategy: bandit`, the same `route_weights`
+        # block is folded in as a Beta-prior bias so existing per-model
+        # tuning is not thrown away on the switch.
+        route_sampling_cfg = OmegaConf.select(self.cfg, "evolver.llm.route_sampling", default=None)
+        bandit_cfg = cfg_from_omega(route_sampling_cfg, fallback_weights=self.route_weights)
+        self.route_sampler: AdaptiveSampler = AdaptiveSampler(bandit_cfg)
         # Batch-scoped route assignment populated by the evolution loop before
         # a creation batch. Per-organism hashing alone does not guarantee that
         # a small batch is spread across all positive-weight routes — two seed
@@ -141,7 +152,6 @@ class BaseLlmGenerator:
         available = [route_id for route_id, weight in self.route_weights.items() if weight > 0]
         if not available:
             raise ValueError("evolver.llm.route_weights must contain at least one positive-weight route.")
-        weights = [self.route_weights[route_id] for route_id in available]
 
         if organism_id is not None:
             with self._rng_lock:
@@ -149,12 +159,27 @@ class BaseLlmGenerator:
             if assigned is not None and assigned in available:
                 return assigned
 
+            # Per-organism RNG so the route is reproducible per organism and
+            # is independent of concurrent thread interleaving. The bandit
+            # sampler is asked through this RNG so even Thompson sampling
+            # decisions are reproducible per (seed, organism_id).
             digest = hashlib.sha1(
                 f"{self.seed}:{organism_id}".encode("utf-8"), usedforsecurity=False
             ).digest()
             call_seed = int.from_bytes(digest[:8], "big", signed=False)
             call_rng = random.Random(call_seed)
-            return call_rng.choices(available, weights=weights, k=1)[0]
+            return self.route_sampler.select(available, rng=call_rng)
 
         with self._rng_lock:
-            return self._rng.choices(available, weights=weights, k=1)[0]
+            return self.route_sampler.select(available, rng=self._rng)
+
+    def observe_route_reward(self, route_id: str, *, simple_score: float | None) -> float:
+        """Feed a route's outcome back into the adaptive sampler.
+
+        Called by the evolution loop right after an organism finishes its
+        simple evaluation (or fails to). For non-bandit strategies the
+        underlying ``AdaptiveSampler`` performs a no-op, so this is safe to
+        call unconditionally.
+        """
+
+        return self.route_sampler.observe(route_id, simple_score=simple_score)

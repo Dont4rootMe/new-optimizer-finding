@@ -185,6 +185,7 @@ def write_population_state(
     best_simple_score: float | None = None,
     inflight_seed: dict[str, Any] | None = None,
     inflight_generation: dict[str, Any] | None = None,
+    bandit_state: dict[str, Any] | None = None,
 ) -> Path:
     payload = {
         "current_generation": int(generation),
@@ -195,6 +196,7 @@ def write_population_state(
         "relationship_history": _build_relationship_history(population_root),
         "inflight_seed": inflight_seed,
         "inflight_generation": inflight_generation,
+        "bandit_state": bandit_state if isinstance(bandit_state, dict) else None,
     }
     return write_json(population_state_path(population_root), payload)
 

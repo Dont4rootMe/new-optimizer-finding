@@ -49,6 +49,11 @@ from src.evolve.types import (
     PlannedOrganismCreation,
     PlannedPhaseEvaluation,
 )
+from src.evolve.bandit import (
+    AdaptiveSampler,
+    ConditionalAdaptiveSampler,
+    cfg_from_omega,
+)
 from src.evolve.comet import CometRunLogger
 from src.evolve.visualization import render_evolution_snapshot
 from src.organisms.crossbreeding import CrossbreedingOperator
@@ -127,6 +132,26 @@ class EvolutionLoop:
         )
         self._validate_stop_limits()
         self._validate_phase_selection_bounds()
+
+        # Adaptive samplers — see src/evolve/bandit.py. Both default to
+        # uniform; opt-in via `evolver.reproduction.parent_island_sampling`
+        # and `evolver.reproduction.cross_island_partner_sampling`. The
+        # parent-island sampler picks the home island for any route; the
+        # partner sampler is conditional on the origin island and only
+        # fires for inter-island crossover.
+        parent_island_cfg = cfg_from_omega(
+            OmegaConf.select(cfg, "evolver.reproduction.parent_island_sampling", default=None)
+        )
+        self.parent_island_sampler = AdaptiveSampler(parent_island_cfg)
+        cross_partner_cfg = cfg_from_omega(
+            OmegaConf.select(cfg, "evolver.reproduction.cross_island_partner_sampling", default=None)
+        )
+        self.cross_island_partner_sampler = ConditionalAdaptiveSampler(cross_partner_cfg)
+        # Track which arms each in-flight organism pulled, so we can attribute
+        # the reward back to the right bandit when the simple eval finishes.
+        # Keyed by organism_id. Routes (LLM model) are owned by the generator
+        # and resolved lazily via summary.json, so they are not tracked here.
+        self._bandit_arm_attribution: dict[str, dict[str, Any]] = {}
 
         self.comet_logger = CometRunLogger.from_cfg(
             cfg,
@@ -405,7 +430,90 @@ class EvolutionLoop:
             best_simple_score=best.simple_score if best is not None else None,
             inflight_seed=inflight_seed,
             inflight_generation=inflight_generation,
+            bandit_state=self._bandit_state_dict(),
         )
+
+    def _bandit_state_dict(self) -> dict[str, Any]:
+        """Snapshot every adaptive sampler so resume can restore them."""
+
+        return {
+            "parent_island": self.parent_island_sampler.state_dict(),
+            "cross_island_partner": self.cross_island_partner_sampler.state_dict(),
+            "route": getattr(self.generator, "route_sampler", None).state_dict()
+            if getattr(self.generator, "route_sampler", None) is not None
+            else None,
+            "observed": dict(self._bandit_arm_attribution),
+        }
+
+    def _record_bandit_outcome(
+        self,
+        plan: PlannedOrganismCreation,
+        organism: OrganismMeta | None,
+        *,
+        simple_score: float | None,
+    ) -> None:
+        """Feed the outcome of a creation+eval cycle back into the bandits.
+
+        Called once per organism — either when simple eval finishes (success
+        or eval failure) or when creation itself fails. The attribution
+        bookkeeping in ``self._bandit_arm_attribution`` makes the call
+        idempotent: once a plan's outcome has been recorded, subsequent calls
+        for the same plan are silently ignored.
+        """
+
+        if plan.organism_id in self._bandit_arm_attribution:
+            return
+
+        observed: dict[str, Any] = {
+            "parent_island": plan.island_id,
+            "partner_island": plan.father_island_id,
+            "route": None,
+        }
+        try:
+            self.parent_island_sampler.observe(plan.island_id, simple_score=simple_score)
+        except Exception:  # noqa: BLE001
+            LOGGER.exception("Failed to update parent_island bandit for plan %s", plan.organism_id)
+
+        if plan.father_island_id and plan.route == _ROUTE_INTER_ISLAND_CROSSOVER:
+            try:
+                self.cross_island_partner_sampler.observe(
+                    plan.island_id,
+                    plan.father_island_id,
+                    simple_score=simple_score,
+                )
+            except Exception:  # noqa: BLE001
+                LOGGER.exception(
+                    "Failed to update cross_island_partner bandit for plan %s", plan.organism_id
+                )
+
+        route_id = getattr(organism, "llm_route_id", None) if organism is not None else None
+        if route_id and hasattr(self.generator, "observe_route_reward"):
+            try:
+                self.generator.observe_route_reward(str(route_id), simple_score=simple_score)
+                observed["route"] = str(route_id)
+            except Exception:  # noqa: BLE001
+                LOGGER.exception(
+                    "Failed to update route bandit for plan %s (route=%s)",
+                    plan.organism_id,
+                    route_id,
+                )
+
+        self._bandit_arm_attribution[plan.organism_id] = observed
+
+    def _restore_bandit_state(self, payload: dict[str, Any] | None) -> None:
+        if not isinstance(payload, dict):
+            return
+        if isinstance(payload.get("parent_island"), dict):
+            self.parent_island_sampler.load_state(payload["parent_island"])
+        if isinstance(payload.get("cross_island_partner"), dict):
+            self.cross_island_partner_sampler.load_state(payload["cross_island_partner"])
+        if isinstance(payload.get("route"), dict):
+            route_sampler = getattr(self.generator, "route_sampler", None)
+            if route_sampler is not None:
+                route_sampler.load_state(payload["route"])
+        observed = payload.get("observed")
+        if isinstance(observed, dict):
+            self._bandit_arm_attribution = {str(key): dict(value) for key, value in observed.items() if isinstance(value, dict)}
 
     def _render_progress_snapshot(self) -> None:
         try:
@@ -426,6 +534,7 @@ class EvolutionLoop:
     def _load_state(self) -> dict[str, Any] | None:
         payload = read_population_state(self.population_root)
         if isinstance(payload, dict):
+            self._restore_bandit_state(payload.get("bandit_state"))
             return payload
         return None
 
@@ -585,20 +694,47 @@ class EvolutionLoop:
         count: int,
         distinct: bool,
     ) -> list[str]:
-        strategy = self.reproduction_island_sampling[route]
-        if strategy == "unified":
-            if not candidate_island_ids or count <= 0:
-                return []
-            if distinct:
-                if len(candidate_island_ids) < count:
-                    raise ValueError(
-                        f"Route '{route}' requires {count} distinct islands, got {len(candidate_island_ids)}."
-                    )
-                return list(self.rng.sample(candidate_island_ids, k=count))
-            return [self.rng.choice(candidate_island_ids) for _ in range(count)]
-        raise ValueError(
-            f"Unsupported island sampling strategy '{strategy}' for reproduction route '{route}'."
-        )
+        if not candidate_island_ids or count <= 0:
+            return []
+
+        legacy_strategy = self.reproduction_island_sampling[route]
+        if legacy_strategy not in ("unified", "uniform"):
+            raise ValueError(
+                f"Unsupported legacy island sampling strategy '{legacy_strategy}' for reproduction route '{route}'."
+            )
+
+        if distinct and len(candidate_island_ids) < count:
+            raise ValueError(
+                f"Route '{route}' requires {count} distinct islands, got {len(candidate_island_ids)}."
+            )
+
+        # First slot: use the adaptive parent-island sampler.
+        first = self.parent_island_sampler.select(candidate_island_ids, rng=self.rng)
+        if count == 1:
+            return [first]
+
+        if not distinct:
+            return [first] + [
+                self.parent_island_sampler.select(candidate_island_ids, rng=self.rng)
+                for _ in range(count - 1)
+            ]
+
+        # Distinct second slot — for inter-island crossover, defer to the
+        # conditional partner sampler so it can learn good (origin → partner)
+        # pairings. For longer distinct sequences (none today, but keep the
+        # contract consistent), fall back to uniform among the remaining
+        # candidates so we never duplicate.
+        remaining = [island_id for island_id in candidate_island_ids if island_id != first]
+        if route == _ROUTE_INTER_ISLAND_CROSSOVER and count == 2:
+            second = self.cross_island_partner_sampler.select(first, remaining, rng=self.rng)
+            return [first, second]
+
+        result = [first]
+        for _ in range(count - 1):
+            pick = self.rng.choice(remaining)
+            result.append(pick)
+            remaining = [island_id for island_id in remaining if island_id != pick]
+        return result
 
     def _select_parent_organisms(
         self,
@@ -1502,6 +1638,9 @@ class EvolutionLoop:
         write_organism_meta(organism)
         self._write_phase_summary(organism, summary)
 
+        if summary.phase == "simple":
+            self._record_bandit_outcome(plan, organism, simple_score=organism.simple_score)
+
     async def _execute_planned_creations(
         self,
         planned_organisms: list[PlannedOrganismCreation],
@@ -1591,6 +1730,7 @@ class EvolutionLoop:
                     plan.error_msg = str(exc)
                     self._write_planned_organism_stub(plan)
                     persist_state(planned_organisms)
+                    self._record_bandit_outcome(plan, organism=None, simple_score=None)
                     return plan.organism_id, None
                 self._record_creation_event(
                     plan,
