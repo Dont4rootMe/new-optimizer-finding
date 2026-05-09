@@ -67,7 +67,7 @@ reproduction:
   # factor γ controls how fast the bandit forgets old observations
   # (γ=0.97 ≈ 33 effective recent observations per arm).
   parent_island_sampling:
-    strategy: uniform                  # uniform | bandit
+    strategy: bandit                   # uniform | bandit
     bandit:
       algorithm: discounted_thompson
       discount: 0.97
@@ -81,7 +81,7 @@ reproduction:
   # bandit can learn that "from island A, partner B is good" without
   # forcing "from island B, partner A is also good".
   cross_island_partner_sampling:
-    strategy: uniform                  # uniform | bandit
+    strategy: bandit                   # uniform | bandit
     bandit:
       algorithm: discounted_thompson
       discount: 0.97
@@ -141,7 +141,7 @@ llm:
   # `route_weights` are folded in as a Beta-prior bias so users keep
   # their per-model tuning when switching modes.
   route_sampling:
-    strategy: weighted_static          # uniform | weighted_static | bandit
+    strategy: bandit                   # uniform | weighted_static | bandit
     bandit:
       algorithm: discounted_thompson
       discount: 0.97
