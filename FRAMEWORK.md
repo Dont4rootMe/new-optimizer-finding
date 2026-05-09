@@ -225,6 +225,42 @@ Defined in `src/organisms/implementation_patch.py` and orchestrated in `src/evol
 
 A guard added in P5 promotes PATCH to FULL whenever `len(changed_sections) >= len(implementation_regions) - 1`. PATCH at near-full coverage was the worst of both worlds: same token cost as FULL plus more parser fragility.
 
+## Visualization & telemetry
+
+`src/evolve/visualization.py` renders a multi-group dashboard each generation. The legacy six-panel composite PNG (`evolution_overview.png`) still lands at the population root; the new `render_evolution_snapshot(...)` entry point also produces:
+
+- `population_root/viz/overview/` — every legacy panel as a standalone PNG, plus three new ones:
+  - `score_by_generation.png` (Ox = generation index, vertical column of organisms per generation)
+  - `best_vs_evaluations_with_dead.png` and `best_vs_runtime_with_dead.png` (the Best-Score curves where dead organisms still consume an Ox slot, leaving a gap)
+- `population_root/viz/timeline/` — cumulative-over-generation variants of the four aggregate plots: `cumulative_evaluations_by_island.png`, `cumulative_creations_by_operator.png`, `cumulative_creations_by_island.png`, `cumulative_max_score_by_model.png`
+- `population_root/viz/survival/` — survival ratios (`#scored / #total`) plus cumulative scored/dead counts on three Ox bases: `by_evaluations.png`, `by_runtime.png`, `by_generation.png`
+- `population_root/viz/interactive/best_vs_evaluations.html` — Plotly interactive Best vs Evaluations: hovering any point highlights the maternal-ancestor chain of *that* point (not just the current best). Requires the `evolve` extras (plotly).
+
+Each generation, `EvolutionLoop._render_progress_snapshot()` calls `render_evolution_snapshot` and hands the `RenderedSnapshot` bundle to a `CometRunLogger`, which uploads:
+
+- the composite PNG as `overview/composite`
+- each standalone PNG with a group-prefixed name (`overview/best_vs_evaluations`, `timeline/cumulative_creations_by_operator`, `survival/by_runtime`, ...) — Comet groups by the prefix automatically
+- the Plotly HTML as both `comet log_asset` (versioned, downloadable) and `log_html` (latest inline)
+
+The Comet logger is configured under the top-level `comet:` block in each Hydra family config:
+
+```yaml
+comet:
+  enabled: false                         # default off; set to true to log a run
+  api_key: ${oc.env:COMET_API_KEY,null}
+  project_name: ${oc.env:COMET_PROJECT,evolution-runs}
+  workspace: ${oc.env:COMET_WORKSPACE,null}
+  experiment_name: null                  # default: "<run_label>-<utc_timestamp>"
+  log_combined_overview: true
+  log_individual_panels: true
+  log_plotly: true
+  log_step_per_generation: true          # use generation as Comet step
+```
+
+If `enabled: false` (default) the logger is a no-op — no imports, no network calls. If `enabled: true` but `comet_ml` isn't installed or the experiment fails to start, the wrapper logs a WARNING and continues without Comet (no exceptions reach the loop). Optional dep `comet_ml>=3.40.0` lives in the `evolve` extra alongside `plotly>=5.20.0`.
+
+Currently configured families (`awtf2025_heuristic`, `circle_packing_shinka`) ship with `enabled: false` — opt in per-run via env or override.
+
 ## Per-family status of the gene-sampling refactor (P11)
 
 The production operators `MutationOperator` and `CrossbreedingOperator` are family-blind — they no longer call `prune_gene_pool` / `merge_gene_pools`, so **no family** sees random pre-LLM gene sampling anymore. The prompt files are family-specific, and they have been updated asymmetrically:

@@ -49,7 +49,8 @@ from src.evolve.types import (
     PlannedOrganismCreation,
     PlannedPhaseEvaluation,
 )
-from src.evolve.visualization import render_evolution_overview
+from src.evolve.comet import CometRunLogger
+from src.evolve.visualization import render_evolution_snapshot
 from src.organisms.crossbreeding import CrossbreedingOperator
 from src.organisms.mutation import MutationOperator
 from src.organisms.organism import update_latest_lineage_entry
@@ -126,6 +127,23 @@ class EvolutionLoop:
         )
         self._validate_stop_limits()
         self._validate_phase_selection_bounds()
+
+        self.comet_logger = CometRunLogger.from_cfg(
+            cfg,
+            run_label=str(OmegaConf.select(cfg, "experiments", default=None) or "evolution"),
+        )
+        if self.comet_logger.enabled:
+            try:
+                self.comet_logger.log_parameters(
+                    {
+                        "seed": int(cfg.seed),
+                        "population_root": str(self.population_root),
+                        "max_generation_limit": self.max_generation_limit,
+                        "offspring_per_generation": self.offspring_per_generation,
+                    }
+                )
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Failed to log initial parameters to Comet (continuing)")
 
     def _require_cfg_value(self, path: str) -> Any:
         value = OmegaConf.select(self.cfg, path)
@@ -391,12 +409,19 @@ class EvolutionLoop:
 
     def _render_progress_snapshot(self) -> None:
         try:
-            out_path = render_evolution_overview(self.population_root)
+            snapshot = render_evolution_snapshot(self.population_root)
         except Exception:  # noqa: BLE001
             LOGGER.exception("Failed to render evolution overview for %s", self.population_root)
             return
-        if out_path is not None:
-            LOGGER.info("Updated evolution overview at %s", out_path)
+        if snapshot is None:
+            return
+        if snapshot.composite_overview_path is not None:
+            LOGGER.info("Updated evolution overview at %s", snapshot.composite_overview_path)
+        if self.comet_logger.enabled:
+            try:
+                self.comet_logger.log_snapshot(snapshot)
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Failed to push snapshot to Comet (continuing)")
 
     def _load_state(self) -> dict[str, Any] | None:
         payload = read_population_state(self.population_root)
@@ -1982,6 +2007,10 @@ class EvolutionLoop:
             self.orchestrator.close()
             if self._owns_llm_registry:
                 self.llm_registry.stop()
+            try:
+                self.comet_logger.end()
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Failed to end Comet experiment cleanly (continuing)")
 
     async def run(self) -> dict[str, Any]:
         if self._owns_llm_registry:
@@ -2049,3 +2078,7 @@ class EvolutionLoop:
             self.orchestrator.close()
             if self._owns_llm_registry:
                 self.llm_registry.stop()
+            try:
+                self.comet_logger.end()
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Failed to end Comet experiment cleanly (continuing)")
