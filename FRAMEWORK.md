@@ -310,7 +310,7 @@ comet:
   enabled: false                         # default off; set to true to log a run
   api_key: ${oc.env:COMET_API_KEY,null}
   project_name: ${oc.env:COMET_PROJECT,evolution-runs}
-  workspace: ${oc.env:COMET_WORKSPACE,null}
+  workspace: ${oc.env:COMET_WORKSPACE,dont4rootme}
   experiment_name: null                  # default: "<run_label>-<utc_timestamp>"
   log_combined_overview: true
   log_individual_panels: true

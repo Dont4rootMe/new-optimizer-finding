@@ -82,7 +82,7 @@ comet:
   enabled: true
   api_key: RrClhd4FveFQKO4qLo4jBjrKu
   project_name: ${oc.env:COMET_PROJECT,new-optimizer-search}
-  workspace: ${oc.env:COMET_WORKSPACE,null}
+  workspace: ${oc.env:COMET_WORKSPACE,dont4rootme}
   experiment_name: null
   log_combined_overview: true
   log_individual_panels: true
