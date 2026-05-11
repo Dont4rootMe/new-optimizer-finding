@@ -6,14 +6,16 @@ must dispatch the right calls to a mock experiment when enabled.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
 from omegaconf import OmegaConf
 
-from src.evolve.comet import CometRunLogger
+from src.evolve.comet import CometInitError, CometRunLogger
 from src.evolve.visualization import RenderedSnapshot
 
 
@@ -120,27 +122,232 @@ def test_enabled_logger_uploads_grouped_artifacts(monkeypatch: Any, tmp_path: Pa
     assert mock_experiment.log_html.called
 
 
-def test_enabled_logger_falls_back_to_no_op_when_comet_module_missing(monkeypatch: Any) -> None:
+def test_enabled_logger_raises_when_comet_module_missing(monkeypatch: Any) -> None:
+    """Hard-fail policy: silent disable on a remote run would hide a config
+    bug for the entire run duration. When the operator says enabled=true they
+    expect telemetry; we raise so the run dies immediately and the operator
+    sees the misconfiguration.
+    """
+
     import sys
 
-    # Force the import of comet_ml to fail by injecting a sentinel that raises.
-    class _Raising:
-        def __getattr__(self, name: str) -> Any:
-            raise ImportError("comet_ml not installed in this test")
-
     monkeypatch.setitem(sys.modules, "comet_ml", None)  # makes import comet_ml raise
-    logger = CometRunLogger(
+    with pytest.raises(CometInitError, match="comet_ml package is NOT installed"):
+        CometRunLogger(
+            enabled=True,
+            api_key="fake",
+            project_name="proj",
+            workspace=None,
+            experiment_name=None,
+            log_combined_overview=True,
+            log_individual_panels=True,
+            log_plotly=True,
+            log_step_per_generation=True,
+        )
+
+
+def test_enabled_logger_raises_when_api_key_missing(monkeypatch: Any) -> None:
+    """Same hard-fail policy for missing API key — keep the operator honest."""
+
+    fake_module = SimpleNamespace(Experiment=lambda *args, **kwargs: MagicMock())
+    import sys
+
+    monkeypatch.setitem(sys.modules, "comet_ml", fake_module)
+    with pytest.raises(CometInitError, match="no api_key was resolved"):
+        CometRunLogger(
+            enabled=True,
+            api_key=None,
+            project_name="proj",
+            workspace=None,
+            experiment_name=None,
+            log_combined_overview=True,
+            log_individual_panels=True,
+            log_plotly=True,
+            log_step_per_generation=True,
+        )
+
+
+def test_enabled_logger_raises_when_experiment_init_fails(monkeypatch: Any) -> None:
+    """Network / workspace failures propagate as CometInitError too."""
+
+    def _raise(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("workspace lookup timed out")
+
+    fake_module = SimpleNamespace(Experiment=_raise)
+    import sys
+
+    monkeypatch.setitem(sys.modules, "comet_ml", fake_module)
+    with pytest.raises(CometInitError, match="experiment failed to start"):
+        CometRunLogger(
+            enabled=True,
+            api_key="fake",
+            project_name="proj",
+            workspace="bad-workspace",
+            experiment_name=None,
+            log_combined_overview=True,
+            log_individual_panels=True,
+            log_plotly=True,
+            log_step_per_generation=True,
+        )
+
+
+def test_enabled_logger_persists_experiment_key_to_population_root(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """After successful init the experiment_key is written so a follow-up
+    process (e.g. evolve after seed) can resume the same Comet experiment.
+    """
+
+    mock_experiment = MagicMock()
+    mock_experiment.get_key.return_value = "exp-key-abc"
+    fake_module = SimpleNamespace(
+        Experiment=lambda *args, **kwargs: mock_experiment,
+        ExistingExperiment=lambda *args, **kwargs: MagicMock(),  # not used in this path
+    )
+    import sys
+
+    monkeypatch.setitem(sys.modules, "comet_ml", fake_module)
+    population_root = tmp_path / "pop"
+
+    CometRunLogger(
         enabled=True,
         api_key="fake",
         project_name="proj",
-        workspace=None,
+        workspace="ws",
+        experiment_name="run-1",
+        log_combined_overview=True,
+        log_individual_panels=True,
+        log_plotly=True,
+        log_step_per_generation=True,
+        population_root=population_root,
+    )
+
+    cache_path = population_root / "comet_experiment.json"
+    assert cache_path.exists()
+    payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert payload["experiment_key"] == "exp-key-abc"
+    assert payload["project_name"] == "proj"
+    assert payload["workspace"] == "ws"
+
+
+def test_enabled_logger_resumes_existing_experiment_when_cache_present(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """Seed + evolve share one Comet experiment: the second process sees the
+    cached key and calls ``ExistingExperiment`` instead of ``Experiment``.
+    """
+
+    existing_experiment = MagicMock()
+    existing_experiment.get_key.return_value = "exp-key-abc"
+
+    new_experiment_calls: list[dict[str, Any]] = []
+
+    def _new_experiment(*args: Any, **kwargs: Any) -> Any:
+        new_experiment_calls.append(kwargs)
+        return MagicMock()
+
+    existing_experiment_calls: list[dict[str, Any]] = []
+
+    def _existing_experiment(*args: Any, **kwargs: Any) -> Any:
+        existing_experiment_calls.append(kwargs)
+        return existing_experiment
+
+    fake_module = SimpleNamespace(
+        Experiment=_new_experiment,
+        ExistingExperiment=_existing_experiment,
+    )
+    import sys
+
+    monkeypatch.setitem(sys.modules, "comet_ml", fake_module)
+    population_root = tmp_path / "pop"
+    population_root.mkdir()
+    (population_root / "comet_experiment.json").write_text(
+        json.dumps(
+            {
+                "experiment_key": "exp-key-abc",
+                "project_name": "proj",
+                "workspace": "ws",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    CometRunLogger(
+        enabled=True,
+        api_key="fake",
+        project_name="proj",
+        workspace="ws",
         experiment_name=None,
         log_combined_overview=True,
         log_individual_panels=True,
         log_plotly=True,
         log_step_per_generation=True,
+        population_root=population_root,
     )
-    assert logger.enabled is False
+
+    # Resume path was taken: ExistingExperiment was called once, Experiment never.
+    assert len(existing_experiment_calls) == 1
+    assert existing_experiment_calls[0]["previous_experiment"] == "exp-key-abc"
+    assert new_experiment_calls == []
+
+
+def test_resume_ignores_cache_when_project_workspace_mismatch(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """If the user changed project/workspace between runs, the cached key is
+    stale — we start a fresh experiment rather than blindly resuming.
+    """
+
+    new_experiment_calls: list[dict[str, Any]] = []
+
+    def _new_experiment(*args: Any, **kwargs: Any) -> Any:
+        new_experiment_calls.append(kwargs)
+        mock = MagicMock()
+        mock.get_key.return_value = "new-exp"
+        return mock
+
+    existing_experiment_calls: list[dict[str, Any]] = []
+
+    def _existing_experiment(*args: Any, **kwargs: Any) -> Any:
+        existing_experiment_calls.append(kwargs)
+        return MagicMock()
+
+    fake_module = SimpleNamespace(
+        Experiment=_new_experiment,
+        ExistingExperiment=_existing_experiment,
+    )
+    import sys
+
+    monkeypatch.setitem(sys.modules, "comet_ml", fake_module)
+    population_root = tmp_path / "pop"
+    population_root.mkdir()
+    (population_root / "comet_experiment.json").write_text(
+        json.dumps(
+            {
+                "experiment_key": "exp-key-abc",
+                "project_name": "old-proj",
+                "workspace": "ws",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    CometRunLogger(
+        enabled=True,
+        api_key="fake",
+        project_name="new-proj",  # different from cached
+        workspace="ws",
+        experiment_name=None,
+        log_combined_overview=True,
+        log_individual_panels=True,
+        log_plotly=True,
+        log_step_per_generation=True,
+        population_root=population_root,
+    )
+
+    # Cache mismatch → fresh experiment, no resume.
+    assert len(new_experiment_calls) == 1
+    assert existing_experiment_calls == []
 
 
 def test_enabled_logger_skips_plotly_when_log_plotly_disabled(monkeypatch: Any, tmp_path: Path) -> None:

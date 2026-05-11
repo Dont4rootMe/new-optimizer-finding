@@ -153,9 +153,13 @@ class EvolutionLoop:
         # and resolved lazily via summary.json, so they are not tracked here.
         self._bandit_arm_attribution: dict[str, dict[str, Any]] = {}
 
+        # population_root is passed so seed and evolve processes share one
+        # Comet experiment via the persisted experiment_key file in the
+        # population directory.
         self.comet_logger = CometRunLogger.from_cfg(
             cfg,
             run_label=str(OmegaConf.select(cfg, "experiments", default=None) or "evolution"),
+            population_root=self.population_root,
         )
         if self.comet_logger.enabled:
             try:
