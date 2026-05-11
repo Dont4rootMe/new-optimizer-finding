@@ -225,6 +225,26 @@ Defined in `src/organisms/implementation_patch.py` and orchestrated in `src/evol
 
 A guard added in P5 promotes PATCH to FULL whenever `len(changed_sections) >= len(implementation_regions) - 1`. PATCH at near-full coverage was the worst of both worlds: same token cost as FULL plus more parser fragility.
 
+## Two-step design pipeline (rationalization → formalization)
+
+For families that ship rationalization prompts, the design stage runs as two consecutive LLM calls instead of one:
+
+- **Step 1 — rationalization** (`generator.run_rationalization_stage`): free-text "design plan" with six `## ` headers — `SCORE_BEARING_CORE`, `LINEAGE_REGIME_DIAGNOSIS`, `WEAKNESS_HYPOTHESIS`, `WHAT_TO_REMOVE`, `WHAT_TO_ADD_OR_INVENT`, `CHILD_DIRECTION`. The model is explicitly told to invent its own ideas and remove parent material, not just recombine genes. Pseudocode hints inside `WHAT_TO_ADD_OR_INVENT` use **tilde-fenced `~~~python` blocks** (different from Step 2's backtick fences) so a sloppy Step 1 cannot contaminate Step 2's strict CORE_GENES parser.
+
+- **Step 2 — formalization**: the existing sectioned-artifact call. The Step-2 user prompt carries a literal `{rationalization}` placeholder that the generator substitutes with the Step 1 text (two-step) or with the `(rationalization disabled — single-call mode)` stub (single-call). The Step 2 system prompt has a short preamble telling the LLM to materialize `WHAT_TO_ADD_OR_INVENT` bullets in the matching CORE_GENES section, honour `WHAT_TO_REMOVE`, and lift `~~~python` hints into proper code blocks.
+
+Step 1 is **cached across validator retries**: novelty/compatibility rejections are almost always formalization drift, not strategic mistakes, so the same rationale is reused with the existing `_append_rejected_candidate_repair_block` feedback added to Step 2's user prompt. Re-running Step 1 each retry both wastes a call and risks the planner contradicting its own previous direction.
+
+Step 1 also receives a **lineage regime hint** (Tier 2 C). `src/organisms/lineage_regime.py::summarize_recent_regime` scans the parent's recent ancestors (last 8 by default), matches their `change_description` against family-specific keyword categories (`wall_family`, `grouping_family`, `routing_family`, `repair_regime` for awtf2025; `packing_family`, `radius_regime`, `symmetry_family`, `repair_family` for circle_packing), and emits a short prose hint marking axes that have converged on a single family vs axes that no recent ancestor has used. The hint is injected **only** into Step 1's user prompt — Step 2 doesn't need it, the rationale already encodes the regime-break decision.
+
+**Persistence**: Step 1's output lives in `org_dir/llm_rationalization.json` (separate from `llm_request.json`/`llm_response.json` so the design stage's overwrite doesn't lose it). Both `dump_llm.py` and `dump_llm_excerpt.py` surface it.
+
+**Soft-fail by design**: if Step 1 LLM call fails, returns malformed output, or the generator lacks `run_rationalization_stage` (test fakes), the operator silently falls back to single-call mode and Step 2 sees the stub. No exceptions reach the loop.
+
+**Configuration**: per family, point `evolver.prompts.{mutation,crossover}_rationalization_{system,user}` at the family's `prompts/rationalization/{mutation,crossover}/{system,user}.txt`. Absent entries mean the family hasn't migrated and the single-call legacy path is used unconditionally. Active families with the two-step pipeline: `awtf2025_heuristic`, `circle_packing_shinka`. `optimization_survey` remains single-call.
+
+Keyword maps for the lineage regime hint live next to the prompt assets at `conf/experiments/<family>/prompts/shared/regime_keywords.yaml`; built-in fallbacks in `lineage_regime.py` keep the hint working even if the YAML is absent.
+
 ## Adaptive sampling (bandits)
 
 Three sampling decisions the loop makes per organism creation can run in either uniform or **adaptive bandit** mode:

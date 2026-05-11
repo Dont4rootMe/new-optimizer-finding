@@ -17,6 +17,8 @@ Key modules:
 - `storage.py`: canonical filesystem layout and strict resume helpers
 - `selection.py`: island-local survival and parent sampling helpers
 - `bandit.py`: discounted-Thompson multi-armed bandit + reward computer + persistence; backs `evolver.{llm.route_sampling, reproduction.parent_island_sampling, reproduction.cross_island_partner_sampling}`. Stateful — `state_dict()` / `load_state(...)` round-trip into `population_state.json` so resume restores the posteriors.
+- `prompt_utils.py::DesignPromptBundle`: dataclass carrying Step-1 and Step-2 prompts for the two-step design pipeline. Built by `src/organisms/{mutation,crossbreeding}.py::build_*_design_bundle`; `render_formalization(rationale_text)` substitutes the `{rationalization}` placeholder in the Step-2 user template.
+- `generator.py::run_rationalization_stage`: public method that runs Step 1 of the two-step pipeline. Persists the result to `org_dir/llm_rationalization.json` and soft-fails (returns None) on any error so the loop degrades cleanly to single-call mode.
 
 ## Non-Negotiable Invariants
 
@@ -43,3 +45,6 @@ Key modules:
 - `pytest -q tests/test_optimizer_generator.py`
 - `pytest -q tests/test_selection.py`
 - `pytest -q tests/test_bandit.py`
+- `pytest -q tests/test_rationalization.py`
+- `pytest -q tests/test_lineage_regime.py`
+- `pytest -q tests/test_two_step_design.py`

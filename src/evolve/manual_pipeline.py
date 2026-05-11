@@ -275,7 +275,7 @@ def build_manual_crossover_prompts(
         inherit_probability=probability,
         rng=random.Random(_resolve_seed(context, seed)),
     )
-    system_prompt, user_prompt = build_crossover_prompt_from_artifacts(
+    crossover_bundle = build_crossover_prompt_from_artifacts(
         inherited_genes=child_gene_pool,
         mother_genetic_code=mother_genetic_code,
         mother_lineage=mother_lineage,
@@ -284,6 +284,9 @@ def build_manual_crossover_prompts(
         prompts=context.prompt_bundle,
         novelty_feedback=novelty_feedback,
     )
+    # Manual-pipeline tooling stays single-call; substitute the
+    # rationalization placeholder with the legacy stub before returning.
+    system_prompt, user_prompt = crossover_bundle.render_formalization(rationale_text=None)
     return {
         "child_gene_pool": child_gene_pool,
         "inherit_probability": probability,
@@ -319,7 +322,7 @@ def build_manual_mutation_prompts(
         delete_probability=probability,
         rng=random.Random(_resolve_seed(context, seed)),
     )
-    system_prompt, user_prompt = build_mutation_prompt_from_artifacts(
+    mutation_bundle = build_mutation_prompt_from_artifacts(
         inherited_genes=inherited_genes,
         removed_genes=removed_genes,
         parent_genetic_code=parent_genetic_code,
@@ -327,6 +330,7 @@ def build_manual_mutation_prompts(
         prompts=context.prompt_bundle,
         novelty_feedback=novelty_feedback,
     )
+    system_prompt, user_prompt = mutation_bundle.render_formalization(rationale_text=None)
     return {
         "inherited_genes": inherited_genes,
         "removed_genes": removed_genes,

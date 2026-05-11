@@ -127,6 +127,35 @@ def dump_organism(org_dir: Path, out_dir: Path) -> dict[str, Any]:
     if organism.get("error_msg"):
         lines.append(f"- error_msg: `{organism['error_msg']}`")
 
+    # Step 1 of the two-step design pipeline — lives in its own file so the
+    # later design stage's read-write of llm_request.json doesn't have to
+    # merge with it. When the file is missing the family hasn't migrated
+    # (legacy single-call path) or the run preceded the feature.
+    rationalization_path = org_dir / "llm_rationalization.json"
+    if rationalization_path.exists():
+        try:
+            rationalization_payload = json.loads(rationalization_path.read_text())
+        except Exception as exc:  # noqa: BLE001
+            rationalization_payload = {"status": "parse_error", "error_msg": str(exc)}
+        lines.append("\n\n## STAGE: rationalization\n")
+        meta_pairs = [
+            ("operator", rationalization_payload.get("operator")),
+            ("route", rationalization_payload.get("route_id")),
+            ("provider", rationalization_payload.get("provider")),
+            ("model", rationalization_payload.get("provider_model_id")),
+            ("status", rationalization_payload.get("status")),
+        ]
+        rendered_meta = "; ".join(f"{key}={value}" for key, value in meta_pairs if value is not None)
+        if rendered_meta:
+            lines.append(f"_{rendered_meta}_\n")
+        parsed = rationalization_payload.get("parsed") or {}
+        if parsed:
+            lines.append(f"- actionable directive present: `{parsed.get('has_actionable_directive')}`")
+            present = parsed.get("sections_present") or []
+            lines.append(f"- sections present: {', '.join(present) if present else '(none parsed)'}")
+        rationale_text = rationalization_payload.get("text") or "(empty)"
+        lines.append("\n```\n" + rationale_text.strip() + "\n```")
+
     for i, (ra, rb) in enumerate(
         zip(req.get("design_attempts", []), resp.get("design_attempts", []))
     ):

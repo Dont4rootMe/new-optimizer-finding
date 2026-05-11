@@ -82,6 +82,7 @@ def dump_excerpt(org_dir: Path, out_dir: Path, gen_name: str) -> dict[str, Any]:
     req = _read_json(org_dir / "llm_request.json")
     resp = _read_json(org_dir / "llm_response.json")
     summary = _read_json(org_dir / "summary.json")
+    rationalization = _read_json(org_dir / "llm_rationalization.json")
 
     out_file = out_dir / f"{gen_name}__{island}__{org}.md"
 
@@ -123,6 +124,26 @@ def dump_excerpt(org_dir: Path, out_dir: Path, gen_name: str) -> dict[str, Any]:
 
     lines.append("\n## Stages (excerpt)\n")
     stage_meta_keys = ("status", "verdict", "rejection_reason", "sections_at_issue", "changed_sections", "error_kind")
+
+    # Step 1 of the two-step design pipeline. Lives in its own JSON file so
+    # the design stage's overwrite of llm_request.json doesn't lose it.
+    if rationalization:
+        lines.append("### rationalization (Step 1)")
+        rat_meta_parts: list[str] = []
+        rat_status = rationalization.get("status")
+        if rat_status:
+            rat_meta_parts.append(f"status={rat_status}")
+        rat_parsed = rationalization.get("parsed") or {}
+        if "has_actionable_directive" in rat_parsed:
+            rat_meta_parts.append(f"actionable={rat_parsed['has_actionable_directive']}")
+        if rat_parsed.get("sections_present"):
+            rat_meta_parts.append(f"sections={','.join(rat_parsed['sections_present'])}")
+        if rat_meta_parts:
+            lines.append(f"- **meta**: {_one_line('; '.join(rat_meta_parts), 600)}")
+        rat_text = rationalization.get("text")
+        if rat_text:
+            lines.append(f"- **text**: {_one_line(rat_text, 700)}")
+        lines.append("")
 
     for key in (*STAGE_LIST_KEYS, *STAGE_SINGLE_KEYS):
         for label, req_stage, resp_stage in _iter_pairs(req, resp, key):

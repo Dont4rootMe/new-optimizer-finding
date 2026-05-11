@@ -6,7 +6,12 @@ import logging
 import random
 from pathlib import Path
 
-from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
+from src.evolve.prompt_utils import (
+    DesignPromptBundle,
+    PromptBundle,
+    RATIONALIZATION_PLACEHOLDER,
+    compose_system_prompt,
+)
 from src.evolve.storage import utc_now_iso
 from src.evolve.types import OrganismMeta
 from src.organisms.compatibility import (
@@ -16,6 +21,8 @@ from src.organisms.compatibility import (
     build_crossover_compatibility_prompt,
     format_compatibility_rejection_feedback,
 )
+from src.organisms.lineage_regime import summarize_recent_regime
+from src.organisms.mutation import _detect_family_id, _maybe_run_step1
 from src.organisms.novelty import (
     NoveltyCheckContext,
     build_crossover_novelty_prompt,
@@ -76,26 +83,48 @@ def _build_crossbreed_prompt(
     novelty_feedback: list[str] | None = None,
     compatibility_feedback: list[CompatibilityJudgment] | None = None,
 ) -> tuple[str, str]:
-    """Build `(system_prompt, user_prompt)` for crossover LLM call."""
+    """Build `(system_prompt, user_prompt)` for crossover LLM call (legacy path).
 
-    mother_lineage = read_organism_lineage(mother)
-    father_lineage = read_organism_lineage(father)
+    Kept for callers that still want flat strings — internally derives the
+    formalization prompts from :func:`build_crossover_design_bundle` and
+    substitutes the rationalization placeholder with the single-call stub.
+    """
 
-    return build_crossover_prompt_from_artifacts(
-        inherited_genes=inherited_genes,
-        mother_genetic_code=read_organism_genetic_code(mother),
-        mother_lineage=mother_lineage,
-        father_genetic_code=read_organism_genetic_code(father),
-        father_lineage=father_lineage,
+    bundle = build_crossover_design_bundle(
+        mother=mother,
+        father=father,
         prompts=prompts,
         novelty_feedback=novelty_feedback,
         compatibility_feedback=compatibility_feedback,
+    )
+    return bundle.render_formalization(rationale_text=None)
+
+
+def build_crossover_design_bundle(
+    *,
+    mother: OrganismMeta,
+    father: OrganismMeta,
+    prompts: PromptBundle,
+    novelty_feedback: list[str] | None = None,
+    compatibility_feedback: list[CompatibilityJudgment] | None = None,
+    family_id: str | None = None,
+) -> DesignPromptBundle:
+    """Build the full two-step prompt bundle for a crossover child."""
+
+    return build_crossover_prompt_from_artifacts(
+        mother_genetic_code=read_organism_genetic_code(mother),
+        mother_lineage=read_organism_lineage(mother),
+        father_genetic_code=read_organism_genetic_code(father),
+        father_lineage=read_organism_lineage(father),
+        prompts=prompts,
+        novelty_feedback=novelty_feedback,
+        compatibility_feedback=compatibility_feedback,
+        family_id=family_id,
     )
 
 
 def build_crossover_prompt_from_artifacts(
     *,
-    inherited_genes: list[str],
     mother_genetic_code: dict[str, Any],
     mother_lineage: list[dict[str, Any]],
     father_genetic_code: dict[str, Any],
@@ -103,25 +132,70 @@ def build_crossover_prompt_from_artifacts(
     prompts: PromptBundle,
     novelty_feedback: list[str] | None = None,
     compatibility_feedback: list[CompatibilityJudgment] | None = None,
-) -> tuple[str, str]:
-    """Build crossover prompts from raw canonical artifacts."""
+    family_id: str | None = None,
+    # Legacy kwarg accepted for backward compatibility with manual_pipeline.py;
+    # intentionally unused since pre-LLM gene merging is disabled.
+    inherited_genes: list[str] | None = None,
+) -> DesignPromptBundle:
+    """Build crossover design prompts (Step 1 + Step 2 templates)."""
 
-    system = compose_system_prompt(prompts.project_context, prompts.crossover_system)
-    user = prompts.crossover_user.format(
-        genome_schema=prompts.genome_schema,
-        inherited_gene_pool="\n".join(f"- {gene}" for gene in inherited_genes) or "(none)",
-        mother_genetic_code=format_genetic_code(dict(mother_genetic_code)),
-        mother_lineage_summary=format_lineage_summary(list(mother_lineage)),
-        father_genetic_code=format_genetic_code(dict(father_genetic_code)),
-        father_lineage_summary=format_lineage_summary(list(father_lineage)),
-        novelty_rejection_feedback=format_novelty_rejection_feedback(list(novelty_feedback or [])),
-    )
+    mother_code_str = format_genetic_code(dict(mother_genetic_code))
+    mother_lineage_str = format_lineage_summary(list(mother_lineage))
+    father_code_str = format_genetic_code(dict(father_genetic_code))
+    father_lineage_str = format_lineage_summary(list(father_lineage))
+    novelty_feedback_str = format_novelty_rejection_feedback(list(novelty_feedback or []))
+    compatibility_block = ""
     if compatibility_feedback:
-        user = (
-            f"{user}\n\n=== COMPATIBILITY REJECTION FEEDBACK ===\n"
+        compatibility_block = (
+            "\n\n=== COMPATIBILITY REJECTION FEEDBACK ===\n"
             f"{format_compatibility_rejection_feedback(compatibility_feedback)}"
         )
-    return system, user
+
+    formalization_system = compose_system_prompt(prompts.project_context, prompts.crossover_system)
+    formalization_user_template = prompts.crossover_user.format(
+        genome_schema=prompts.genome_schema,
+        mother_genetic_code=mother_code_str,
+        mother_lineage_summary=mother_lineage_str,
+        father_genetic_code=father_code_str,
+        father_lineage_summary=father_lineage_str,
+        novelty_rejection_feedback=novelty_feedback_str,
+        rationalization=RATIONALIZATION_PLACEHOLDER,
+        # Legacy placeholder for optimization_survey prompts that still
+        # reference the pre-bandit gene-sampling shape.
+        inherited_gene_pool="(none)",
+    ) + compatibility_block
+
+    rationalization_system: str | None = None
+    rationalization_user: str | None = None
+    # Regime hint is computed from the primary parent's (mother's) lineage —
+    # the primary parent dominates the recombination by design.
+    lineage_regime_hint = summarize_recent_regime(list(mother_lineage), family=family_id)
+    if prompts.supports_two_step_crossover:
+        rationalization_system = compose_system_prompt(
+            prompts.project_context,
+            prompts.crossover_rationalization_system,
+        )
+        rationalization_user = prompts.crossover_rationalization_user.format(
+            mother_genetic_code=mother_code_str,
+            mother_lineage_summary=mother_lineage_str,
+            father_genetic_code=father_code_str,
+            father_lineage_summary=father_lineage_str,
+            lineage_regime_hint=lineage_regime_hint,
+            novelty_rejection_feedback=novelty_feedback_str,
+        )
+        if compatibility_feedback:
+            rationalization_user = (
+                f"{rationalization_user}\n\n=== COMPATIBILITY REJECTION FEEDBACK ===\n"
+                f"{format_compatibility_rejection_feedback(compatibility_feedback)}"
+            )
+
+    return DesignPromptBundle(
+        formalization_system=formalization_system,
+        formalization_user_template=formalization_user_template,
+        rationalization_system=rationalization_system,
+        rationalization_user=rationalization_user,
+        lineage_regime_hint=lineage_regime_hint,
+    )
 
 
 class CrossbreedingOperator:
@@ -153,21 +227,39 @@ class CrossbreedingOperator:
             father.organism_id[:8],
         )
 
-        system_prompt, user_prompt = _build_crossbreed_prompt(
-            child_dna,
-            mother,
-            father,
-            generator.prompt_bundle,
+        family_id = _detect_family_id(generator)
+        initial_bundle = build_crossover_design_bundle(
+            mother=mother,
+            father=father,
+            prompts=generator.prompt_bundle,
+            family_id=family_id,
         )
+
+        rationale_text = _maybe_run_step1(
+            generator=generator,
+            bundle=initial_bundle,
+            organism_id=organism_id,
+            generation=generation,
+            operator="crossover",
+            org_dir=org_dir,
+        )
+
+        system_prompt, user_prompt = initial_bundle.render_formalization(rationale_text)
+
+        def _rebuild_step2(novelty_feedback=None, compatibility_feedback=None):
+            retry_bundle = build_crossover_design_bundle(
+                mother=mother,
+                father=father,
+                prompts=generator.prompt_bundle,
+                novelty_feedback=novelty_feedback,
+                compatibility_feedback=compatibility_feedback,
+                family_id=family_id,
+            )
+            return retry_bundle.render_formalization(rationale_text)
+
         novelty_context = NoveltyCheckContext(
             operator="crossover",
-            build_design_prompts=lambda feedback: _build_crossbreed_prompt(
-                child_dna,
-                mother,
-                father,
-                generator.prompt_bundle,
-                novelty_feedback=feedback,
-            ),
+            build_design_prompts=lambda feedback: _rebuild_step2(novelty_feedback=feedback),
             build_novelty_prompts=lambda candidate_design: build_crossover_novelty_prompt(
                 inherited_genes=child_dna,
                 mother=mother,
@@ -184,11 +276,7 @@ class CrossbreedingOperator:
         ):
             compatibility_context = CompatibilityValidationContext(
                 check=CompatibilityCheckContext(operator_kind="crossover"),
-                build_design_prompts=lambda novelty_feedback, compatibility_feedback: _build_crossbreed_prompt(
-                    child_dna,
-                    mother,
-                    father,
-                    generator.prompt_bundle,
+                build_design_prompts=lambda novelty_feedback, compatibility_feedback: _rebuild_step2(
                     novelty_feedback=novelty_feedback,
                     compatibility_feedback=compatibility_feedback,
                 ),

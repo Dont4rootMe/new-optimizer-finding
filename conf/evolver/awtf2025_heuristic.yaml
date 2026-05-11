@@ -32,6 +32,8 @@ prompts:
   mutation_novelty_user: conf/experiments/awtf2025_heuristic/prompts/novelty/mutation/user.txt
   compatibility_mutation_system: conf/experiments/awtf2025_heuristic/prompts/compatibility/mutation/system.txt
   compatibility_mutation_user: conf/experiments/awtf2025_heuristic/prompts/compatibility/mutation/user.txt
+  mutation_rationalization_system: conf/experiments/awtf2025_heuristic/prompts/rationalization/mutation/system.txt
+  mutation_rationalization_user: conf/experiments/awtf2025_heuristic/prompts/rationalization/mutation/user.txt
 
   crossover_system: conf/experiments/awtf2025_heuristic/prompts/crossover/system.txt
   crossover_user: conf/experiments/awtf2025_heuristic/prompts/crossover/user.txt
@@ -39,6 +41,8 @@ prompts:
   crossover_novelty_user: conf/experiments/awtf2025_heuristic/prompts/novelty/crossover/user.txt
   compatibility_crossover_system: conf/experiments/awtf2025_heuristic/prompts/compatibility/crossover/system.txt
   compatibility_crossover_user: conf/experiments/awtf2025_heuristic/prompts/compatibility/crossover/user.txt
+  crossover_rationalization_system: conf/experiments/awtf2025_heuristic/prompts/rationalization/crossover/system.txt
+  crossover_rationalization_user: conf/experiments/awtf2025_heuristic/prompts/rationalization/crossover/user.txt
 
   implementation_system: conf/experiments/awtf2025_heuristic/prompts/implementation/system.txt
   implementation_user: conf/experiments/awtf2025_heuristic/prompts/implementation/user.txt

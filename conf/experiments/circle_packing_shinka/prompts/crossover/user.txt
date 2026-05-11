@@ -4,6 +4,10 @@ Create one crossover child from these two parents.
 The schema below is authoritative for the structure and meaning of CORE_GENES.
 {genome_schema}
 
+=== STEP 1 DESIGN RATIONALE ===
+A prior rationalization call produced the design plan below. Materialize WHAT_TO_REMOVE, WHAT_TO_ADD_OR_INVENT and CHILD_DIRECTION in the structured artifact. If the block reads "(rationalization disabled — single-call mode)", proceed without it.
+{rationalization}
+
 === PRIMARY PARENT GENETIC CODE ===
 Use this as the structural base for the child. Its core paradigm should dominate the recombination.
 {mother_genetic_code}

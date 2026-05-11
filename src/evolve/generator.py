@@ -2026,6 +2026,94 @@ class CandidateGenerator(BaseLlmGenerator):
             provider_model_id=accepted_design_response.provider_model_id,
         )
 
+    def run_rationalization_stage(
+        self,
+        *,
+        rationalization_system: str,
+        rationalization_user: str,
+        organism_id: str,
+        generation: int,
+        operator: str,
+        org_dir: Path | None = None,
+    ) -> str | None:
+        """Run Step 1 of the two-step design pipeline.
+
+        Returns the raw rationalization text (six ``## ``-headered prose
+        sections per the design contract) or ``None`` when the call fails.
+
+        Persistence: when ``org_dir`` is given, a sibling file
+        ``llm_rationalization.json`` is written alongside the organism's
+        canonical ``llm_request.json`` so post-mortem dumps can read Step 1
+        independently of Step 2. Splitting it from ``llm_request.json``
+        avoids a read-modify-write merge with the later design stage that
+        overwrites that file wholesale.
+
+        Soft-fails: any exception is logged and ``None`` is returned, which
+        callers interpret as "single-call mode fallback".
+        """
+
+        from src.organisms.rationalization import (
+            parse_rationalization_response,
+            rationalization_summary,
+        )
+
+        route_id = self.sample_route_id(organism_id=organism_id)
+        _announce(
+            f"organism {organism_id} -> route {route_id}: calling rationalization stage "
+            f"(generation={generation}, operator={operator})"
+        )
+        started_at = utc_now_iso()
+        try:
+            response = self._call_llm_stage(
+                route_id,
+                "design_rationalization",
+                rationalization_system,
+                rationalization_user,
+                organism_id=organism_id,
+                generation=generation,
+            )
+        except Exception:  # noqa: BLE001
+            LOGGER.exception(
+                "Rationalization stage failed organism=%s generation=%d operator=%s; "
+                "falling back to single-call formalization",
+                organism_id,
+                generation,
+                operator,
+            )
+            return None
+        finished_at = utc_now_iso()
+        rationale_text = _structured_response_text(response)
+        parsed = parse_rationalization_response(rationale_text)
+        _announce(
+            f"organism {organism_id} rationalization stage returned "
+            f"(route={route_id}, provider={response.provider}, "
+            f"model={response.provider_model_id}, "
+            f"actionable={parsed.has_actionable_directive})"
+        )
+
+        if org_dir is not None:
+            try:
+                rationalization_payload = {
+                    "route_id": route_id,
+                    "operator": operator,
+                    "system_prompt": rationalization_system,
+                    "user_prompt": rationalization_user,
+                    "text": rationale_text,
+                    "parsed": rationalization_summary(parsed),
+                    "provider": response.provider,
+                    "provider_model_id": response.provider_model_id,
+                    "started_at": started_at,
+                    "finished_at": finished_at,
+                    "status": "completed",
+                }
+                write_json(org_dir / "llm_rationalization.json", rationalization_payload)
+            except Exception:  # noqa: BLE001
+                LOGGER.exception(
+                    "Failed to persist rationalization for organism %s; continuing", organism_id
+                )
+
+        return rationale_text
+
     def run_creation_stages(
         self,
         *,

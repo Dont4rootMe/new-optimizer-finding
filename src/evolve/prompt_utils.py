@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from omegaconf import DictConfig
 
 from pathlib import Path
+
+# Sentinel placeholder kept inside the Step-2 user template until the
+# generator either substitutes the actual Step-1 rationale text (two-step
+# mode) or a "rationalization disabled" stub (single-call mode). Using a
+# bare placeholder string lets str.format(...) leave it untouched as long
+# as the kwarg explicitly carries the same string.
+RATIONALIZATION_PLACEHOLDER = "{rationalization}"
+RATIONALIZATION_SINGLE_CALL_STUB = "(rationalization disabled — single-call mode)"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -35,6 +43,56 @@ class PromptBundle:
     compatibility_mutation_user: str = ""
     compatibility_crossover_system: str = ""
     compatibility_crossover_user: str = ""
+    # Step-1 prompts for the two-step design pipeline (rationalization →
+    # formalization). Empty strings mean the family hasn't migrated and the
+    # single-call legacy path is used unconditionally.
+    mutation_rationalization_system: str = ""
+    mutation_rationalization_user: str = ""
+    crossover_rationalization_system: str = ""
+    crossover_rationalization_user: str = ""
+
+    @property
+    def supports_two_step_mutation(self) -> bool:
+        return bool(self.mutation_rationalization_system and self.mutation_rationalization_user)
+
+    @property
+    def supports_two_step_crossover(self) -> bool:
+        return bool(self.crossover_rationalization_system and self.crossover_rationalization_user)
+
+
+@dataclass(slots=True)
+class DesignPromptBundle:
+    """Carries the prompts for one design-stage attempt.
+
+    Step 1 (rationalization) prompts are ``None`` when the family hasn't
+    migrated to the two-step pipeline or when single-call mode is forced
+    by config. Step 2 (formalization) prompts always exist; the user
+    template carries the ``{rationalization}`` placeholder unsubstituted —
+    the generator fills it in either with the Step-1 LLM response (two
+    step) or with the single-call stub before issuing the LLM call.
+    """
+
+    formalization_system: str
+    formalization_user_template: str
+    rationalization_system: str | None = None
+    rationalization_user: str | None = None
+    # Lineage regime hint used at Step 1 prompt-render time. Empty when no
+    # convergence diagnosis is available or single-call mode is active.
+    lineage_regime_hint: str = ""
+
+    @property
+    def is_two_step(self) -> bool:
+        return bool(self.rationalization_system and self.rationalization_user)
+
+    def render_formalization(self, rationale_text: str | None) -> tuple[str, str]:
+        """Substitute the rationalization placeholder and return ``(system, user)``."""
+
+        substitution = rationale_text if rationale_text else RATIONALIZATION_SINGLE_CALL_STUB
+        rendered_user = self.formalization_user_template.replace(
+            RATIONALIZATION_PLACEHOLDER,
+            substitution,
+        )
+        return self.formalization_system, rendered_user
 
 
 def _read_path(path: Path) -> str:
@@ -94,6 +152,10 @@ def load_prompt_bundle(cfg: DictConfig) -> PromptBundle:
         compatibility_mutation_user=_read_optional_prompt_asset(cfg, "compatibility_mutation_user"),
         compatibility_crossover_system=_read_optional_prompt_asset(cfg, "compatibility_crossover_system"),
         compatibility_crossover_user=_read_optional_prompt_asset(cfg, "compatibility_crossover_user"),
+        mutation_rationalization_system=_read_optional_prompt_asset(cfg, "mutation_rationalization_system"),
+        mutation_rationalization_user=_read_optional_prompt_asset(cfg, "mutation_rationalization_user"),
+        crossover_rationalization_system=_read_optional_prompt_asset(cfg, "crossover_rationalization_system"),
+        crossover_rationalization_user=_read_optional_prompt_asset(cfg, "crossover_rationalization_user"),
     )
 
 

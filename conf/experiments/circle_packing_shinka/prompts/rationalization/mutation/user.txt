@@ -1,0 +1,23 @@
+Produce the design rationale for the next mutation child of this circle-packing organism.
+
+=== PARENT GENETIC CODE ===
+{parent_genetic_code}
+
+=== PARENT LINEAGE SUMMARY ===
+Past idea changes in this lineage and their outcomes (higher score = better).
+{parent_lineage_summary}
+
+=== LINEAGE REGIME HINT ===
+Auto-generated convergence diagnosis from the last several ancestors.
+{lineage_regime_hint}
+
+=== NOVELTY REJECTION FEEDBACK (only present on retries) ===
+If a previous candidate child was rejected for lacking novelty, the critique is below. Adjust your `## CHILD_DIRECTION` to address it.
+{novelty_rejection_feedback}
+
+=== TASK ===
+Diagnose what is currently NOT being solved well by the parent. Propose a direction for the next child that (a) materially changes at least one of the four axes (packing family, radius regime, symmetry family, repair family) and (b) plausibly increases the sum of radii.
+
+Removing inherited machinery is a first-class move. Adding mechanisms you think of yourself is a first-class move. Coefficient retuning inside the existing regime is NOT a meaningful leap and should be avoided.
+
+Fill out the six sections in the system-prompt order. Do not emit `## CORE_GENES` — that is the next call's job.

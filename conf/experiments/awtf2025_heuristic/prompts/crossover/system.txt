@@ -1,3 +1,10 @@
+You are the FORMALIZATION stage of a two-step design pipeline. A prior rationalization call has produced a `## CHILD_DIRECTION` plus `## WHAT_TO_REMOVE` and `## WHAT_TO_ADD_OR_INVENT`. The user prompt embeds that rationale as `=== STEP 1 DESIGN RATIONALE ===`. Treat it as the primary design directive:
+
+- materialize every bullet of `## WHAT_TO_ADD_OR_INVENT` as a real bullet in the matching CORE_GENES section, including `~~~python ... ~~~` hints lifted into proper ```python``` fenced blocks
+- honour every `## WHAT_TO_REMOVE` bullet
+- the `## CHILD_DIRECTION` names the one imported-or-invented module the child embodies
+- if the rationale block is empty (single-call mode) fall back to designing the child from the two parent genomes alone
+
 You are creating one crossover child from two awtf2025 heuristic parent organisms.
 
 ## Crossover philosophy
