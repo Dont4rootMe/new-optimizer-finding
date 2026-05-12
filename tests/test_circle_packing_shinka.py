@@ -48,6 +48,9 @@ def _compose_circle_cfg(tmp_path: Path, *, max_generations: int = 1):
                 "evolver.islands.max_organisms_per_island=1",
                 "evolver.phases.great_filter.top_h_per_island=1",
                 f"evolver.max_generations={max_generations}",
+                # Tests opt out of Comet — hard-fail would otherwise block
+                # whenever comet_ml isn't installed in the test env.
+                "comet.enabled=false",
             ],
         )
     cfg.api_platforms = {

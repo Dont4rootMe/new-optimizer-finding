@@ -246,13 +246,20 @@ def render_evolution_snapshot(
         lambda ax: _plot_cumulative_max_score_by_model_over_generation(ax, records),
     )
 
+    # Every matplotlib panel also gets a Plotly HTML sibling. PNGs give
+    # instant thumbnails in Comet; HTMLs let the operator hover for organism
+    # metadata, zoom into a regime shift, and toggle traces. Each renderer
+    # soft-skips when plotly isn't installed or when there's no data yet.
     interactive_html: dict[str, Path] = {}
-    plotly_path = _maybe_render_plotly_best_vs_evaluations(
-        interactive_dir / "best_vs_evaluations.html",
-        records,
-    )
-    if plotly_path is not None:
-        interactive_html["best_vs_evaluations"] = plotly_path
+    plotly_renderers = _build_plotly_renderers(records, all_records=all_records, interactive_dir=interactive_dir)
+    for name, renderer in plotly_renderers.items():
+        try:
+            path = renderer()
+        except Exception:  # noqa: BLE001
+            LOGGER.exception("Plotly renderer %s failed", name)
+            continue
+        if path is not None:
+            interactive_html[name] = path
 
     return RenderedSnapshot(
         population_root=root,
@@ -337,6 +344,88 @@ def _maybe_render_plotly_best_vs_evaluations(
     except Exception:  # noqa: BLE001
         LOGGER.exception("Plotly render failed for %s", out_path)
         return None
+
+
+def _build_plotly_renderers(
+    records: list[OrganismVizRecord],
+    *,
+    all_records: list[OrganismVizRecord],
+    interactive_dir: Path,
+) -> dict[str, Any]:
+    """Map panel-id → zero-arg callable that returns the rendered Path or None.
+
+    Centralising the registry here keeps ``render_evolution_snapshot`` short
+    and means a new plotly panel needs exactly two edits (one renderer + one
+    line below). The matching matplotlib PNG names are deliberately kept
+    one-to-one so the Comet UI can group them by id.
+    """
+
+    try:
+        from src.evolve.visualization_plotly import (
+            render_best_vs_evaluations_plotly,
+            render_best_vs_runtime_plotly,
+            render_cumulative_creations_by_island_plotly,
+            render_cumulative_creations_by_operator_plotly,
+            render_cumulative_evaluations_by_island_plotly,
+            render_cumulative_max_score_by_model_plotly,
+            render_evaluations_per_generation_plotly,
+            render_operators_total_plotly,
+            render_score_by_generation_plotly,
+            render_score_by_island_plotly,
+            render_score_by_model_plotly,
+            render_survival_by_evaluations_plotly,
+            render_survival_by_generation_plotly,
+            render_survival_by_runtime_plotly,
+        )
+    except ImportError as exc:  # pragma: no cover - optional dep
+        LOGGER.warning("Plotly not installed; skipping interactive HTML (%s)", exc)
+        return {}
+
+    def _bind(fn: Any, name: str, **kwargs: Any) -> Any:
+        return lambda: fn(records, out_path=interactive_dir / name, **kwargs)
+
+    return {
+        # overview — same ids as overview_panels for clean Comet grouping
+        "best_vs_evaluations": _bind(render_best_vs_evaluations_plotly, "best_vs_evaluations.html"),
+        "best_vs_runtime": _bind(render_best_vs_runtime_plotly, "best_vs_runtime.html"),
+        "score_by_island": _bind(render_score_by_island_plotly, "score_by_island.html"),
+        "score_by_model": _bind(render_score_by_model_plotly, "score_by_model.html"),
+        "score_by_generation": _bind(render_score_by_generation_plotly, "score_by_generation.html"),
+        "operators_total": (
+            lambda: render_operators_total_plotly(
+                records, out_path=interactive_dir / "operators_total.html", context_records=all_records,
+            )
+        ),
+        "evaluations_per_generation": _bind(
+            render_evaluations_per_generation_plotly, "evaluations_per_generation.html"
+        ),
+        # timeline — cumulative-over-generation views
+        "cumulative_evaluations_by_island": _bind(
+            render_cumulative_evaluations_by_island_plotly,
+            "cumulative_evaluations_by_island.html",
+        ),
+        "cumulative_creations_by_operator": (
+            lambda: render_cumulative_creations_by_operator_plotly(
+                records,
+                out_path=interactive_dir / "cumulative_creations_by_operator.html",
+                context_records=all_records,
+            )
+        ),
+        "cumulative_creations_by_island": _bind(
+            render_cumulative_creations_by_island_plotly, "cumulative_creations_by_island.html"
+        ),
+        "cumulative_max_score_by_model": _bind(
+            render_cumulative_max_score_by_model_plotly, "cumulative_max_score_by_model.html"
+        ),
+        # survival
+        "survival_by_evaluations": _bind(
+            render_survival_by_evaluations_plotly, "survival_by_evaluations.html"
+        ),
+        "survival_by_runtime": _bind(render_survival_by_runtime_plotly, "survival_by_runtime.html"),
+        "survival_by_generation": _bind(
+            render_survival_by_generation_plotly, "survival_by_generation.html"
+        ),
+    }
 
 
 def _load_records(population_root: Path) -> tuple[list[OrganismVizRecord], int, int]:

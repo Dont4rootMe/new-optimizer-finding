@@ -367,24 +367,25 @@ class CometRunLogger:
             return False
 
     def _upload_html(self, path: Path, asset_name: str, *, step: int | None) -> bool:
+        """Upload one Plotly HTML panel as a versioned Comet asset.
+
+        We deliberately do NOT call ``experiment.log_html`` here. Comet's
+        ``log_html(clear=False)`` *appends* to a single experiment-wide HTML
+        slot, so when we ship 14 interactive panels per snapshot the slot
+        becomes a giant concatenated blob nobody can read. ``log_asset``
+        stores each panel as its own file under the Assets tab, Comet
+        renders HTML assets in-browser on click, and revisions are kept per
+        step so the operator can scrub the dashboard backwards in time.
+        """
+
         if not path.exists():
             return False
         try:
-            html = path.read_text(encoding="utf-8")
-        except Exception:  # noqa: BLE001
-            LOGGER.exception("Failed to read HTML asset %s", path)
-            return False
-        try:
-            # Comet has no first-class "log_html_versioned" so we use log_asset
-            # for the file (preserves history) and log_html for an inline
-            # rendering. log_html only keeps the latest version per experiment,
-            # which is fine for the current dashboard.
             self._experiment.log_asset(
                 str(path),
                 file_name=f"{asset_name.replace('/', '_')}.html",
                 step=step,
             )
-            self._experiment.log_html(html, clear=False)
             return True
         except Exception as exc:  # noqa: BLE001
             if not self._first_snapshot_logged:

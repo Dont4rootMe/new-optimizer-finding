@@ -53,6 +53,10 @@ def _compose_awtf_cfg(tmp_path: Path, *, max_generations: int = 1):
                 f"evolver.max_generations={max_generations}",
                 "experiments.group_commands_and_wall_planning.validation.smoke_case_ids=[0,1]",
                 "experiments.group_commands_and_wall_planning.validation.full_case_ids=[0,1,2]",
+                # Tests shouldn't hit Comet — opt out explicitly so the
+                # hard-fail policy doesn't blow up when comet_ml isn't
+                # installed in the test env.
+                "comet.enabled=false",
             ],
         )
     cfg.api_platforms = {

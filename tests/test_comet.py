@@ -117,9 +117,11 @@ def test_enabled_logger_uploads_grouped_artifacts(monkeypatch: Any, tmp_path: Pa
     for _, kwargs in image_calls:
         assert kwargs.get("step") == 3
 
-    # Plotly HTML is logged as both an asset (versioned file) and a log_html (latest only).
+    # Plotly HTML is uploaded as a versioned asset only (log_html appends
+    # into a single experiment-wide slot, which is wrong when we ship many
+    # panels — see CometRunLogger._upload_html for the rationale).
     assert mock_experiment.log_asset.called
-    assert mock_experiment.log_html.called
+    assert not mock_experiment.log_html.called
 
 
 def test_enabled_logger_raises_when_comet_module_missing(monkeypatch: Any) -> None:

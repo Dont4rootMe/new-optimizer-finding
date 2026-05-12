@@ -756,9 +756,41 @@ def test_render_evolution_snapshot_writes_grouped_artifacts(tmp_path: Path) -> N
         assert path.exists(), f"missing survival panel {name}"
         assert "/viz/survival/" in str(path).replace("\\", "/")
     # Plotly is optional; if it's available the HTML must exist under viz/interactive/.
+    # When plotly IS installed, we expect every panel category to surface
+    # at least its key interactive companion — the test environment may or
+    # may not have plotly so we only assert path correctness, not the count.
     for name, path in snapshot.interactive_html.items():
         assert path.exists(), f"missing interactive html {name}"
         assert "/viz/interactive/" in str(path).replace("\\", "/")
+    try:
+        import plotly.graph_objects as _go  # noqa: F401
+
+        plotly_available = True
+    except ImportError:
+        plotly_available = False
+    if plotly_available:
+        # When plotly is on the path every static panel should ALSO have an
+        # interactive HTML sibling (modulo a few panels that need data we
+        # don't always have — e.g. cumulative_max_score_by_model needs
+        # evaluated organisms, which the fixture provides).
+        expected_html_ids = {
+            "best_vs_evaluations",
+            "best_vs_runtime",
+            "score_by_island",
+            "score_by_model",
+            "score_by_generation",
+            "operators_total",
+            "evaluations_per_generation",
+            "cumulative_evaluations_by_island",
+            "cumulative_creations_by_operator",
+            "cumulative_creations_by_island",
+            "cumulative_max_score_by_model",
+            "survival_by_evaluations",
+            "survival_by_runtime",
+            "survival_by_generation",
+        }
+        missing = expected_html_ids - set(snapshot.interactive_html.keys())
+        assert not missing, f"plotly is available but these HTMLs are missing: {sorted(missing)}"
     # Required panels per task spec.
     assert "score_by_generation" in snapshot.overview_panels
     assert "best_vs_evaluations_with_dead" in snapshot.overview_panels
