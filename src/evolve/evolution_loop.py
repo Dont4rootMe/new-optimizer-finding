@@ -82,6 +82,57 @@ def _announce(message: str) -> None:
         pass
 
 
+def _resolve_comet_run_label(cfg: DictConfig) -> str | None:
+    """Best-effort detection of an experiment-family label for Comet naming.
+
+    Resolution order (first non-empty wins):
+
+    1. ``cfg.evolver.family_id`` — explicit override if the user wires one
+       in. Currently unused by any shipped config but cheap to honour.
+    2. ``conf/experiments/<family>/`` prefix lifted from one of the
+       configured prompt paths (mutation, seed, genome schema). The
+       canonical Hydra-composed configs always point at this layout, so the
+       family id can be recovered from the prompt path even when the user
+       hasn't set anything else.
+    3. The single key under ``cfg.experiments`` when there's exactly one
+       (e.g. ``"group_commands_and_wall_planning"``).
+
+    Returns ``None`` when nothing resolves; the caller substitutes a
+    generic fallback like ``"evolution"``.
+    """
+
+    explicit = OmegaConf.select(cfg, "evolver.family_id", default=None)
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+
+    prompt_keys = (
+        "evolver.prompts.mutation_system",
+        "evolver.prompts.seed_system",
+        "evolver.prompts.genome_schema",
+    )
+    for key in prompt_keys:
+        candidate = OmegaConf.select(cfg, key, default=None)
+        if not isinstance(candidate, str):
+            continue
+        marker = "experiments/"
+        if marker not in candidate:
+            continue
+        tail = candidate.split(marker, 1)[1]
+        family = tail.split("/", 1)[0]
+        if family:
+            return family
+
+    experiments_block = OmegaConf.select(cfg, "experiments", default=None)
+    if experiments_block is not None:
+        try:
+            keys = list(experiments_block.keys())
+        except Exception:  # noqa: BLE001
+            keys = []
+        if len(keys) == 1:
+            return str(keys[0])
+    return None
+
+
 _MISSING = object()
 _ROUTE_WITHIN_ISLAND_CROSSOVER = "within_island_crossover"
 _ROUTE_INTER_ISLAND_CROSSOVER = "inter_island_crossover"
@@ -156,9 +207,17 @@ class EvolutionLoop:
         # population_root is passed so seed and evolve processes share one
         # Comet experiment via the persisted experiment_key file in the
         # population directory.
+        #
+        # run_label is the fallback used in the auto-derived experiment name
+        # when neither `comet.run_name` nor `comet.experiment_name` is set.
+        # We use the experiment family id (e.g. "awtf2025_heuristic") rather
+        # than stringifying the whole `cfg.experiments` mapping — the latter
+        # produced names like "{group_commands_and_wall_planning: {…}}" which
+        # is what prompted the explicit run_name knob.
+        run_label = _resolve_comet_run_label(cfg) or "evolution"
         self.comet_logger = CometRunLogger.from_cfg(
             cfg,
-            run_label=str(OmegaConf.select(cfg, "experiments", default=None) or "evolution"),
+            run_label=run_label,
             population_root=self.population_root,
         )
         if self.comet_logger.enabled:

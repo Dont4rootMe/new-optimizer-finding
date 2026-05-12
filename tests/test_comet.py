@@ -49,6 +49,66 @@ def _make_snapshot(tmp_path: Path) -> RenderedSnapshot:
     )
 
 
+def test_from_cfg_prefers_run_name_over_legacy_experiment_name(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """When both `comet.run_name` and `comet.experiment_name` are set,
+    ``run_name`` wins (it is the new explicit knob)."""
+
+    mock_experiment = MagicMock()
+    mock_experiment.get_key.return_value = "exp-key-1"
+    fake_module = SimpleNamespace(
+        Experiment=lambda *args, **kwargs: mock_experiment,
+        ExistingExperiment=lambda *args, **kwargs: MagicMock(),
+    )
+    import sys
+
+    monkeypatch.setitem(sys.modules, "comet_ml", fake_module)
+    cfg = OmegaConf.create(
+        {
+            "comet": {
+                "enabled": True,
+                "api_key": "fake",
+                "project_name": "proj",
+                "workspace": None,
+                "run_name": "my-explicit-run",
+                "experiment_name": "legacy-name-should-be-ignored",
+            }
+        }
+    )
+    CometRunLogger.from_cfg(cfg, run_label="evolution", population_root=tmp_path)
+    mock_experiment.set_name.assert_called_with("my-explicit-run")
+
+
+def test_from_cfg_falls_back_to_legacy_experiment_name_when_run_name_missing(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """Old YAMLs that only set `experiment_name` keep working."""
+
+    mock_experiment = MagicMock()
+    mock_experiment.get_key.return_value = "exp-key-2"
+    fake_module = SimpleNamespace(
+        Experiment=lambda *args, **kwargs: mock_experiment,
+        ExistingExperiment=lambda *args, **kwargs: MagicMock(),
+    )
+    import sys
+
+    monkeypatch.setitem(sys.modules, "comet_ml", fake_module)
+    cfg = OmegaConf.create(
+        {
+            "comet": {
+                "enabled": True,
+                "api_key": "fake",
+                "project_name": "proj",
+                "workspace": None,
+                "experiment_name": "legacy-only-name",
+            }
+        }
+    )
+    CometRunLogger.from_cfg(cfg, run_label="evolution", population_root=tmp_path)
+    mock_experiment.set_name.assert_called_with("legacy-only-name")
+
+
 def test_from_cfg_returns_disabled_logger_when_block_missing() -> None:
     cfg = OmegaConf.create({"seed": 1})
     logger = CometRunLogger.from_cfg(cfg)

@@ -259,12 +259,20 @@ class CometRunLogger:
                 run_label=run_label,
                 population_root=population_root,
             )
+        # `run_name` is the new explicit knob — if set, it is used verbatim
+        # as the Comet experiment name. `experiment_name` is kept as a
+        # legacy alias so older YAMLs still work; `run_name` wins when both
+        # are populated. When neither is set we fall back to the
+        # auto-derived "<run_label>-<utc_timestamp>" default.
+        explicit_run_name = _optional_str(_get_attr(comet_cfg, "run_name", default=None))
+        legacy_experiment_name = _optional_str(_get_attr(comet_cfg, "experiment_name", default=None))
+        resolved_experiment_name = explicit_run_name or legacy_experiment_name
         return cls(
             enabled=bool(_get_attr(comet_cfg, "enabled", default=False)),
             api_key=_optional_str(_get_attr(comet_cfg, "api_key", default=None)),
             project_name=_optional_str(_get_attr(comet_cfg, "project_name", default=None)),
             workspace=_optional_str(_get_attr(comet_cfg, "workspace", default=None)),
-            experiment_name=_optional_str(_get_attr(comet_cfg, "experiment_name", default=None)),
+            experiment_name=resolved_experiment_name,
             log_combined_overview=bool(_get_attr(comet_cfg, "log_combined_overview", default=True)),
             log_individual_panels=bool(_get_attr(comet_cfg, "log_individual_panels", default=True)),
             log_plotly=bool(_get_attr(comet_cfg, "log_plotly", default=True)),
