@@ -11,7 +11,9 @@ Usage:
 
 from __future__ import annotations
 
+import ast
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Iterable
@@ -24,6 +26,35 @@ STAGE_LIST_KEYS = (
     "repair_attempts",
 )
 STAGE_SINGLE_KEYS = ("design", "implementation", "repair")
+
+
+_STRUCTURED_WRAPPER_RE = re.compile(
+    r"^_StructuredResponseText\(full_text=(.*?), content_text=",
+    re.DOTALL,
+)
+
+
+def _unwrap_structured_text(text: Any) -> str:
+    """Defensively unwrap ``_StructuredResponseText(full_text='...', ...)`` reprs.
+
+    Step-1 rationalization runs from before the wrapper fix persisted the
+    dataclass's default repr instead of its ``full_text`` field. This lets
+    the dump still render those traces readably without re-running them.
+    Returns the unwrapped str when the prefix matches; otherwise the input
+    coerced to str.
+    """
+
+    if not isinstance(text, str):
+        return "" if text is None else str(text)
+    if not text.startswith("_StructuredResponseText"):
+        return text
+    match = _STRUCTURED_WRAPPER_RE.match(text)
+    if not match:
+        return text
+    try:
+        return ast.literal_eval(match.group(1))
+    except (ValueError, SyntaxError):
+        return text
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -133,16 +164,43 @@ def dump_excerpt(org_dir: Path, out_dir: Path, gen_name: str) -> dict[str, Any]:
         rat_status = rationalization.get("status")
         if rat_status:
             rat_meta_parts.append(f"status={rat_status}")
+        rat_route = rationalization.get("route_id")
+        if rat_route:
+            rat_meta_parts.append(f"route={rat_route}")
+        rat_provider = rationalization.get("provider")
+        rat_model = rationalization.get("provider_model_id")
+        if rat_provider:
+            rat_meta_parts.append(f"provider={rat_provider}")
+        if rat_model:
+            rat_meta_parts.append(f"model={rat_model}")
         rat_parsed = rationalization.get("parsed") or {}
         if "has_actionable_directive" in rat_parsed:
             rat_meta_parts.append(f"actionable={rat_parsed['has_actionable_directive']}")
         if rat_parsed.get("sections_present"):
-            rat_meta_parts.append(f"sections={','.join(rat_parsed['sections_present'])}")
+            rat_meta_parts.append(
+                f"sections=[{','.join(rat_parsed['sections_present'])}]"
+            )
+        if rat_parsed.get("sections_missing"):
+            rat_meta_parts.append(
+                f"missing=[{','.join(rat_parsed['sections_missing'])}]"
+            )
+        rat_sys = rationalization.get("system_prompt") or ""
+        rat_usr = rationalization.get("user_prompt") or ""
+        if rat_sys or rat_usr:
+            rat_meta_parts.append(
+                f"prompt_chars=sys:{len(rat_sys)}+user:{len(rat_usr)}"
+            )
         if rat_meta_parts:
             lines.append(f"- **meta**: {_one_line('; '.join(rat_meta_parts), 600)}")
-        rat_text = rationalization.get("text")
+        rat_err = rationalization.get("error_msg")
+        if rat_err:
+            lines.append(f"- **stage_error**: {_one_line(rat_err, 500)}")
+        rat_text = _unwrap_structured_text(rationalization.get("text"))
         if rat_text:
-            lines.append(f"- **text**: {_one_line(rat_text, 700)}")
+            lines.append("")
+            lines.append("```")
+            lines.append(rat_text.rstrip())
+            lines.append("```")
         lines.append("")
 
     for key in (*STAGE_LIST_KEYS, *STAGE_SINGLE_KEYS):
