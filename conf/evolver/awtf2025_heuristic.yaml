@@ -178,11 +178,27 @@ llm:
   # (or remove it) and the `route_weights` / `route_sampling` path
   # above takes over.
   pipelines:
+    # Baseline: every stage on the cheap fast model.
     - id: gemma_only
       stages:
         rationalization: ollama_gemma4_31b
         design: ollama_gemma4_31b
         implementation: ollama_gemma4_31b
+        compatibility: ollama_gemma4_31b
+        novelty: ollama_gemma4_31b
+        repair: ollama_gemma4_31b
+    # Heavy-creative arm: qwen 122B for the score-bearing stages
+    # (rationalization, design, implementation) where extra reasoning
+    # capacity should buy score, gemma 31B for the cheap validators
+    # (compatibility, novelty, repair) where capacity does not. GPU
+    # layout: qwen takes two 3-GPU instances on ranks [0,1,2] + [3,4,5],
+    # gemma takes two single-GPU instances on ranks [6] + [7]. The
+    # bandit decides per organism whether to spend the heavy budget.
+    - id: qwen_creative_gemma_check
+      stages:
+        rationalization: ollama_qwen35_122b
+        design: ollama_qwen35_122b
+        implementation: ollama_qwen35_122b
         compatibility: ollama_gemma4_31b
         novelty: ollama_gemma4_31b
         repair: ollama_gemma4_31b
