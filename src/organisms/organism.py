@@ -111,6 +111,87 @@ def _format_core_gene_block(genetic_code: dict[str, Any]) -> str:
     return rendered.strip() or "(none)"
 
 
+def format_parent_fitness_signal(
+    *,
+    primary_label: str,
+    primary_score: float | None,
+    primary_lineage: list[dict[str, Any]],
+    secondary_label: str | None = None,
+    secondary_score: float | None = None,
+    secondary_lineage: list[dict[str, Any]] | None = None,
+) -> str:
+    """Render the explicit score-gap block injected at the top of Step 1.
+
+    Earlier prompt versions only carried per-ancestor scores inside the
+    free-form lineage summary; the LLM consistently produced "plausibility"
+    weakness hypotheses instead of grounding them in the actual fitness
+    signal. This helper pulls the parent score and best-ancestor score
+    forward into a labeled block so the rationalizer must reason against
+    a concrete number gap rather than infer one.
+
+    Layout:
+
+        === PARENT FITNESS SIGNAL ===
+        Higher simple_score = better. Use this gap to ground the weakness
+        hypothesis in actual evidence, not in plausibility arguments.
+
+        parent simple_score: <value>
+        best ancestor simple_score: <value>
+        gap (best_ancestor - parent): <delta>
+        best ancestor's mechanism shift: <change_description excerpt>
+
+    For crossover the primary parent is the mother and the secondary is
+    the father; both scores appear and the best ancestor is taken across
+    both lineages. When the parent already matches the best ancestor the
+    gap is 0 — the LLM should read this as "do not regress" rather than
+    "recover a lost mechanism".
+    """
+
+    def _fmt(value: float | None) -> str:
+        return f"{value:.4f}" if isinstance(value, (int, float)) else "(unknown)"
+
+    lines: list[str] = []
+    lines.append(
+        "Higher simple_score = better (less negative). Ground the weakness "
+        "hypothesis in this number gap rather than in plausibility arguments."
+    )
+    lines.append("")
+    lines.append(f"{primary_label} simple_score: {_fmt(primary_score)}")
+    if secondary_label is not None:
+        lines.append(f"{secondary_label} simple_score: {_fmt(secondary_score)}")
+
+    merged: list[dict[str, Any]] = list(primary_lineage)
+    if secondary_lineage:
+        merged.extend(secondary_lineage)
+
+    best_entry: dict[str, Any] | None = None
+    best_score: float | None = None
+    for entry in merged:
+        score = entry.get("simple_score")
+        if not isinstance(score, (int, float)):
+            continue
+        if best_score is None or score > best_score:
+            best_entry = entry
+            best_score = score
+
+    if best_entry is not None and best_score is not None:
+        lines.append(f"best ancestor simple_score: {_fmt(best_score)}")
+        if isinstance(primary_score, (int, float)):
+            gap = best_score - primary_score
+            lines.append(
+                f"gap (best_ancestor - {primary_label}): {gap:+.4f}"
+            )
+        change = str(best_entry.get("change_description", "")).strip()
+        if change:
+            if len(change) > 300:
+                change = change[:300].rstrip() + "..."
+            lines.append(f"best ancestor's mechanism shift: {change}")
+    else:
+        lines.append("best ancestor simple_score: (lineage has no scored entries yet)")
+
+    return "\n".join(lines)
+
+
 def format_lineage_summary(
     entries: list[dict[str, Any]],
     limit: int = _MAX_LINEAGE_IN_PROMPT,

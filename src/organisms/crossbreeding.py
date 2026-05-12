@@ -32,6 +32,7 @@ from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
     format_lineage_summary,
+    format_parent_fitness_signal,
     read_organism_genetic_code,
     read_organism_lineage,
 )
@@ -120,6 +121,8 @@ def build_crossover_design_bundle(
         novelty_feedback=novelty_feedback,
         compatibility_feedback=compatibility_feedback,
         family_id=family_id,
+        mother_simple_score=mother.simple_score,
+        father_simple_score=father.simple_score,
     )
 
 
@@ -133,6 +136,8 @@ def build_crossover_prompt_from_artifacts(
     novelty_feedback: list[str] | None = None,
     compatibility_feedback: list[CompatibilityJudgment] | None = None,
     family_id: str | None = None,
+    mother_simple_score: float | None = None,
+    father_simple_score: float | None = None,
     # Legacy kwarg accepted for backward compatibility with manual_pipeline.py;
     # intentionally unused since pre-LLM gene merging is disabled.
     inherited_genes: list[str] | None = None,
@@ -143,6 +148,14 @@ def build_crossover_prompt_from_artifacts(
     mother_lineage_str = format_lineage_summary(list(mother_lineage))
     father_code_str = format_genetic_code(dict(father_genetic_code))
     father_lineage_str = format_lineage_summary(list(father_lineage))
+    parent_fitness_signal = format_parent_fitness_signal(
+        primary_label="mother",
+        primary_score=mother_simple_score,
+        primary_lineage=list(mother_lineage),
+        secondary_label="father",
+        secondary_score=father_simple_score,
+        secondary_lineage=list(father_lineage),
+    )
     novelty_feedback_str = format_novelty_rejection_feedback(list(novelty_feedback or []))
     compatibility_block = ""
     if compatibility_feedback:
@@ -158,6 +171,7 @@ def build_crossover_prompt_from_artifacts(
         mother_lineage_summary=mother_lineage_str,
         father_genetic_code=father_code_str,
         father_lineage_summary=father_lineage_str,
+        parent_fitness_signal=parent_fitness_signal,
         novelty_rejection_feedback=novelty_feedback_str,
         rationalization=RATIONALIZATION_PLACEHOLDER,
         # Legacy placeholder for optimization_survey prompts that still
@@ -180,6 +194,7 @@ def build_crossover_prompt_from_artifacts(
             mother_lineage_summary=mother_lineage_str,
             father_genetic_code=father_code_str,
             father_lineage_summary=father_lineage_str,
+            parent_fitness_signal=parent_fitness_signal,
             lineage_regime_hint=lineage_regime_hint,
             novelty_rejection_feedback=novelty_feedback_str,
         )

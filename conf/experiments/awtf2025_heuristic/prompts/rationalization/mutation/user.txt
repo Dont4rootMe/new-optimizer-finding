@@ -1,5 +1,8 @@
 Produce the design rationale for the next mutation child of this awtf2025 heuristic organism.
 
+=== PARENT FITNESS SIGNAL ===
+{parent_fitness_signal}
+
 === PARENT GENETIC CODE ===
 {parent_genetic_code}
 
@@ -16,7 +19,7 @@ If a previous candidate child was rejected for lacking novelty, the critique is 
 {novelty_rejection_feedback}
 
 === TASK ===
-Diagnose what is currently NOT being solved well by the parent. Propose a direction for the next child that (a) materially changes at least one of the four axes (wall family, grouping family, routing family, repair regime), and (b) plausibly pushes the absolute contest score lower.
+Diagnose what is currently NOT being solved well by the parent. Use the `PARENT FITNESS SIGNAL` block above as the primary anchor: the `gap` between the parent and the best ancestor tells you whether this lineage is improving (gap is roughly 0, you're at the frontier — propose a forward step) or regressing (gap is positive, you lost something the best ancestor had — diagnose what was lost). Propose a direction for the next child that (a) materially changes at least one of the four axes (wall family, grouping family, routing family, repair regime), and (b) plausibly pushes the absolute contest score lower.
 
 Removing inherited machinery is a first-class move. Adding mechanisms you think of yourself, not inherited from the parent, is a first-class move. Pure coefficient retuning inside the existing regime is NOT a meaningful leap and should be avoided.
 

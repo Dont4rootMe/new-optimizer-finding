@@ -378,3 +378,71 @@ def test_canonical_organism_meta_round_trips_error_msg(tmp_path: Path) -> None:
 
     reloaded = read_organism_meta(org.organism_dir)
     assert reloaded.error_msg == "design response is missing COMPUTE_NOTES"
+
+
+def test_parent_fitness_signal_renders_gap_and_best_ancestor() -> None:
+    """Task A regression: Step 1 prompts now carry an explicit fitness gap.
+
+    The free-form lineage summary buried per-ancestor scores in a multi-line
+    block that the LLM tended to skim past. Pulling parent_score +
+    best_ancestor_score + the explicit gap into a labeled block forces the
+    rationalizer to engage with the actual fitness signal instead of doing
+    armchair plausibility reasoning.
+    """
+
+    from src.organisms.organism import format_parent_fitness_signal
+
+    rendered = format_parent_fitness_signal(
+        primary_label="parent",
+        primary_score=-50000.0,
+        primary_lineage=[
+            {"simple_score": -26000.0, "change_description": "Seed: quadrant isolation."},
+            {"simple_score": -45000.0, "change_description": "Urgency-weighted BFS routing."},
+            {"simple_score": -50000.0, "change_description": "Lane-priority vacuum mechanism."},
+        ],
+    )
+
+    assert "parent simple_score: -50000" in rendered
+    assert "best ancestor simple_score: -26000" in rendered
+    # Gap with explicit sign forces the LLM to read "+ means I regressed".
+    assert "gap (best_ancestor - parent): +24000" in rendered
+    # The best ancestor's mechanism is surfaced so the LLM can target it.
+    assert "Seed: quadrant isolation" in rendered
+
+
+def test_parent_fitness_signal_handles_crossover_two_parents() -> None:
+    from src.organisms.organism import format_parent_fitness_signal
+
+    rendered = format_parent_fitness_signal(
+        primary_label="mother",
+        primary_score=-30000.0,
+        primary_lineage=[
+            {"simple_score": -26000.0, "change_description": "Seed mother."}
+        ],
+        secondary_label="father",
+        secondary_score=-40000.0,
+        secondary_lineage=[
+            {"simple_score": -35000.0, "change_description": "Father with BFS routing."}
+        ],
+    )
+
+    assert "mother simple_score: -30000" in rendered
+    assert "father simple_score: -40000" in rendered
+    # Best ancestor is taken across both lineages.
+    assert "best ancestor simple_score: -26000" in rendered
+    assert "gap (best_ancestor - mother): +4000" in rendered
+
+
+def test_parent_fitness_signal_handles_empty_lineage_gracefully() -> None:
+    from src.organisms.organism import format_parent_fitness_signal
+
+    rendered = format_parent_fitness_signal(
+        primary_label="parent",
+        primary_score=None,
+        primary_lineage=[],
+    )
+
+    assert "parent simple_score: (unknown)" in rendered
+    assert "lineage has no scored entries" in rendered
+    # No explicit gap line — there is no anchor to compare to.
+    assert "gap (best_ancestor" not in rendered

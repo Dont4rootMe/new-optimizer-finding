@@ -31,6 +31,7 @@ from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
     format_lineage_summary,
+    format_parent_fitness_signal,
     read_organism_genetic_code,
     read_organism_lineage,
 )
@@ -199,6 +200,7 @@ def build_mutation_design_bundle(
         novelty_feedback=novelty_feedback,
         compatibility_feedback=compatibility_feedback,
         family_id=family_id,
+        parent_simple_score=parent.simple_score,
     )
 
 
@@ -210,6 +212,7 @@ def build_mutation_prompt_from_artifacts(
     novelty_feedback: list[str] | None = None,
     compatibility_feedback: list[CompatibilityJudgment] | None = None,
     family_id: str | None = None,
+    parent_simple_score: float | None = None,
     # Legacy kwargs accepted for backward compatibility with manual_pipeline.py;
     # both are intentionally unused since pre-LLM gene sampling is disabled.
     inherited_genes: list[str] | None = None,
@@ -219,6 +222,11 @@ def build_mutation_prompt_from_artifacts(
 
     parent_genetic_code_str = format_genetic_code(dict(parent_genetic_code))
     parent_lineage_str = format_lineage_summary(list(parent_lineage))
+    parent_fitness_signal = format_parent_fitness_signal(
+        primary_label="parent",
+        primary_score=parent_simple_score,
+        primary_lineage=list(parent_lineage),
+    )
     novelty_feedback_str = format_novelty_rejection_feedback(list(novelty_feedback or []))
     compatibility_block = ""
     if compatibility_feedback:
@@ -236,6 +244,7 @@ def build_mutation_prompt_from_artifacts(
         genome_schema=prompts.genome_schema,
         parent_genetic_code=parent_genetic_code_str,
         parent_lineage_summary=parent_lineage_str,
+        parent_fitness_signal=parent_fitness_signal,
         novelty_rejection_feedback=novelty_feedback_str,
         rationalization=RATIONALIZATION_PLACEHOLDER,
         # Legacy placeholders kept for backward compat with optimization_survey
@@ -258,6 +267,7 @@ def build_mutation_prompt_from_artifacts(
         rationalization_user = prompts.mutation_rationalization_user.format(
             parent_genetic_code=parent_genetic_code_str,
             parent_lineage_summary=parent_lineage_str,
+            parent_fitness_signal=parent_fitness_signal,
             lineage_regime_hint=lineage_regime_hint,
             novelty_rejection_feedback=novelty_feedback_str,
         )

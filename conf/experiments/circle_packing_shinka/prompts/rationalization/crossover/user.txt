@@ -1,5 +1,8 @@
 Produce the design rationale for the next crossover child of these two circle-packing parents.
 
+=== PARENT FITNESS SIGNAL ===
+{parent_fitness_signal}
+
 === PRIMARY PARENT GENETIC CODE ===
 This parent's core paradigm dominates the recombination.
 {mother_genetic_code}
@@ -25,7 +28,7 @@ If a previous candidate child was rejected for lacking novelty, the critique is 
 {novelty_rejection_feedback}
 
 === TASK ===
-Diagnose what the primary parent is currently failing at and how the secondary parent (or a new mechanism you invent) could address it. Propose a direction that materially changes at least one of the four axes (packing / radius / symmetry / repair) for the child relative to the primary parent.
+Use the `PARENT FITNESS SIGNAL` block above as the primary anchor: compare the two parents' scores and look at the gap to the best ancestor across both lineages. If the mother is the best ancestor itself, propose a forward step from her position; if the best ancestor is upstream of either parent and the gap is positive, the import (or invention) should target what that best ancestor had which the current parents lack. Diagnose what the primary parent is currently failing at and how the secondary parent (or a new mechanism you invent) could address it. Propose a direction that materially changes at least one of the four axes (packing / radius / symmetry / repair) for the child relative to the primary parent.
 
 Stitching half of each parent together is not enough. Importing a module unchanged is allowed when it cleanly addresses a primary-parent weakness; inventing a third-option mechanism is also a first-class move. Removing primary-parent material that duplicates the import is a first-class move.
 
