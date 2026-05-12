@@ -83,11 +83,7 @@ comet:
   api_key: RrClhd4FveFQKO4qLo4jBjrKu
   project_name: ${oc.env:COMET_PROJECT,new-optimizer-search}
   workspace: ${oc.env:COMET_WORKSPACE,dont4rootme}
-  # `run_name`: the explicit Comet experiment name. Wins over the legacy
-  # `experiment_name` field below when both are set. When null, the run is
-  # named `<family>-<utc_timestamp>` (e.g. `circle_packing_shinka-20260512T093015Z`).
-  # Override via CLI for a tagged run: `comet.run_name=circle-baseline-1`.
-  run_name: ${oc.env:COMET_RUN_NAME,null}
+  run_name: ${oc.env:COMET_RUN_NAME,circle-packing-shinka}
   experiment_name: null
   log_combined_overview: true
   log_individual_panels: true
