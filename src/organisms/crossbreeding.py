@@ -338,6 +338,11 @@ class CrossbreedingOperator:
             llm_route_id=creation.llm_route_id,
             llm_provider=creation.llm_provider,
             provider_model_id=creation.provider_model_id,
+            llm_pipeline_id=(
+                generator.pipeline_id_for_organism(organism_id) or ""
+                if hasattr(generator, "pipeline_id_for_organism")
+                else ""
+            ),
             prompt_hash=creation.prompt_hash,
             seed=generator.seed,
             timestamp=utc_now_iso(),

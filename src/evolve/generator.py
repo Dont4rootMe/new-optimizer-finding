@@ -840,7 +840,12 @@ class CandidateGenerator(BaseLlmGenerator):
     ) -> CreationStageResult:
         """Run the canonical two-stage design -> implementation exchange."""
 
-        route_id = self.sample_route_id(organism_id=organism_id)
+        # In pipeline mode different stages of the same organism may route
+        # to different models. The "design" route plays the role of the
+        # legacy single-route id (logged at the top of the organism JSON
+        # and on ``OrganismMeta.llm_route_id``); the implementation route
+        # is sampled separately and the per-stage JSON records it.
+        route_id = self.sample_route_id(organism_id=organism_id, stage="design")
         _announce(
             f"organism {organism_id} -> route {route_id}: calling design stage (generation={generation})"
         )
@@ -965,7 +970,9 @@ class CandidateGenerator(BaseLlmGenerator):
         implementation_system_prompt = prepared_implementation.system_prompt
         implementation_user_prompt = prepared_implementation.user_prompt
         implementation_code = self._run_implementation_stage_with_retries(
-            route_id=route_id,
+            route_id=self.sample_route_id(
+                organism_id=organism_id, stage="implementation"
+            ),
             prepared=prepared_implementation,
             llm_request_path=llm_request_path,
             llm_response_path=llm_response_path,
@@ -1008,7 +1015,11 @@ class CandidateGenerator(BaseLlmGenerator):
     ) -> CreationStageResult:
         """Run design -> novelty-check loop -> implementation for non-seed operators."""
 
-        route_id = self.sample_route_id(organism_id=organism_id)
+        # ``route_id`` plays the legacy single-route role (organism-level
+        # log entry, ``OrganismMeta.llm_route_id``). In pipeline mode the
+        # novelty + implementation stages route independently — see the
+        # per-stage ``sample_route_id`` calls below.
+        route_id = self.sample_route_id(organism_id=organism_id, stage="design")
         llm_request_path = org_dir / "llm_request.json"
         llm_response_path = org_dir / "llm_response.json"
         llm_request_payload: dict[str, object] = {
@@ -1226,10 +1237,17 @@ class CandidateGenerator(BaseLlmGenerator):
             novelty_system_prompt, novelty_user_prompt = novelty_context.build_novelty_prompts(parsed_design)
             prompt_hash_parts.extend((novelty_system_prompt, novelty_user_prompt))
 
+            # In pipeline mode the novelty stage may route to a different
+            # model than design; resolve once here and use the same route
+            # for both the JSON record and the LLM call so the persisted
+            # trace matches what actually executed.
+            novelty_route_id = self.sample_route_id(
+                organism_id=organism_id, stage="novelty_check"
+            )
             novelty_request_entry = {
                 "attempt": attempt,
                 "design_attempt": attempt,
-                "route_id": route_id,
+                "route_id": novelty_route_id,
                 "operator": novelty_context.operator,
                 "system_prompt": novelty_system_prompt,
                 "user_prompt": novelty_user_prompt,
@@ -1240,7 +1258,7 @@ class CandidateGenerator(BaseLlmGenerator):
             novelty_response_entry = {
                 "attempt": attempt,
                 "design_attempt": attempt,
-                "route_id": route_id,
+                "route_id": novelty_route_id,
                 "operator": novelty_context.operator,
                 "text": None,
                 "response": None,
@@ -1258,12 +1276,12 @@ class CandidateGenerator(BaseLlmGenerator):
             write_json(llm_response_path, llm_response_payload)
 
             _announce(
-                f"organism {organism_id} -> route {route_id}: calling novelty_check stage "
+                f"organism {organism_id} -> route {novelty_route_id}: calling novelty_check stage "
                 f"(design_attempt={attempt}, operator={novelty_context.operator})"
             )
             try:
                 novelty_response = self._call_llm_stage(
-                    route_id,
+                    novelty_route_id,
                     "novelty_check",
                     novelty_system_prompt,
                     novelty_user_prompt,
@@ -1283,7 +1301,7 @@ class CandidateGenerator(BaseLlmGenerator):
                 novelty_response_entry["error_kind"] = "provider_failure"
                 write_json(llm_request_path, llm_request_payload)
                 write_json(llm_response_path, llm_response_payload)
-                _announce(f"organism {organism_id} novelty_check stage failed (route={route_id}): {error_msg}")
+                _announce(f"organism {organism_id} novelty_check stage failed (route={novelty_route_id}): {error_msg}")
                 raise
 
             novelty_text = _structured_response_text(novelty_response)
@@ -1391,7 +1409,9 @@ class CandidateGenerator(BaseLlmGenerator):
         implementation_user_prompt = prepared_implementation.user_prompt
         prompt_hash_parts.extend((implementation_system_prompt, implementation_user_prompt))
         implementation_code = self._run_implementation_stage_with_retries(
-            route_id=route_id,
+            route_id=self.sample_route_id(
+                organism_id=organism_id, stage="implementation"
+            ),
             prepared=prepared_implementation,
             llm_request_path=llm_request_path,
             llm_response_path=llm_response_path,
@@ -1426,7 +1446,12 @@ class CandidateGenerator(BaseLlmGenerator):
     ) -> CreationStageResult:
         """Run design -> optional novelty -> compatibility -> implementation."""
 
-        route_id = self.sample_route_id(organism_id=organism_id)
+        # See _run_standard_creation_stages: ``route_id`` is the design
+        # route and plays the legacy single-route role at the organism
+        # level. Novelty / compatibility / implementation sample their own
+        # routes below; in pipeline mode they may resolve to different
+        # models depending on the active pipeline.
+        route_id = self.sample_route_id(organism_id=organism_id, stage="design")
         llm_request_path = org_dir / "llm_request.json"
         llm_response_path = org_dir / "llm_response.json"
         operator_kind = compatibility_context.check.operator_kind
@@ -1661,10 +1686,15 @@ class CandidateGenerator(BaseLlmGenerator):
             if novelty_context is not None:
                 novelty_system_prompt, novelty_user_prompt = novelty_context.build_novelty_prompts(parsed_design)
                 prompt_hash_parts.extend((novelty_system_prompt, novelty_user_prompt))
+                # Resolve the novelty route once so the JSON record matches
+                # the route actually used by ``_call_llm_stage`` below.
+                novelty_route_id = self.sample_route_id(
+                    organism_id=organism_id, stage="novelty_check"
+                )
                 novelty_request_entry = {
                     "attempt": len(novelty_requests) + 1,
                     "design_attempt": attempt,
-                    "route_id": route_id,
+                    "route_id": novelty_route_id,
                     "operator": novelty_context.operator,
                     "system_prompt": novelty_system_prompt,
                     "user_prompt": novelty_user_prompt,
@@ -1675,7 +1705,7 @@ class CandidateGenerator(BaseLlmGenerator):
                 novelty_response_entry = {
                     "attempt": len(novelty_responses) + 1,
                     "design_attempt": attempt,
-                    "route_id": route_id,
+                    "route_id": novelty_route_id,
                     "operator": novelty_context.operator,
                     "text": None,
                     "response": None,
@@ -1694,12 +1724,12 @@ class CandidateGenerator(BaseLlmGenerator):
                 write_json(llm_response_path, llm_response_payload)
 
                 _announce(
-                    f"organism {organism_id} -> route {route_id}: calling novelty_check stage "
+                    f"organism {organism_id} -> route {novelty_route_id}: calling novelty_check stage "
                     f"(design_attempt={attempt}, operator={novelty_context.operator})"
                 )
                 try:
                     novelty_response = self._call_llm_stage(
-                        route_id,
+                        novelty_route_id,
                         "novelty_check",
                         novelty_system_prompt,
                         novelty_user_prompt,
@@ -1719,7 +1749,7 @@ class CandidateGenerator(BaseLlmGenerator):
                     novelty_response_entry["error_kind"] = "provider_failure"
                     write_json(llm_request_path, llm_request_payload)
                     write_json(llm_response_path, llm_response_payload)
-                    _announce(f"organism {organism_id} novelty_check stage failed (route={route_id}): {error_msg}")
+                    _announce(f"organism {organism_id} novelty_check stage failed (route={novelty_route_id}): {error_msg}")
                     raise
 
                 novelty_text = _structured_response_text(novelty_response)
@@ -1814,10 +1844,14 @@ class CandidateGenerator(BaseLlmGenerator):
                 compatibility_context.build_compatibility_prompts(parsed_design)
             )
             prompt_hash_parts.extend((compatibility_system_prompt, compatibility_user_prompt))
+            # Resolve compatibility route once for consistent JSON record.
+            compatibility_route_id = self.sample_route_id(
+                organism_id=organism_id, stage="compatibility_check"
+            )
             compatibility_request_entry = {
                 "attempt": len(compatibility_requests) + 1,
                 "design_attempt": attempt,
-                "route_id": route_id,
+                "route_id": compatibility_route_id,
                 "operator": operator_kind,
                 "system_prompt": compatibility_system_prompt,
                 "user_prompt": compatibility_user_prompt,
@@ -1828,7 +1862,7 @@ class CandidateGenerator(BaseLlmGenerator):
             compatibility_response_entry = {
                 "attempt": len(compatibility_responses) + 1,
                 "design_attempt": attempt,
-                "route_id": route_id,
+                "route_id": compatibility_route_id,
                 "operator": operator_kind,
                 "text": None,
                 "response": None,
@@ -1849,12 +1883,12 @@ class CandidateGenerator(BaseLlmGenerator):
             if pipeline_state_callback is not None:
                 pipeline_state_callback("compatibility_check")
             _announce(
-                f"organism {organism_id} -> route {route_id}: calling compatibility_check stage "
+                f"organism {organism_id} -> route {compatibility_route_id}: calling compatibility_check stage "
                 f"(design_attempt={attempt}, operator={operator_kind})"
             )
             try:
                 compatibility_response = self._call_llm_stage(
-                    route_id,
+                    compatibility_route_id,
                     "compatibility_check",
                     compatibility_system_prompt,
                     compatibility_user_prompt,
@@ -1874,7 +1908,7 @@ class CandidateGenerator(BaseLlmGenerator):
                 compatibility_response_entry["error_kind"] = "provider_failure"
                 write_json(llm_request_path, llm_request_payload)
                 write_json(llm_response_path, llm_response_payload)
-                _announce(f"organism {organism_id} compatibility_check stage failed (route={route_id}): {error_msg}")
+                _announce(f"organism {organism_id} compatibility_check stage failed (route={compatibility_route_id}): {error_msg}")
                 raise
 
             compatibility_text = _structured_response_text(compatibility_response)
@@ -2007,7 +2041,9 @@ class CandidateGenerator(BaseLlmGenerator):
         implementation_user_prompt = prepared_implementation.user_prompt
         prompt_hash_parts.extend((implementation_system_prompt, implementation_user_prompt))
         implementation_code = self._run_implementation_stage_with_retries(
-            route_id=route_id,
+            route_id=self.sample_route_id(
+                organism_id=organism_id, stage="implementation"
+            ),
             prepared=prepared_implementation,
             llm_request_path=llm_request_path,
             llm_response_path=llm_response_path,
@@ -2057,7 +2093,9 @@ class CandidateGenerator(BaseLlmGenerator):
             rationalization_summary,
         )
 
-        route_id = self.sample_route_id(organism_id=organism_id)
+        route_id = self.sample_route_id(
+            organism_id=organism_id, stage="design_rationalization"
+        )
         _announce(
             f"organism {organism_id} -> route {route_id}: calling rationalization stage "
             f"(generation={generation}, operator={operator})"
@@ -2259,7 +2297,28 @@ class CandidateGenerator(BaseLlmGenerator):
     ) -> None:
         """Use the assigned route to repair implementation.py after evaluator failure."""
 
-        route_id = organism.llm_route_id or self.sample_route_id(organism_id=organism.organism_id)
+        # In pipeline mode the repair stage may use a different route than
+        # the organism's primary llm_route_id (e.g. a cheap fast model for
+        # checks/repairs and the heavy model only for creative stages).
+        # When the organism's pipeline assignment is already known
+        # (``organism.llm_pipeline_id`` is set at creation time) we resolve
+        # the repair route through that specific pipeline so a long-lived
+        # process whose bandit state drifted between creation and repair
+        # still uses the original pipeline. Fresh sampling is the fallback
+        # for organisms created before this feature shipped.
+        if self.pipelines:
+            stored_pipeline_id = getattr(organism, "llm_pipeline_id", "") or ""
+            pipeline = self._pipelines_by_id.get(stored_pipeline_id)
+            if pipeline is not None:
+                route_id = pipeline.route_for("repair")
+            else:
+                route_id = self.sample_route_id(
+                    organism_id=organism.organism_id, stage="repair"
+                )
+        else:
+            route_id = organism.llm_route_id or self.sample_route_id(
+                organism_id=organism.organism_id, stage="repair"
+            )
         org_dir = Path(organism.organism_dir)
         system_prompt, user_prompt = build_repair_prompt(
             organism,
@@ -2461,6 +2520,7 @@ class CandidateGenerator(BaseLlmGenerator):
             llm_route_id=creation.llm_route_id,
             llm_provider=creation.llm_provider,
             provider_model_id=creation.provider_model_id,
+            llm_pipeline_id=self.pipeline_id_for_organism(organism_id) or "",
             prompt_hash=creation.prompt_hash,
             seed=self.seed,
             timestamp=utc_now_iso(),

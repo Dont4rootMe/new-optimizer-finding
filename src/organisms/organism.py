@@ -498,6 +498,7 @@ def build_organism_from_response(
     cross_island: bool = False,
     father_island_id: str | None = None,
     expected_core_gene_sections: tuple[str, ...] | None = None,
+    llm_pipeline_id: str = "",
 ) -> OrganismMeta:
     """Build `OrganismMeta` from a canonical design response and raw implementation text."""
 
@@ -550,6 +551,7 @@ def build_organism_from_response(
         llm_route_id=llm_route_id,
         llm_provider=llm_provider,
         provider_model_id=provider_model_id,
+        llm_pipeline_id=llm_pipeline_id,
         prompt_hash=prompt_hash,
         seed=seed,
     )

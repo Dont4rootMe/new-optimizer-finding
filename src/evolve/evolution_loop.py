@@ -499,11 +499,15 @@ class EvolutionLoop:
     def _bandit_state_dict(self) -> dict[str, Any]:
         """Snapshot every adaptive sampler so resume can restore them."""
 
+        pipeline_sampler = getattr(self.generator, "pipeline_sampler", None)
         return {
             "parent_island": self.parent_island_sampler.state_dict(),
             "cross_island_partner": self.cross_island_partner_sampler.state_dict(),
             "route": getattr(self.generator, "route_sampler", None).state_dict()
             if getattr(self.generator, "route_sampler", None) is not None
+            else None,
+            "pipeline": pipeline_sampler.state_dict()
+            if pipeline_sampler is not None
             else None,
             "observed": dict(self._bandit_arm_attribution),
         }
@@ -561,6 +565,28 @@ class EvolutionLoop:
                     route_id,
                 )
 
+        # Pipeline bandit feedback is parallel to the route bandit: when
+        # ``evolver.llm.pipelines`` is configured the organism carries the
+        # pipeline id that produced it, and reward flows to that arm here.
+        # When pipelines are disabled the generator's pipeline_sampler is
+        # None and ``observe_pipeline_reward`` short-circuits, so this call
+        # is safe to make unconditionally.
+        pipeline_id = (
+            getattr(organism, "llm_pipeline_id", None) if organism is not None else None
+        )
+        if pipeline_id and hasattr(self.generator, "observe_pipeline_reward"):
+            try:
+                self.generator.observe_pipeline_reward(
+                    str(pipeline_id), simple_score=simple_score
+                )
+                observed["pipeline"] = str(pipeline_id)
+            except Exception:  # noqa: BLE001
+                LOGGER.exception(
+                    "Failed to update pipeline bandit for plan %s (pipeline=%s)",
+                    plan.organism_id,
+                    pipeline_id,
+                )
+
         self._bandit_arm_attribution[plan.organism_id] = observed
 
     def _restore_bandit_state(self, payload: dict[str, Any] | None) -> None:
@@ -574,6 +600,10 @@ class EvolutionLoop:
             route_sampler = getattr(self.generator, "route_sampler", None)
             if route_sampler is not None:
                 route_sampler.load_state(payload["route"])
+        if isinstance(payload.get("pipeline"), dict):
+            pipeline_sampler = getattr(self.generator, "pipeline_sampler", None)
+            if pipeline_sampler is not None:
+                pipeline_sampler.load_state(payload["pipeline"])
         observed = payload.get("observed")
         if isinstance(observed, dict):
             self._bandit_arm_attribution = {str(key): dict(value) for key, value in observed.items() if isinstance(value, dict)}

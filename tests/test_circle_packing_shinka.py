@@ -59,6 +59,10 @@ def _compose_circle_cfg(tmp_path: Path, *, max_generations: int = 1):
         }
     }
     cfg.evolver.llm.route_weights = {"mock": 1.0}
+    # Disable pipelines for tests that override routes to the mock
+    # platform; otherwise pipeline validation rejects ``ollama_*``
+    # routes that the shipped config references.
+    cfg.evolver.llm.pipelines = []
     return cfg
 
 

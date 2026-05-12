@@ -144,6 +144,10 @@ llm:
   # discounted Thompson sampler keyed on the same routes; the existing
   # `route_weights` are folded in as a Beta-prior bias so users keep
   # their per-model tuning when switching modes.
+  #
+  # NOTE: when `pipelines` (below) is defined and non-empty, route
+  # selection happens through the pipeline mapping and this `route_*`
+  # path is bypassed for organism stages — see comments on `pipelines`.
   route_sampling:
     strategy: bandit                   # uniform | weighted_static | bandit
     bandit:
@@ -152,5 +156,44 @@ llm:
       prior_alpha: 1.0
       prior_beta: 1.0
       reward_mode: score_quantile      # survival | score_quantile | hybrid
+      reward_window: 50
+      survival_weight: 0.3
+
+  # Pipeline configurations. Each entry is a named bundle of
+  # `canonical_stage -> route_id` assignments. When this block is
+  # non-empty the bandit sampler switches granularity from individual
+  # routes to whole pipelines: one pipeline is sampled per organism and
+  # *every stage of that organism* uses the pipeline's stage mapping.
+  # Reward (organism simple_score) is fed back to the pipeline arm.
+  #
+  # Canonical stages must each be present (no defaults):
+  #   - rationalization        (Step 1 of two-step design)
+  #   - design                 (Step 2 of two-step design, also retries)
+  #   - implementation         (also implementation_attempt / template)
+  #   - compatibility          (compatibility_check)
+  #   - novelty                (novelty_check)
+  #   - repair                 (post-eval repair after evaluator failure)
+  #
+  # To get back to legacy per-stage independent routing, set this to []
+  # (or remove it) and the `route_weights` / `route_sampling` path
+  # above takes over.
+  pipelines:
+    - id: gemma_only
+      stages:
+        rationalization: ollama_gemma4_31b
+        design: ollama_gemma4_31b
+        implementation: ollama_gemma4_31b
+        compatibility: ollama_gemma4_31b
+        novelty: ollama_gemma4_31b
+        repair: ollama_gemma4_31b
+
+  pipeline_sampling:
+    strategy: bandit                   # uniform | weighted_static | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile
       reward_window: 50
       survival_weight: 0.3

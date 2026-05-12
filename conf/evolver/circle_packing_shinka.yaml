@@ -125,8 +125,45 @@ llm:
     ollama_gemma4_31b: 1.0
     ollama_qwen35_35b: 1.0
 
+  # When `pipelines` (below) is defined the route-bandit path here is
+  # bypassed in favour of pipeline-bandit sampling.
   route_sampling:
     strategy: weighted_static          # uniform | weighted_static | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile
+      reward_window: 50
+      survival_weight: 0.3
+
+  # Pipeline configurations. See conf/evolver/awtf2025_heuristic.yaml for
+  # the full description of the canonical-stage taxonomy. Two pipelines
+  # are defined here as a starting point: one all-gemma, one all-qwen.
+  # Adding a "creative_qwen / validator_gemma" pipeline once a heavier
+  # qwen model is brought up is straightforward — just append a new
+  # entry below.
+  pipelines:
+    - id: gemma_only
+      stages:
+        rationalization: ollama_gemma4_31b
+        design: ollama_gemma4_31b
+        implementation: ollama_gemma4_31b
+        compatibility: ollama_gemma4_31b
+        novelty: ollama_gemma4_31b
+        repair: ollama_gemma4_31b
+    - id: qwen_only
+      stages:
+        rationalization: ollama_qwen35_35b
+        design: ollama_qwen35_35b
+        implementation: ollama_qwen35_35b
+        compatibility: ollama_qwen35_35b
+        novelty: ollama_qwen35_35b
+        repair: ollama_qwen35_35b
+
+  pipeline_sampling:
+    strategy: bandit                   # uniform | weighted_static | bandit
     bandit:
       algorithm: discounted_thompson
       discount: 0.97

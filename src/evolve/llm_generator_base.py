@@ -13,6 +13,11 @@ from omegaconf import DictConfig, OmegaConf
 
 from api_platforms import ApiPlatformRegistry
 from src.evolve.bandit import AdaptiveSampler, cfg_from_omega
+from src.evolve.pipeline import (
+    PipelineConfig,
+    parse_pipelines,
+    validate_pipeline_routes,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -69,6 +74,38 @@ class BaseLlmGenerator:
         # a balanced mapping here so sample_route_id can honour it. Protected
         # by `_rng_lock` because multiple creation threads read it in parallel.
         self._batch_route_assignments: dict[str, str] = {}
+
+        # ---- Pipeline mode -------------------------------------------------
+        # When `evolver.llm.pipelines` is defined, route selection moves up
+        # one level of abstraction: the bandit picks a *pipeline* (a named
+        # bundle of canonical stage -> route_id assignments) per organism,
+        # and every stage of that organism uses the pipeline's mapping. This
+        # is opt-in. When the block is absent the legacy per-stage route
+        # sampling above stays in effect.
+        pipelines_cfg = OmegaConf.select(self.cfg, "evolver.llm.pipelines", default=None)
+        self.pipelines: list[PipelineConfig] = parse_pipelines(pipelines_cfg)
+        if self.pipelines:
+            validate_pipeline_routes(self.pipelines, self.registry.available_route_ids)
+            pipeline_sampling_cfg = OmegaConf.select(
+                self.cfg, "evolver.llm.pipeline_sampling", default=None
+            )
+            pipeline_fallback = {p.id: 1.0 for p in self.pipelines}
+            pipeline_bandit_cfg = cfg_from_omega(
+                pipeline_sampling_cfg, fallback_weights=pipeline_fallback
+            )
+            self.pipeline_sampler: AdaptiveSampler | None = AdaptiveSampler(
+                pipeline_bandit_cfg
+            )
+            self._pipelines_by_id: dict[str, PipelineConfig] = {
+                p.id: p for p in self.pipelines
+            }
+        else:
+            self.pipeline_sampler = None
+            self._pipelines_by_id = {}
+        # Per-organism pipeline assignment cache: an organism's pipeline is
+        # sampled the first time *any* stage asks for its route, and held
+        # for the rest of the organism's stages. Protected by `_rng_lock`.
+        self._organism_pipeline_ids: dict[str, str] = {}
 
     def _extract_python(self, text: str, *, preserve_trailing_newline: bool = True) -> str:
         """Extract Python code from LLM response, stripping markdown fences.
@@ -128,26 +165,41 @@ class BaseLlmGenerator:
         with self._rng_lock:
             self._batch_route_assignments = {}
 
-    def sample_route_id(self, *, organism_id: str | None = None) -> str:
-        """Sample a route id by `route_weights`, optionally per-organism-deterministic.
+    def sample_route_id(
+        self,
+        *,
+        organism_id: str | None = None,
+        stage: str | None = None,
+    ) -> str:
+        """Sample a route id, honouring pipeline mode when configured.
 
-        Precedence, when `organism_id` is provided:
-          1. `self._batch_route_assignments[organism_id]` — the evolution loop's
-             pre-computed balanced assignment for the current batch.
-          2. A fresh per-call RNG seeded from `(self.seed, organism_id)`.
+        Resolution order:
+          1. **Pipeline mode** (``evolver.llm.pipelines`` non-empty): the
+             pipeline assigned to ``organism_id`` resolves ``stage`` to its
+             configured route. The assignment is made on first lookup and
+             cached for the rest of the organism's stages so every stage
+             of one organism uses the same pipeline.
+          2. **Batch-scoped legacy assignment**: ``set_batch_route_assignments``
+             may have pinned a route for this organism for load-balancing
+             across providers.
+          3. **Per-organism deterministic sampling**: a fresh RNG seeded
+             from ``(self.seed, organism_id)`` asks ``route_sampler`` for
+             a route weighted by ``route_weights``.
+          4. **Generator-level RNG fallback** when ``organism_id`` is None
+             (manual pipeline / one-off callers).
 
-        The deterministic fallback makes route selection reproducible per
-        organism AND removes the coupling between the order in which
-        concurrent creation threads grab `_rng_lock` and the route
-        distribution. Without the batch mapping, two near-simultaneous seed
-        creations routinely land on the same route, defeating the purpose of
-        having multiple `route_weights` entries and saturating one provider
-        while the others idle. The batch mapping fixes the remaining
-        statistical variance for small batches.
-
-        When no `organism_id` is provided (legacy callers) we fall back to
-        the shared generator-level RNG.
+        ``stage`` is required in pipeline mode (the pipeline only resolves
+        when it knows which canonical stage to look up). Legacy callers
+        that pass only ``organism_id`` continue to work when pipelines are
+        empty.
         """
+
+        # Pipeline mode short-circuit. When pipelines are configured, the
+        # legacy `route_weights` path is not consulted — pipelines own
+        # routing for the whole organism.
+        if self.pipelines and organism_id is not None and stage is not None:
+            pipeline = self.pipeline_for_organism(organism_id)
+            return pipeline.route_for(stage)
 
         available = [route_id for route_id, weight in self.route_weights.items() if weight > 0]
         if not available:
@@ -173,6 +225,53 @@ class BaseLlmGenerator:
         with self._rng_lock:
             return self.route_sampler.select(available, rng=self._rng)
 
+    def pipeline_for_organism(self, organism_id: str) -> PipelineConfig:
+        """Return the pipeline assigned to ``organism_id``, sampling lazily.
+
+        Caller must have verified ``self.pipelines`` is non-empty. The
+        pipeline_id is cached so subsequent stages of the same organism
+        see the same pipeline.
+        """
+
+        if not self.pipelines or self.pipeline_sampler is None:
+            raise RuntimeError(
+                "pipeline_for_organism called but evolver.llm.pipelines is empty"
+            )
+
+        with self._rng_lock:
+            cached = self._organism_pipeline_ids.get(organism_id)
+        if cached is not None:
+            return self._pipelines_by_id[cached]
+
+        # Deterministic per-organism RNG mirrors the route-sampling path:
+        # two near-simultaneous creations on the same organism_id must land
+        # on the same pipeline regardless of thread interleaving.
+        digest = hashlib.sha1(
+            f"{self.seed}:pipeline:{organism_id}".encode("utf-8"),
+            usedforsecurity=False,
+        ).digest()
+        call_seed = int.from_bytes(digest[:8], "big", signed=False)
+        call_rng = random.Random(call_seed)
+        available_ids = [p.id for p in self.pipelines]
+        pipeline_id = self.pipeline_sampler.select(available_ids, rng=call_rng)
+
+        with self._rng_lock:
+            self._organism_pipeline_ids[organism_id] = pipeline_id
+        return self._pipelines_by_id[pipeline_id]
+
+    def pipeline_id_for_organism(self, organism_id: str) -> str | None:
+        """Return the cached pipeline_id for an organism, or None when no
+        pipeline has been sampled for it yet (or when pipelines are disabled).
+
+        Used by the evolution loop to persist ``llm_pipeline_id`` on the
+        organism and to feed reward back to the right pipeline bandit arm.
+        """
+
+        if not self.pipelines:
+            return None
+        with self._rng_lock:
+            return self._organism_pipeline_ids.get(organism_id)
+
     def observe_route_reward(self, route_id: str, *, simple_score: float | None) -> float:
         """Feed a route's outcome back into the adaptive sampler.
 
@@ -183,3 +282,17 @@ class BaseLlmGenerator:
         """
 
         return self.route_sampler.observe(route_id, simple_score=simple_score)
+
+    def observe_pipeline_reward(
+        self, pipeline_id: str, *, simple_score: float | None
+    ) -> float:
+        """Feed a pipeline's outcome back into the pipeline-level sampler.
+
+        No-op when pipelines are disabled. Mirrors ``observe_route_reward``
+        so the evolution loop can call both unconditionally and let the
+        unused one short-circuit.
+        """
+
+        if self.pipeline_sampler is None:
+            return 0.0
+        return self.pipeline_sampler.observe(pipeline_id, simple_score=simple_score)

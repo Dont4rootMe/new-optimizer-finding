@@ -65,6 +65,12 @@ def _compose_awtf_cfg(tmp_path: Path, *, max_generations: int = 1):
         }
     }
     cfg.evolver.llm.route_weights = {"mock": 1.0}
+    # The shipped config now defines pipelines that reference real
+    # ollama routes; collapse them to a single mock-route pipeline so
+    # pipeline validation passes. Tests that exercise the legacy
+    # route-weights path still go through the route bandit because
+    # they never hit ``self.pipelines`` (now empty after this override).
+    cfg.evolver.llm.pipelines = []
     return cfg
 
 
