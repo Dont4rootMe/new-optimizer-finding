@@ -120,7 +120,13 @@ def dump_excerpt(org_dir: Path, out_dir: Path, gen_name: str) -> dict[str, Any]:
     pipeline_state = organism.get("pipeline_state")
     operator = organism.get("operator")
     organism_id = organism.get("organism_id")
-    score = summary.get("score")
+    # ``simple_score`` / ``hard_score`` live on ``organism.json`` (the
+    # canonical fitness record). ``summary.json`` is a hand-written sidecar
+    # that may or may not exist and stores a generic ``score`` field; fall
+    # back to it for legacy dumps so existing populations still render.
+    simple_score = organism.get("simple_score")
+    hard_score = organism.get("hard_score")
+    legacy_score = summary.get("score") if simple_score is None else None
 
     route_id = req.get("route_id")
     provider = req.get("provider")
@@ -137,8 +143,15 @@ def dump_excerpt(org_dir: Path, out_dir: Path, gen_name: str) -> dict[str, Any]:
         lines.append(f"- **pipeline_state**: `{pipeline_state}`")
     if operator:
         lines.append(f"- **operator**: `{operator}`")
-    if score is not None:
-        lines.append(f"- **score**: `{score}`")
+    if simple_score is not None:
+        score_line = f"- **simple_score**: `{simple_score}`"
+        if hard_score is not None:
+            score_line += f"  **hard_score**: `{hard_score}`"
+        lines.append(score_line)
+    elif hard_score is not None:
+        lines.append(f"- **hard_score**: `{hard_score}`")
+    elif legacy_score is not None:
+        lines.append(f"- **score**: `{legacy_score}`")
     if provider or model or route_id:
         lines.append(
             "- **llm**: "
@@ -248,7 +261,9 @@ def dump_excerpt(org_dir: Path, out_dir: Path, gen_name: str) -> dict[str, Any]:
         "rel": rel,
         "out": str(out_file),
         "pipeline_state": pipeline_state,
-        "score": score,
+        "simple_score": simple_score,
+        "hard_score": hard_score,
+        "score": legacy_score,
         "route_id": route_id,
         "provider_model_id": model,
         "error_msg": error_msg,
@@ -278,8 +293,19 @@ def main() -> None:
         if gen != cur_gen:
             cur_gen = gen
             lines.append(f"\n## {gen}\n")
-        score = s.get("score")
-        score_str = f" score=`{score}`" if score is not None else ""
+        simple_score = s.get("simple_score")
+        hard_score = s.get("hard_score")
+        legacy_score = s.get("score")
+        if simple_score is not None:
+            score_str = f" simple=`{simple_score}`"
+            if hard_score is not None:
+                score_str += f" hard=`{hard_score}`"
+        elif hard_score is not None:
+            score_str = f" hard=`{hard_score}`"
+        elif legacy_score is not None:
+            score_str = f" score=`{legacy_score}`"
+        else:
+            score_str = ""
         err = s.get("error_msg")
         lines.append(
             f"- [{s['rel']}]({Path(s['out']).name}) — state=`{s.get('pipeline_state')}`"
