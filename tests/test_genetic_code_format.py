@@ -422,3 +422,164 @@ def test_sectioned_parser_uses_arbitrary_schema_section_names() -> None:
     assert parsed.format_kind == "sectioned"
     assert parsed.core_gene_sections is not None
     assert tuple(section.name for section in parsed.core_gene_sections) == OPTIMIZER_SECTION_NAMES
+
+
+def test_sectioned_parser_round_trips_bullet_wrapped_fenced_code() -> None:
+    """Regression for the gen_0002 poison-parent bug.
+
+    Pipeline: the LLM emits an entry whose first line is ``- ```python`` at
+    indent 0 — a bulleted fence opener. The parser collects everything up to
+    the closing ``\\`\\`\\``` as a single entry. Then ``_render_gene_entry``
+    re-emits the entry with ``- `` prefix on the head and ``  `` (2 spaces)
+    prefix on every continuation, so the file on disk has ``- - ```python``
+    followed by 2-space-indented body and a 2-space-indented closing fence.
+
+    An earlier version of the parser fired its fence-opener detector on any
+    line whose ``strip()`` started with ``\\`\\`\\``` — including the indented
+    closing fence — which made the parser think a new fence was opening,
+    swallow the next subsection's content, and finally raise
+    ``unterminated fenced code block`` at EOF. Every descendant of the
+    affected ``simple_complete`` parent died at parent-load with
+    ``Canonical genetic code at <path> is malformed``.
+
+    The fix gates fence-opener detection on ``not line.startswith(" ")``: an
+    indented ``\\`\\`\\``` is always a continuation, never a fresh opener.
+    """
+
+    from src.evolve.storage import (
+        _render_genetic_code,
+        parse_genetic_code_text as parse_for_storage,
+    )
+
+    poison_parent = """## CORE_GENES
+### STATE_REPRESENTATION
+- Distance fields are computed for each robot via BFS from its target.
+- - ```python
+    def get_multi_source_bfs(sources, N, walls):
+        dist = [[float('inf')] * N for _ in range(N)]
+        return dist
+    ```
+
+### MACRO_STRATEGY
+- Robots are grouped by target quadrant for synchronized movement.
+
+### CONSTRUCTION_POLICY
+- A central cross of added walls partitions the board.
+- - ```python
+      def select_group_dir(group_id, bfs_maps):
+          return 'U'
+      ```
+
+### LOCAL_REPAIR_POLICY
+- Individual escalation triggers when group movement stalls.
+- - ```python
+      if group_stagnant[g_id] > N:
+          emit_op('i', robot, dir)
+      ```
+
+### OPTIONAL_CODE_SKETCH
+- None.
+
+## INTERACTION_NOTES
+Group routing and stuck-robot escalation interact through stagnation counters.
+
+## COMPUTE_NOTES
+O(K * N^2) per generation for BFS and direction selection.
+
+## CHANGE_DESCRIPTION
+Quadrant-corridor partitioning with weighted group-BFS routing.
+"""
+
+    parsed_payload_1 = parse_for_storage(
+        poison_parent, expected_section_names=AWTF_SECTION_NAMES
+    )
+    rendered = _render_genetic_code(parsed_payload_1)
+    parsed_payload_2 = parse_for_storage(
+        rendered, expected_section_names=AWTF_SECTION_NAMES
+    )
+
+    assert parsed_payload_1 == parsed_payload_2
+    section_names = tuple(s["name"] for s in parsed_payload_2["core_gene_sections"])
+    assert section_names == AWTF_SECTION_NAMES
+
+
+def test_sectioned_parser_auto_completes_missing_optional_section() -> None:
+    """Local Ollama models routinely drop the trailing
+    ``### OPTIONAL_CODE_SKETCH`` even when the prompt insists on it. Of 31
+    ``failed_creation`` cases in one 80-organism run, 18 were caused by the
+    LLM emitting the first 4 required subsections in correct order and
+    simply omitting the optional 5th. The parser now treats that single
+    omission as if the LLM had written ``### OPTIONAL_CODE_SKETCH\\n- None.``
+    so the design survives instead of consuming a retry budget.
+
+    Any structural mismatch elsewhere (wrong order, wrong names, missing
+    required subsection) must still raise — the auto-complete only fires
+    when the actual subsections match ``expected_section_names[:-1]``
+    exactly.
+    """
+
+    truncated = """## CORE_GENES
+### STATE_REPRESENTATION
+- Quadrant labels are derived from `N // 2` for both axes.
+
+### MACRO_STRATEGY
+- The organism partitions the board into four quadrants linked by a central hub.
+
+### CONSTRUCTION_POLICY
+- Walls are placed around the hub except near the center.
+
+### LOCAL_REPAIR_POLICY
+- Stuck robots retry with individual moves once group commands stall.
+
+## INTERACTION_NOTES
+The quadrants and hub combine to bound concurrent flows.
+
+## COMPUTE_NOTES
+Construction is `O(K * N^2)` worst case.
+
+## CHANGE_DESCRIPTION
+Tests quadrant routing with a central hub.
+"""
+
+    from src.evolve.storage import parse_genetic_code_text as parse_for_storage
+
+    parsed = parse_for_storage(
+        truncated, expected_section_names=AWTF_SECTION_NAMES
+    )
+
+    section_names = tuple(s["name"] for s in parsed["core_gene_sections"])
+    assert section_names == AWTF_SECTION_NAMES
+    optional = parsed["core_gene_sections"][-1]
+    assert optional["name"] == "OPTIONAL_CODE_SKETCH"
+    assert optional["entries"] == ["None."]
+
+
+def test_sectioned_parser_does_not_auto_complete_when_required_subsection_missing() -> None:
+    """The auto-complete must NOT fire for a required-subsection omission;
+    those still need to fail loudly so the LLM retries.
+    """
+
+    missing_required = """## CORE_GENES
+### STATE_REPRESENTATION
+- Quadrant labels are derived from `N // 2`.
+
+### MACRO_STRATEGY
+- Four quadrants linked by a central hub.
+
+### LOCAL_REPAIR_POLICY
+- Stuck robots retry with individual moves.
+
+## INTERACTION_NOTES
+Body.
+
+## COMPUTE_NOTES
+Body.
+
+## CHANGE_DESCRIPTION
+Body.
+"""
+
+    with pytest.raises(ValueError, match="must match the genome schema exactly"):
+        parse_genetic_code_text(
+            missing_required, expected_section_names=AWTF_SECTION_NAMES
+        )

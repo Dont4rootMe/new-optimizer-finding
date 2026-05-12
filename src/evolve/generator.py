@@ -2082,10 +2082,14 @@ class CandidateGenerator(BaseLlmGenerator):
             )
             return None
         finished_at = utc_now_iso()
-        # _structured_response_text returns a wrapper object — we must coerce
-        # to str() before downstream consumers (template substitution via
-        # str.replace) which require both arguments to be strings.
-        rationale_text = str(_structured_response_text(response))
+        # ``_structured_response_text`` returns a frozen dataclass whose
+        # default ``__str__`` is the dataclass repr — using ``str(wrapper)``
+        # would inject ``_StructuredResponseText(full_text=..., content_text=...)``
+        # into both the persisted JSON and the Step 2 ``{rationalization}``
+        # prompt placeholder, derailing the formalizer's parse-rule following.
+        # Always read ``.parse_text`` (the cleaned final answer when present,
+        # otherwise the raw response text).
+        rationale_text = _structured_response_text(response).parse_text
         parsed = parse_rationalization_response(rationale_text)
         _announce(
             f"organism {organism_id} rationalization stage returned "

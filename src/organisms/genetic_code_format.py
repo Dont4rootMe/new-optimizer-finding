@@ -332,13 +332,25 @@ def _parse_sectioned_core_genes(
 
         if not line.strip():
             continue
-        if current_name in _FENCED_CODE_TOLERANT_SECTIONS:
+        if current_name in _FENCED_CODE_TOLERANT_SECTIONS and not line.startswith(
+            " "
+        ):
             # Detect a fenced ``` opener, which LLMs commonly emit either bare
             # on its own line ("```python") or wrapped inside a bullet
             # ("- ```python"). Both must enter fenced-collection mode so that
             # the matching closing ``` is recognized correctly on reread.
             # Tolerance covers all code-bearing subsections per the genome
             # schema; `MACRO_STRATEGY` is excluded and still rejects fences.
+            #
+            # The indent guard above is load-bearing: when an entry's text
+            # already begins with ``- ``` `` (a bulleted fence the LLM emitted),
+            # the renderer round-trips it to ``- - ``` `` with a 2-space-indented
+            # closing ``` further down. Without the guard, that indented closer
+            # would be misread as a fresh fence opener, leaving every subsequent
+            # block in fence-collection mode and tripping
+            # ``unterminated fenced code block`` on the next subsection header —
+            # exactly the failure mode that made successfully-created parents
+            # unloadable by their own descendants.
             stripped = line.strip()
             fenced_payload: str | None = None
             if stripped.startswith("```"):
@@ -380,8 +392,44 @@ def _parse_sectioned_core_genes(
         raise ValueError("Sectioned CORE_GENES must contain at least one subsection.")
 
     if expected_section_names is not None:
-        _validate_expected_sectioned_core_genes(tuple(sections), expected_section_names)
+        section_tuple = _auto_complete_optional_section(
+            tuple(sections), expected_section_names
+        )
+        _validate_expected_sectioned_core_genes(section_tuple, expected_section_names)
+        return section_tuple
     return tuple(sections)
+
+
+def _auto_complete_optional_section(
+    sections: tuple[ParsedCoreGeneSection, ...],
+    expected_section_names: tuple[str, ...],
+) -> tuple[ParsedCoreGeneSection, ...]:
+    """Append a default ``- None.`` entry for a missing trailing optional
+    subsection (e.g. ``OPTIONAL_CODE_SKETCH``) when every required subsection
+    is already present in the exact expected order.
+
+    Local Ollama models routinely drop the final optional subsection — most
+    visibly ``OPTIONAL_CODE_SKETCH`` — even when the prompt requires its
+    presence. Recovering with the schema-permitted ``- None.`` placeholder
+    keeps an otherwise-valid design alive instead of failing the entire
+    creation attempt; only the omission of the last (optional) section is
+    tolerated, so any structural mismatch elsewhere still surfaces as a
+    parse error and triggers a retry.
+    """
+
+    if len(expected_section_names) < 2:
+        return sections
+    if len(sections) != len(expected_section_names) - 1:
+        return sections
+    actual_names = tuple(section.name for section in sections)
+    if actual_names != expected_section_names[:-1]:
+        return sections
+    return sections + (
+        ParsedCoreGeneSection(
+            name=expected_section_names[-1],
+            entries=(ParsedGeneEntry(text="None."),),
+        ),
+    )
 
 
 def _validate_expected_sectioned_core_genes(

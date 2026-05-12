@@ -82,6 +82,8 @@ Inside `## CORE_GENES`, return exactly these subsection headings, in this exact 
 ### LOCAL_REPAIR_POLICY
 ### OPTIONAL_CODE_SKETCH
 
+All five subsection headings above are mandatory and must appear once each, in this exact order. If you have no helper code to share, still emit `### OPTIONAL_CODE_SKETCH` and put the single bullet `- None.` underneath it — omitting the heading is the most common contract violation and rejects the whole response.
+
 Rules for subsection bodies:
 - `STATE_REPRESENTATION` through `LOCAL_REPAIR_POLICY` must each contain at least one `- ` bullet
 - every line of every required subsection must either start with `- ` (a fresh bullet) or be a continuation indented by exactly two spaces; paragraph prose without a leading `- ` is a hard parse error

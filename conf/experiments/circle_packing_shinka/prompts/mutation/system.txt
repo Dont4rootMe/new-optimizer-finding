@@ -75,6 +75,8 @@ Inside `## CORE_GENES`, return exactly these subsection headings, in this exact 
 ### PARAMETERS
 ### OPTIONAL_CODE_SKETCH
 
+All eight subsection headings above are mandatory and must appear once each, in this exact order. If you have no helper code to share, still emit `### OPTIONAL_CODE_SKETCH` and put the single bullet `- None.` underneath it — omitting the heading is the most common contract violation and rejects the whole response.
+
 Rules for subsection bodies:
 - `INIT_GEOMETRY` through `PARAMETERS` must each contain at least one `- ` bullet
 - `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`

@@ -182,6 +182,44 @@ def test_render_formalization_coerces_non_string_rationale_to_str() -> None:
     assert RATIONALIZATION_PLACEHOLDER not in user
 
 
+def test_run_rationalization_stage_unwraps_structured_response_text() -> None:
+    """Regression for a follow-on bug to ``_structured_response_text``: the
+    earlier "fix" wrote ``str(_structured_response_text(response))`` thinking
+    that would unwrap the dataclass. It did not — ``_StructuredResponseText``
+    is a frozen dataclass whose ``__str__`` is the dataclass repr, so the
+    persisted rationalization text became
+    ``_StructuredResponseText(full_text='...', content_text='...', ...)``
+    and that string was substituted into Step 2's ``{rationalization}``
+    placeholder. The Step 2 LLM saw garbled context and drifted off the
+    parser contract, producing the schema-mismatch and continuation-line
+    failures that wiped out gen 3 onward of a real run. ``parse_text`` is
+    the only field that yields a clean string for both code paths.
+    """
+
+    from src.evolve.generator import (  # imported here to avoid heavy module import at collection
+        _StructuredResponseText,
+        _structured_response_text,
+    )
+
+    class _FakeOllamaResponse:
+        def __init__(self, text: str) -> None:
+            self.text = text
+            self.raw_response = {"message": {"content": text, "thinking": ""}}
+            self.provider = "ollama"
+            self.provider_model_id = "gemma4:31b"
+
+    response = _FakeOllamaResponse("## SCORE_BEARING_CORE\n- diagnosis body\n")
+    wrapper = _structured_response_text(response)
+    assert isinstance(wrapper, _StructuredResponseText)
+    # The bug was using ``str(wrapper)`` — confirm that path *would* have
+    # produced a repr (so the test fails noisily if anyone re-introduces it).
+    assert str(wrapper).startswith("_StructuredResponseText(")
+    # The fix is ``.parse_text``: a clean str ready for substitution.
+    assert wrapper.parse_text.startswith("## SCORE_BEARING_CORE")
+    assert "- diagnosis body" in wrapper.parse_text
+    assert not wrapper.parse_text.startswith("_StructuredResponseText(")
+
+
 def test_legacy_optimization_survey_bundle_is_single_call() -> None:
     cfg = _compose_cfg("config_optimization_survey")
     bundle = load_prompt_bundle(cfg)
