@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from omegaconf import DictConfig
 
 from pathlib import Path
+from typing import Any
 
 # Sentinel placeholder kept inside the Step-2 user template until the
 # generator either substitutes the actual Step-1 rationale text (two-step
@@ -84,10 +85,20 @@ class DesignPromptBundle:
     def is_two_step(self) -> bool:
         return bool(self.rationalization_system and self.rationalization_user)
 
-    def render_formalization(self, rationale_text: str | None) -> tuple[str, str]:
-        """Substitute the rationalization placeholder and return ``(system, user)``."""
+    def render_formalization(self, rationale_text: Any) -> tuple[str, str]:
+        """Substitute the rationalization placeholder and return ``(system, user)``.
 
-        substitution = rationale_text if rationale_text else RATIONALIZATION_SINGLE_CALL_STUB
+        ``rationale_text`` is accepted as ``Any`` (not strictly ``str``)
+        because upstream callers may pass an LLM-response wrapper that
+        renders to a string via ``str(...)``. Coercing here is defense in
+        depth: a single non-string sneaking through used to kill the entire
+        evolution run with ``TypeError: replace() argument 2 must be str``.
+        """
+
+        if rationale_text is None:
+            substitution = RATIONALIZATION_SINGLE_CALL_STUB
+        else:
+            substitution = str(rationale_text) or RATIONALIZATION_SINGLE_CALL_STUB
         rendered_user = self.formalization_user_template.replace(
             RATIONALIZATION_PLACEHOLDER,
             substitution,

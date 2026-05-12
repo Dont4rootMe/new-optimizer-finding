@@ -149,6 +149,39 @@ def test_circle_packing_crossover_bundle_supports_two_step(tmp_path: Path) -> No
     assert RATIONALIZATION_PLACEHOLDER in design_bundle.formalization_user_template
 
 
+def test_render_formalization_coerces_non_string_rationale_to_str() -> None:
+    """Regression for a production-killer bug: ``_structured_response_text``
+    returns a wrapper object, and an early version of this code passed it
+    straight into ``str.replace(...)`` which raises ``TypeError: replace()
+    argument 2 must be str``. That single TypeError killed every
+    mutation/crossover child for 150 generations (1500+ failed_creation
+    cases out of 1510). The renderer now coerces with ``str(...)`` defensively.
+    """
+
+    class _Wrapper:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def __str__(self) -> str:
+            return self._text
+
+    template = (
+        "header\n=== RATIONALE ===\n"
+        + RATIONALIZATION_PLACEHOLDER
+        + "\n=== END ===\nfooter"
+    )
+    bundle = DesignPromptBundle(
+        formalization_system="sys",
+        formalization_user_template=template,
+    )
+    wrapper = _Wrapper("## SCORE_BEARING_CORE\nrationale body")
+
+    _, user = bundle.render_formalization(rationale_text=wrapper)
+
+    assert "## SCORE_BEARING_CORE" in user
+    assert RATIONALIZATION_PLACEHOLDER not in user
+
+
 def test_legacy_optimization_survey_bundle_is_single_call() -> None:
     cfg = _compose_cfg("config_optimization_survey")
     bundle = load_prompt_bundle(cfg)

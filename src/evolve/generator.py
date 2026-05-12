@@ -2082,7 +2082,10 @@ class CandidateGenerator(BaseLlmGenerator):
             )
             return None
         finished_at = utc_now_iso()
-        rationale_text = _structured_response_text(response)
+        # _structured_response_text returns a wrapper object — we must coerce
+        # to str() before downstream consumers (template substitution via
+        # str.replace) which require both arguments to be strings.
+        rationale_text = str(_structured_response_text(response))
         parsed = parse_rationalization_response(rationale_text)
         _announce(
             f"organism {organism_id} rationalization stage returned "
