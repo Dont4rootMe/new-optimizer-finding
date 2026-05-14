@@ -84,20 +84,51 @@ def _build_evolution_config(
     extra = shinka_block.get("extra_runner_kwargs") or {}
     extra_dict = OmegaConf.to_container(extra, resolve=True) if isinstance(extra, DictConfig) else dict(extra)
 
+    # ``cost_aware_coef`` was a top-level field on ``EvolutionConfig`` up to
+    # shinka-evolve 0.0.5 and moved into ``llm_dynamic_selection_kwargs`` in
+    # 0.0.6. Keep accepting the old yaml key for ergonomic backward compat
+    # and route it to the new sub-mapping; if the user has an old shinka
+    # installed the fallback path below restores the legacy call shape.
+    selection_kwargs: dict[str, Any] = {}
+    cost_aware_coef = shinka_block.get("cost_aware_coef")
+    if cost_aware_coef is not None:
+        selection_kwargs["cost_aware_coef"] = float(cost_aware_coef)
+
     kwargs: dict[str, Any] = {
         "init_program_path": str(init_program_path),
         "num_generations": int(shinka_block.num_generations),
         "results_dir": str(results_dir),
         "llm_models": llm_models,
         "llm_dynamic_selection": str(shinka_block.get("llm_dynamic_selection") or "ucb1"),
-        "cost_aware_coef": float(shinka_block.get("cost_aware_coef") or 0.0),
     }
+    if selection_kwargs:
+        kwargs["llm_dynamic_selection_kwargs"] = selection_kwargs
     embedding_model = shinka_block.get("embedding_model")
     if embedding_model:
         kwargs["embedding_model"] = str(embedding_model)
     kwargs.update(extra_dict)
 
-    return EvolutionConfig(**kwargs)
+    try:
+        return EvolutionConfig(**kwargs)
+    except TypeError as exc:
+        # Legacy shinka (<=0.0.5) flattens cost_aware_coef back onto the
+        # top-level. Detect that specific shape and retry once instead of
+        # forcing every user to upgrade in lockstep with our local pin.
+        unrecognised = "llm_dynamic_selection_kwargs"
+        if (
+            unrecognised in str(exc)
+            and "llm_dynamic_selection_kwargs" in kwargs
+        ):
+            legacy_kwargs = dict(kwargs)
+            legacy_selection_kwargs = legacy_kwargs.pop(
+                "llm_dynamic_selection_kwargs"
+            )
+            if "cost_aware_coef" in legacy_selection_kwargs:
+                legacy_kwargs["cost_aware_coef"] = float(
+                    legacy_selection_kwargs["cost_aware_coef"]
+                )
+            return EvolutionConfig(**legacy_kwargs)
+        raise
 
 
 def _build_local_job_config(
