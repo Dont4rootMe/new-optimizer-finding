@@ -103,9 +103,18 @@ def _build_evolution_config(
     }
     if selection_kwargs:
         kwargs["llm_dynamic_selection_kwargs"] = selection_kwargs
+    # ``EvolutionConfig.embedding_model`` defaults to OpenAI's
+    # ``text-embedding-3-small``, and shinka 0.0.6's runner refuses to
+    # start unless every referenced model's env var is set (it raises
+    # "missing OPENAI_API_KEY" up front). The 0.0.6 runner skips the
+    # embedding-model env-var check when ``embedding_model`` is falsy,
+    # so we always pass through whatever the yaml has — including
+    # ``null`` — instead of swallowing the None and letting the upstream
+    # OpenAI default leak in.
     embedding_model = shinka_block.get("embedding_model")
-    if embedding_model:
-        kwargs["embedding_model"] = str(embedding_model)
+    kwargs["embedding_model"] = (
+        str(embedding_model) if embedding_model else None
+    )
     kwargs.update(extra_dict)
 
     try:
