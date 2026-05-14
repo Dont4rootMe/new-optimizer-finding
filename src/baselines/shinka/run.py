@@ -141,10 +141,17 @@ def _build_local_job_config(
     if not eval_program_path.exists():
         raise FileNotFoundError(f"evaluate_program_path does not exist: {eval_program_path}")
 
-    return LocalJobConfig(
-        eval_program_path=str(eval_program_path),
-        max_parallel_jobs=int(shinka_block.get("max_parallel_jobs") or 1),
-    )
+    # ``max_parallel_jobs`` moved off ``LocalJobConfig`` in shinka-evolve
+    # 0.0.6 — it is now ``max_evaluation_jobs`` on ``ShinkaEvolveRunner``.
+    # Try the modern signature first; on TypeError fall back to the legacy
+    # call shape so anyone still pinned to 0.0.4/0.0.5 keeps working.
+    try:
+        return LocalJobConfig(eval_program_path=str(eval_program_path))
+    except TypeError:
+        return LocalJobConfig(
+            eval_program_path=str(eval_program_path),
+            max_parallel_jobs=int(shinka_block.get("max_parallel_jobs") or 1),
+        )
 
 
 def _build_database_config(
@@ -218,7 +225,32 @@ def main(argv: list[str] | None = None) -> int:
     if is_dataclass(evo_cfg):
         print(f"[shinka_baseline] EvolutionConfig: {asdict(evo_cfg)}", file=sys.stderr, flush=True)
 
-    runner = shinka["ShinkaEvolveRunner"](evo_config=evo_cfg, job_config=job_cfg, db_config=db_cfg)
+    # In shinka-evolve 0.0.6 the evaluator-concurrency knob moved from
+    # ``LocalJobConfig.max_parallel_jobs`` to
+    # ``ShinkaEvolveRunner.max_evaluation_jobs``. Keep accepting the old
+    # yaml key (``shinka_evolve.max_parallel_jobs``) and route it here;
+    # older runners that don't take this kwarg fall back via TypeError.
+    max_parallel_jobs = int(shinka_block.get("max_parallel_jobs") or 1)
+    runner_kwargs: dict[str, Any] = {
+        "evo_config": evo_cfg,
+        "job_config": job_cfg,
+        "db_config": db_cfg,
+        "max_evaluation_jobs": max_parallel_jobs,
+    }
+    max_proposal_jobs = shinka_block.get("max_proposal_jobs")
+    if max_proposal_jobs is not None:
+        runner_kwargs["max_proposal_jobs"] = int(max_proposal_jobs)
+    try:
+        runner = shinka["ShinkaEvolveRunner"](**runner_kwargs)
+    except TypeError:
+        # Pre-0.0.6 runner doesn't take ``max_evaluation_jobs``; the
+        # concurrency knob lived on LocalJobConfig instead, which we
+        # already populated in the legacy fallback above.
+        legacy_kwargs = {
+            k: v for k, v in runner_kwargs.items()
+            if k not in {"max_evaluation_jobs", "max_proposal_jobs"}
+        }
+        runner = shinka["ShinkaEvolveRunner"](**legacy_kwargs)
     runner.run()
     return 0
 
