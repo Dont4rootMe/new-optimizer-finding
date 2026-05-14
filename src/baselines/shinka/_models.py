@@ -76,9 +76,14 @@ def build_shinka_model_urls(cfg: DictConfig) -> list[str]:
         instances = derive_ollama_instance_configs(route_cfg)
         if not instances:
             continue
-        instance = instances[0]
-        openai_base = _ollama_api_to_openai(str(instance.base_url))
-        urls.append(f"local/{instance.provider_model_id}@{openai_base}")
+        # Emit one shinka URL per concrete ollama instance — multi-GPU
+        # routes spawn one process per `gpu_ranks` group, each on its own
+        # port, and Shinka's UCB1 bandit treats them as independent arms.
+        # Previously only ``instances[0]`` was emitted, so all extra
+        # instances launched by `ensure_ollama_runtime` sat idle.
+        for instance in instances:
+            openai_base = _ollama_api_to_openai(str(instance.base_url))
+            urls.append(f"local/{instance.provider_model_id}@{openai_base}")
 
     if not urls:
         raise RuntimeError(

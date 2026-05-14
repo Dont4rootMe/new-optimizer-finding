@@ -1,3 +1,9 @@
+# @package _global_
+# Promote contents (and `defaults:` inheritance) to the root of the
+# composed config — otherwise Hydra nests everything under
+# ``baselines.*`` because the file lives in ``conf/baselines/``, which
+# breaks ``src/baselines/shinka/run.py``'s top-level reads of
+# ``cfg.shinka_evolve`` and ``cfg.evolver.llm.route_weights``.
 defaults:
   - /config_circle_packing_shinka
   - _self_
