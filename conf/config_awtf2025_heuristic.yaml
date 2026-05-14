@@ -26,15 +26,6 @@ paths:
   api_platform_runtime_root: ${oc.env:API_PLATFORM_RUNTIME_ROOT,./.api_platform_runtime_atcoder_awt}
   ollama_cache_root: ${oc.env:OLLAMA_MODELS,./ollama_cache}
 
-evolver:
-  llm:
-    # Legacy single-route weights. With ``pipelines`` enabled below the
-    # route bandit is bypassed for organism stages, but the registry
-    # still validates these against the api_platforms block so both
-    # routes must be listed.
-    route_weights:
-      ollama_gemma4_31b: 1.0
-      ollama_qwen35_122b: 1.0
 
 api_platforms:
   # Gemma 4 31B holds GPUs 6 and 7 as two single-GPU instances. It
