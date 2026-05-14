@@ -49,4 +49,15 @@ shinka_evolve:
   cost_aware_coef: 0.0
   llm_models: null
   embedding_model: null
+  # Path (resolved against the project root) to the system prompt the
+  # ShinkaEvolve LLM sees on every patch attempt. The upstream default
+  # is a generic "improve the program" message which leaves the model
+  # to reverse-engineer the task from a failing program; the first
+  # run of this baseline produced 0/78 correct programs because of
+  # exactly that. The file lives under the isolated ``_baselines/``
+  # tree so the main evolutionary loop is unaffected.
+  task_sys_msg_path: experiments/awtf2025_heuristic/_baselines/shinka/task_sys_msg.txt
+  # Alternative: paste a multi-line string directly. When set the
+  # inline value wins over ``task_sys_msg_path``.
+  task_sys_msg: null
   extra_runner_kwargs: {}

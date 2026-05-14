@@ -25,4 +25,9 @@ shinka_evolve:
   cost_aware_coef: 0.0
   llm_models: null
   embedding_model: null
+  # Optional task system-prompt override (file path or inline string).
+  # Both null = use upstream default. See conf/baselines/awtf2025_heuristic.yaml
+  # for the full description.
+  task_sys_msg_path: null
+  task_sys_msg: null
   extra_runner_kwargs: {}

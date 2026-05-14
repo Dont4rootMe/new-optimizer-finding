@@ -115,6 +115,31 @@ def _build_evolution_config(
     kwargs["embedding_model"] = (
         str(embedding_model) if embedding_model else None
     )
+
+    # ``EvolutionConfig.task_sys_msg`` is the system prompt the LLM
+    # receives on every patch attempt. The upstream default is a
+    # generic "improve the program" message, which leaves the model to
+    # reverse-engineer the task from the failing program — that's why
+    # the first run of this baseline produced 0/78 correct programs.
+    # Two opt-in ways to override it, isolated to the baseline tree so
+    # the main evolutionary loop is untouched:
+    #   * ``shinka_evolve.task_sys_msg`` — inline string
+    #   * ``shinka_evolve.task_sys_msg_path`` — path to a file (resolved
+    #     against the project root) whose contents become the message
+    # When both are set the inline message wins. When neither is set
+    # the upstream default applies.
+    task_sys_msg_inline = shinka_block.get("task_sys_msg")
+    task_sys_msg_path = shinka_block.get("task_sys_msg_path")
+    if task_sys_msg_inline:
+        kwargs["task_sys_msg"] = str(task_sys_msg_inline)
+    elif task_sys_msg_path:
+        resolved = _resolve_path(task_sys_msg_path, root=project_root)
+        if not resolved.exists():
+            raise FileNotFoundError(
+                f"shinka_evolve.task_sys_msg_path does not exist: {resolved}"
+            )
+        kwargs["task_sys_msg"] = resolved.read_text(encoding="utf-8")
+
     kwargs.update(extra_dict)
 
     try:
