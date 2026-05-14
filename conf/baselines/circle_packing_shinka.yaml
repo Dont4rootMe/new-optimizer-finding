@@ -15,7 +15,12 @@ shinka_evolve:
   results_dir: ${oc.env:SHINKA_RESULTS_DIR,./shinka_runs/circle_packing_shinka}
   num_generations: 50
   num_islands: 4
+  # Routed to ``ShinkaEvolveRunner.max_evaluation_jobs`` in shinka 0.0.6+
+  # (and to ``LocalJobConfig.max_parallel_jobs`` on legacy releases).
   max_parallel_jobs: 4
+  # LLM-proposal concurrency knob added in shinka 0.0.6; upstream
+  # default is 6. Set to null to fall back to the upstream default.
+  max_proposal_jobs: null
   llm_dynamic_selection: ucb1
   cost_aware_coef: 0.0
   llm_models: null

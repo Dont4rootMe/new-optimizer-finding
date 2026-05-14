@@ -37,7 +37,14 @@ shinka_evolve:
   num_generations: 75
   num_islands: 4
   # 2 qwen instances × 2 per-instance concurrency = 4 parallel evaluators.
+  # Routed to ``ShinkaEvolveRunner.max_evaluation_jobs`` in shinka 0.0.6+
+  # (and to ``LocalJobConfig.max_parallel_jobs`` on legacy releases).
   max_parallel_jobs: 4
+  # LLM-proposal concurrency knob added in shinka 0.0.6; capped here to
+  # match the number of available evaluator slots so we don't pile up
+  # half-finished proposals against the 4 ollama request slots. The
+  # upstream default is 6. Ignored on legacy shinka.
+  max_proposal_jobs: 4
   llm_dynamic_selection: ucb1
   cost_aware_coef: 0.0
   llm_models: null
