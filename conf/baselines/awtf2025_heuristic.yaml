@@ -34,7 +34,7 @@ shinka_evolve:
   initial_program_path: experiments/awtf2025_heuristic/_baselines/shinka/initial_program.py
   evaluate_program_path: experiments/awtf2025_heuristic/_baselines/shinka/evaluate.py
   results_dir: ${oc.env:SHINKA_RESULTS_DIR,./shinka_runs/awtf2025_heuristic}
-  num_generations: 50
+  num_generations: 75
   num_islands: 4
   # 2 qwen instances × 2 per-instance concurrency = 4 parallel evaluators.
   max_parallel_jobs: 4
