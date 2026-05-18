@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -80,38 +82,105 @@ def _normalize_combined_score(result: dict[str, Any]) -> float:
 
 
 def evaluate_with_host_experiment(program_path: str, results_dir: str) -> dict[str, Any]:
-    """Run the host-project experiment evaluator on `program_path` and return shinka format."""
+    """Run the host experiment evaluator on ``program_path`` and emit shinka files.
+
+    ShinkaEvolve does NOT consume the return value of this function — it
+    reads two files written to ``results_dir`` after the evaluator subprocess
+    exits:
+
+      * ``results_dir/correct.json``  → ``{"correct": bool, "error": str|None}``
+      * ``results_dir/metrics.json``  → ``{"combined_score": float, ...}``
+
+    (See ``shinka.utils.general.load_results``.) Until this adapter writes
+    those files explicitly the runner falls back to its defaults
+    (``correct=False, score=0.0``), which is exactly the symptom of the
+    first 75-gen ShinkaEvolve run: every program — including a known-good
+    seed scoring 21 318 locally — was logged as ``correct=False score=0.0``
+    and the database showed 0/78 correct programs.
+
+    The fix is to call :func:`shinka.core.wrap_eval.save_json_results`
+    after the host evaluator returns. ``correct=True`` whenever the host
+    evaluator completes without raising; ``correct=False`` with a
+    traceback string on any exception. The returned dict is kept (and
+    still includes the ``combined_score`` + ``public`` view used by tests
+    and ad-hoc CLI invocations).
+    """
+
+    from shinka.core.wrap_eval import save_json_results
+
+    results_dir_resolved = str(Path(results_dir).expanduser().resolve())
+    metrics: dict[str, Any] = {"combined_score": 0.0}
+    public: dict[str, Any] = {}
+    correct = False
+    error_msg: str | None = None
+    result: dict[str, Any] | None = None
 
     organism_dir, cleanup_dir = _stage_organism_dir(Path(program_path))
     try:
-        cfg = _compose_cfg()
-        experiment_cfg = _select_experiment_cfg(cfg)
-        experiment = instantiate(experiment_cfg, _recursive_=False)
-        result = experiment.evaluate_organism(organism_dir=str(organism_dir), cfg=experiment_cfg)
+        try:
+            cfg = _compose_cfg()
+            experiment_cfg = _select_experiment_cfg(cfg)
+            experiment = instantiate(experiment_cfg, _recursive_=False)
+            result = experiment.evaluate_organism(
+                organism_dir=str(organism_dir), cfg=experiment_cfg
+            )
+        except BaseException as exc:  # noqa: BLE001
+            error_msg = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
     finally:
         if cleanup_dir is not None:
             shutil.rmtree(cleanup_dir, ignore_errors=True)
 
-    public = {
-        "objective_name": result.get("objective_name"),
-        "objective_direction": result.get("objective_direction"),
-        "objective_last": result.get("objective_last"),
-        "status": result.get("status"),
-    }
-    if "num_cases" in result:
-        public["num_cases"] = result["num_cases"]
-        public["mean_absolute_score"] = result.get("mean_absolute_score")
-        public["total_absolute_score"] = result.get("total_absolute_score")
-    if "num_circles" in result:
-        public["num_circles"] = result["num_circles"]
-        public["reported_sum_of_radii"] = result.get("reported_sum_of_radii")
+    if result is not None:
+        try:
+            combined_score = _normalize_combined_score(result)
+        except Exception as exc:  # noqa: BLE001
+            combined_score = 0.0
+            correct = False
+            error_msg = (error_msg or "") + f"\nscore-extraction failed: {exc}"
+        else:
+            correct = True
+            metrics["combined_score"] = combined_score
+            public = {
+                "objective_name": result.get("objective_name"),
+                "objective_direction": result.get("objective_direction"),
+                "objective_last": result.get("objective_last"),
+                "status": result.get("status"),
+            }
+            if "num_cases" in result:
+                public["num_cases"] = result["num_cases"]
+                public["mean_absolute_score"] = result.get("mean_absolute_score")
+                public["total_absolute_score"] = result.get("total_absolute_score")
+            if "num_circles" in result:
+                public["num_circles"] = result["num_circles"]
+                public["reported_sum_of_radii"] = result.get("reported_sum_of_radii")
+            metrics["public"] = public
+
+    # Write the two files the ShinkaEvolve runner actually reads. This
+    # is the load-bearing line that flips ``correct=False score=0.0`` to
+    # the real outcome.
+    try:
+        save_json_results(
+            results_dir_resolved,
+            metrics,
+            correct=correct,
+            error=error_msg,
+        )
+    except Exception:  # noqa: BLE001
+        # Last-ditch: if shinka isn't importable in the subprocess for
+        # any reason, still write the files by hand so the runner can
+        # see the result.
+        os.makedirs(results_dir_resolved, exist_ok=True)
+        with open(os.path.join(results_dir_resolved, "correct.json"), "w") as fh:
+            json.dump({"correct": correct, "error": error_msg}, fh, indent=4)
+        with open(os.path.join(results_dir_resolved, "metrics.json"), "w") as fh:
+            json.dump(metrics, fh, indent=4)
 
     return {
-        "combined_score": _normalize_combined_score(result),
+        "combined_score": metrics["combined_score"],
         "public": public,
-        "private": {
-            "results_dir": str(Path(results_dir).expanduser().resolve()),
-        },
+        "private": {"results_dir": results_dir_resolved},
+        "correct": correct,
+        "error": error_msg,
     }
 
 
