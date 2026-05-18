@@ -186,3 +186,47 @@ def evaluate_with_host_experiment(program_path: str, results_dir: str) -> dict[s
 
 def dump_cfg_for_debug(cfg: DictConfig) -> str:
     return OmegaConf.to_yaml(cfg)
+
+
+def run_cli() -> int:
+    """CLI entrypoint invoked by the ShinkaEvolve scheduler subprocess.
+
+    ShinkaEvolve 0.0.6 (``shinka.launch.scheduler.JobScheduler._build_command``)
+    launches every evaluator job as:
+
+        python <eval_program_path> --program_path <main.py> --results_dir <gen_X/results>
+
+    It then reads ``<results_dir>/correct.json`` and
+    ``<results_dir>/metrics.json`` after the subprocess exits (see
+    ``shinka.utils.general.load_results``). The per-experiment
+    ``evaluate.py`` files therefore must do two things on every
+    invocation: (1) parse those two CLI flags and (2) actually call
+    :func:`evaluate_with_host_experiment`, which is the one that writes
+    the result files. Stashing that wiring here keeps the
+    ``evaluate.py`` adapters tiny and identical across experiments.
+    """
+
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        description="ShinkaEvolve evaluator subprocess for awtf2025/circle_packing baselines."
+    )
+    parser.add_argument("--program_path", required=True)
+    parser.add_argument("--results_dir", required=True)
+    args, _unknown = parser.parse_known_args()
+    try:
+        evaluate_with_host_experiment(
+            program_path=args.program_path,
+            results_dir=args.results_dir,
+        )
+    except BaseException as exc:  # noqa: BLE001
+        # ``evaluate_with_host_experiment`` already writes ``correct=False``
+        # + the traceback to ``correct.json`` on any internal failure, but
+        # if even *that* helper raises (e.g. shinka unimportable), surface
+        # the traceback on stderr so the launcher's job_log.err is non-empty
+        # and the failure is visible in post-mortem logs.
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return 1
+    return 0
