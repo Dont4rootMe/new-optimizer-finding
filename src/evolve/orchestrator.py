@@ -384,15 +384,25 @@ class EvolverOrchestrator:
         repair_attempted: bool,
     ) -> list[dict[str, Any]]:
         errors = self._coerce_error_history(task_state)
-        errors.append(
-            {
-                "attempt": len(errors) + 1,
-                "status": status,
-                "error_msg": error_msg,
-                "timestamp": utc_now_iso(),
-                "repair_attempted": repair_attempted,
-            }
-        )
+        # Propagate the per-task evaluator log paths into the error entry
+        # itself so the repair callback can read the raw stdout/stderr from
+        # disk (``format_error_history`` previously only had access to the
+        # one-line ``error_msg`` summary, which loses the traceback and
+        # debugging context the Python interpreter wrote to stderr).
+        entry: dict[str, Any] = {
+            "attempt": len(errors) + 1,
+            "status": status,
+            "error_msg": error_msg,
+            "timestamp": utc_now_iso(),
+            "repair_attempted": repair_attempted,
+        }
+        stdout_path = task_state.get("stdout_path")
+        stderr_path = task_state.get("stderr_path")
+        if stdout_path:
+            entry["stdout_path"] = str(stdout_path)
+        if stderr_path:
+            entry["stderr_path"] = str(stderr_path)
+        errors.append(entry)
         task_state["errors"] = errors
         return errors
 

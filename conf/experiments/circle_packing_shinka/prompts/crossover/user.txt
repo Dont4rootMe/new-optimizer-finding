@@ -12,6 +12,13 @@ A prior rationalization call produced the design plan below. Materialize WHAT_TO
 Use this as the structural base for the child. Its core paradigm should dominate the recombination.
 {mother_genetic_code}
 
+=== PRIMARY PARENT IMPLEMENTATION (ground truth Python) ===
+The actual `implementation.py` the primary parent runs.
+
+```python
+{mother_implementation}
+```
+
 === PRIMARY PARENT LINEAGE SUMMARY ===
 Scores in lineage: higher is better. Use score trends to identify which mechanisms in the primary parent's ancestry actually helped.
 {mother_lineage_summary}
@@ -19,6 +26,13 @@ Scores in lineage: higher is better. Use score trends to identify which mechanis
 === SECONDARY PARENT GENETIC CODE ===
 Use this as the donor of one coherent imported module that complements the primary parent's structure.
 {father_genetic_code}
+
+=== SECONDARY PARENT IMPLEMENTATION (ground truth Python) ===
+The actual `implementation.py` the secondary parent runs.
+
+```python
+{father_implementation}
+```
 
 === SECONDARY PARENT LINEAGE SUMMARY ===
 Scores in lineage: higher is better. Use score trends to identify which mechanisms in the secondary parent's ancestry actually helped.

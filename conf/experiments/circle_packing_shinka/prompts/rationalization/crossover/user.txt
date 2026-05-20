@@ -7,6 +7,13 @@ Produce the design rationale for the next crossover child of these two circle-pa
 This parent's core paradigm dominates the recombination.
 {mother_genetic_code}
 
+=== PRIMARY PARENT IMPLEMENTATION (ground truth Python) ===
+The actual `implementation.py` the primary parent runs.
+
+```python
+{mother_implementation}
+```
+
 === PRIMARY PARENT LINEAGE SUMMARY ===
 Higher score = better.
 {mother_lineage_summary}
@@ -14,6 +21,13 @@ Higher score = better.
 === SECONDARY PARENT GENETIC CODE ===
 The donor of one coherent imported module (or contrast for a third-option invention).
 {father_genetic_code}
+
+=== SECONDARY PARENT IMPLEMENTATION (ground truth Python) ===
+The actual `implementation.py` the secondary parent runs. When picking the imported module, confirm against this code that the mechanism really exists in the donor.
+
+```python
+{father_implementation}
+```
 
 === SECONDARY PARENT LINEAGE SUMMARY ===
 Higher score = better.

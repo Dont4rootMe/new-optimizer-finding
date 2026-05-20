@@ -248,6 +248,28 @@ def format_error_history(errors: list[dict[str, Any]]) -> str:
         r"(?:required|target)\s+(?:radius|radii)?\s*shape\s*[:=]?\s*\(\s*\d+\s*,\s*\)",
         re.IGNORECASE,
     )
+    def _tail_log(path_value: object, *, max_bytes: int = 3072) -> str | None:
+        # Read the last ``max_bytes`` of a logfile if the path exists on
+        # disk. The repair prompt previously only saw the formatted
+        # ``error_msg`` summary; the raw stderr/stdout was missing even
+        # though the orchestrator wrote it. Truncate from the front so the
+        # actual traceback (which is always near the tail) is preserved.
+        if not path_value:
+            return None
+        try:
+            log_path = Path(str(path_value))
+            if not log_path.exists():
+                return None
+            text = log_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            return None
+        text = text.rstrip()
+        if not text:
+            return None
+        if len(text) > max_bytes:
+            text = "...<truncated>...\n" + text[-max_bytes:]
+        return text
+
     lines: list[str] = []
     for entry in errors:
         attempt = entry.get("attempt", "?")
@@ -259,6 +281,21 @@ def format_error_history(errors: list[dict[str, Any]]) -> str:
         error_msg = required_vector_re.sub("required radius shape", error_msg)
         timestamp = str(entry.get("timestamp", "")).strip() or "(unknown time)"
         lines.append(f"- attempt={attempt} status={status} timestamp={timestamp} error={error_msg}")
+        # Inline the actual evaluator stderr/stdout when the orchestrator
+        # recorded them (``orchestrator._append_error_entry`` adds the
+        # file paths to each entry as of the FIX-mode plumbing work). The
+        # repair LLM needs the raw traceback, not just the one-line
+        # ``error_msg`` summary, to diagnose runtime crashes.
+        stderr_tail = _tail_log(entry.get("stderr_path"))
+        if stderr_tail:
+            lines.append("  --- LAST STDERR (truncated) ---")
+            lines.append(stderr_tail)
+            lines.append("  --- END STDERR ---")
+        stdout_tail = _tail_log(entry.get("stdout_path"))
+        if stdout_tail:
+            lines.append("  --- LAST STDOUT (truncated) ---")
+            lines.append(stdout_tail)
+            lines.append("  --- END STDOUT ---")
     return "\n".join(lines)
 
 

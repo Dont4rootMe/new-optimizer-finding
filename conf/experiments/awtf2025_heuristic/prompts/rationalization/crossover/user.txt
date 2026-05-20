@@ -7,6 +7,13 @@ Produce the design rationale for the next crossover child of these two awtf2025 
 This parent's core paradigm dominates the recombination.
 {mother_genetic_code}
 
+=== PRIMARY PARENT IMPLEMENTATION (ground truth Python) ===
+The actual `implementation.py` the primary parent runs. Anchor your weakness diagnosis here — the prose `## CORE_GENES` describes intent, this is what executes.
+
+```python
+{mother_implementation}
+```
+
 === PRIMARY PARENT LINEAGE SUMMARY ===
 Higher score = better.
 {mother_lineage_summary}
@@ -14,6 +21,13 @@ Higher score = better.
 === SECONDARY PARENT GENETIC CODE ===
 The donor of one coherent imported module (or contrast for a third-option invention).
 {father_genetic_code}
+
+=== SECONDARY PARENT IMPLEMENTATION (ground truth Python) ===
+The actual `implementation.py` the secondary parent runs. When choosing what to import, look at this code to confirm the mechanism really exists in the donor; the genetic code may have drifted.
+
+```python
+{father_implementation}
+```
 
 === SECONDARY PARENT LINEAGE SUMMARY ===
 Higher score = better.

@@ -2235,10 +2235,39 @@ class CandidateGenerator(BaseLlmGenerator):
         max_attempts = max(1, int(self.evolver_cfg.creation.max_attempts_to_create_organism))
         last_error: str | None = None
         for attempt in range(1, max_attempts + 1):
+            # FIX-mode style retry feedback: on attempt 2+ append the previous
+            # attempt's exception to the user prompt so the LLM can see what
+            # it got wrong (missing OPTIONAL_CODE_SKETCH, unterminated fenced
+            # code block, bullet-bullet patterns, etc.) instead of re-running
+            # blind. The fields are spelled out so the LLM doesn't have to
+            # guess what the parser complained about. ``last_error`` is None
+            # on the first attempt — that branch is the unchanged code path.
+            if attempt > 1 and last_error is not None:
+                retry_user_prompt = (
+                    design_user_prompt
+                    + "\n\n=== PREVIOUS ATTEMPT FAILED ===\n"
+                    + f"This is creation retry attempt {attempt}/{max_attempts}. "
+                    + "The previous attempt's response was rejected by the parser or "
+                    + "validation layer with the following error:\n"
+                    + f"\n  {last_error}\n\n"
+                    + "Common causes the parser specifically flags:\n"
+                    + "- one or more required CORE_GENES subsections is missing "
+                    + "(e.g. you forgot `### OPTIONAL_CODE_SKETCH`).\n"
+                    + "- a fenced code block opened with ``` ``` `` was never closed.\n"
+                    + "- a continuation line is indented but no `- ` bullet precedes it.\n"
+                    + "- a `- - ` (dash-bullet-bullet) pattern at indent 0 — fenced code blocks "
+                    + "must be either bare (` ``` `python ... ` ``` `) or directly inside one bullet "
+                    + "(`- ``` `python ... ` ``` `), never inside a sub-bullet.\n"
+                    + "- a `### Heading` subsection name not matching the schema exactly.\n\n"
+                    + "Re-produce the FULL response from scratch (not a diff) with the error fixed. "
+                    + "Do not paste the previous broken response back."
+                )
+            else:
+                retry_user_prompt = design_user_prompt
             try:
                 return self.run_creation_stages(
                     design_system_prompt=design_system_prompt,
-                    design_user_prompt=design_user_prompt,
+                    design_user_prompt=retry_user_prompt,
                     org_dir=org_dir,
                     organism_id=organism_id,
                     generation=generation,
@@ -2262,7 +2291,7 @@ class CandidateGenerator(BaseLlmGenerator):
                     delay = self._retry_backoff_sec(attempt)
                     _announce(
                         f"organism {organism_id} retrying in {delay:.0f}s "
-                        f"(attempt {attempt}/{max_attempts})"
+                        f"(attempt {attempt}/{max_attempts}) with parse-error feedback"
                     )
                     time.sleep(delay)
 

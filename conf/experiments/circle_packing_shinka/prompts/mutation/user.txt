@@ -13,6 +13,13 @@ This is the only parent. There is no pre-sampled child draft and no externally e
 You decide which mechanism to evolve, which to keep verbatim, and which to drop.
 {parent_genetic_code}
 
+=== PARENT IMPLEMENTATION (ground truth Python) ===
+Below is the parent's actual `implementation.py` — the code that the host evaluator scored. The genetic code above is the design intent; this block is what actually runs.
+
+```python
+{parent_implementation}
+```
+
 === PARENT LINEAGE SUMMARY ===
 Past idea changes and their outcomes. Scores in lineage: higher is better.
 Use score trends to identify which mechanisms helped, and to spot regime convergence (e.g. several recent children all keeping a single global radius; several recent children all using the same symmetry family).

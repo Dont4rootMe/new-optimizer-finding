@@ -30,9 +30,11 @@ from src.organisms.novelty import (
 from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
+    format_implementation_code,
     format_lineage_summary,
     format_parent_fitness_signal,
     read_organism_genetic_code,
+    read_organism_implementation,
     read_organism_lineage,
 )
 
@@ -192,6 +194,14 @@ def build_mutation_design_bundle(
 
     parent_genetic_code = read_organism_genetic_code(parent)
     parent_lineage = read_organism_lineage(parent)
+    # Ground-truth Python that the parent actually executes. Previously
+    # only the implementation stage saw this; Step 1 (rationalization) and
+    # Step 2 (formalization) operated on the prose ``parent_genetic_code``
+    # alone, which let the LLM confidently "diagnose" mechanisms that
+    # might not even exist in the parent's Python. Reading it here so
+    # ``build_mutation_prompt_from_artifacts`` can inject it into all
+    # stages.
+    parent_implementation = read_organism_implementation(parent)
 
     return build_mutation_prompt_from_artifacts(
         parent_genetic_code=parent_genetic_code,
@@ -201,6 +211,7 @@ def build_mutation_design_bundle(
         compatibility_feedback=compatibility_feedback,
         family_id=family_id,
         parent_simple_score=parent.simple_score,
+        parent_implementation=parent_implementation,
     )
 
 
@@ -213,6 +224,7 @@ def build_mutation_prompt_from_artifacts(
     compatibility_feedback: list[CompatibilityJudgment] | None = None,
     family_id: str | None = None,
     parent_simple_score: float | None = None,
+    parent_implementation: str | None = None,
     # Legacy kwargs accepted for backward compatibility with manual_pipeline.py;
     # both are intentionally unused since pre-LLM gene sampling is disabled.
     inherited_genes: list[str] | None = None,
@@ -226,6 +238,16 @@ def build_mutation_prompt_from_artifacts(
         primary_label="parent",
         primary_score=parent_simple_score,
         primary_lineage=list(parent_lineage),
+    )
+    # ``parent_implementation`` is the ground-truth Python the parent runs.
+    # It's optional so callers that don't have a parent (seeds) or that
+    # don't have the implementation loaded can still build the prompts;
+    # the ``(unavailable)`` fallback keeps ``.format()`` from raising on a
+    # missing placeholder while still being a readable signal to the LLM.
+    parent_implementation_str = (
+        format_implementation_code(parent_implementation)
+        if parent_implementation is not None
+        else "(unavailable)"
     )
     novelty_feedback_str = format_novelty_rejection_feedback(list(novelty_feedback or []))
     compatibility_block = ""
@@ -245,6 +267,7 @@ def build_mutation_prompt_from_artifacts(
         parent_genetic_code=parent_genetic_code_str,
         parent_lineage_summary=parent_lineage_str,
         parent_fitness_signal=parent_fitness_signal,
+        parent_implementation=parent_implementation_str,
         novelty_rejection_feedback=novelty_feedback_str,
         rationalization=RATIONALIZATION_PLACEHOLDER,
         # Legacy placeholders kept for backward compat with optimization_survey
@@ -268,6 +291,7 @@ def build_mutation_prompt_from_artifacts(
             parent_genetic_code=parent_genetic_code_str,
             parent_lineage_summary=parent_lineage_str,
             parent_fitness_signal=parent_fitness_signal,
+            parent_implementation=parent_implementation_str,
             lineage_regime_hint=lineage_regime_hint,
             novelty_rejection_feedback=novelty_feedback_str,
         )

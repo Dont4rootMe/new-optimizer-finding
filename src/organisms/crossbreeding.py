@@ -31,9 +31,11 @@ from src.organisms.novelty import (
 from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
+    format_implementation_code,
     format_lineage_summary,
     format_parent_fitness_signal,
     read_organism_genetic_code,
+    read_organism_implementation,
     read_organism_lineage,
 )
 
@@ -123,6 +125,13 @@ def build_crossover_design_bundle(
         family_id=family_id,
         mother_simple_score=mother.simple_score,
         father_simple_score=father.simple_score,
+        # Ground-truth Python both parents actually execute. Previously
+        # only the implementation stage saw this; Step 1 (rationalization)
+        # and Step 2 (formalization) had to reason about the parents from
+        # the prose genetic_code alone, which let the LLM diagnose
+        # mechanisms that may not even exist in the parents' Python.
+        mother_implementation=read_organism_implementation(mother),
+        father_implementation=read_organism_implementation(father),
     )
 
 
@@ -138,6 +147,8 @@ def build_crossover_prompt_from_artifacts(
     family_id: str | None = None,
     mother_simple_score: float | None = None,
     father_simple_score: float | None = None,
+    mother_implementation: str | None = None,
+    father_implementation: str | None = None,
     # Legacy kwarg accepted for backward compatibility with manual_pipeline.py;
     # intentionally unused since pre-LLM gene merging is disabled.
     inherited_genes: list[str] | None = None,
@@ -148,6 +159,19 @@ def build_crossover_prompt_from_artifacts(
     mother_lineage_str = format_lineage_summary(list(mother_lineage))
     father_code_str = format_genetic_code(dict(father_genetic_code))
     father_lineage_str = format_lineage_summary(list(father_lineage))
+    # Optional ground-truth implementations for each parent. Same shape as
+    # the mutation builder: ``(unavailable)`` fallback keeps ``.format()``
+    # happy on legacy callers that don't have the implementations loaded.
+    mother_implementation_str = (
+        format_implementation_code(mother_implementation)
+        if mother_implementation is not None
+        else "(unavailable)"
+    )
+    father_implementation_str = (
+        format_implementation_code(father_implementation)
+        if father_implementation is not None
+        else "(unavailable)"
+    )
     parent_fitness_signal = format_parent_fitness_signal(
         primary_label="mother",
         primary_score=mother_simple_score,
@@ -172,6 +196,8 @@ def build_crossover_prompt_from_artifacts(
         father_genetic_code=father_code_str,
         father_lineage_summary=father_lineage_str,
         parent_fitness_signal=parent_fitness_signal,
+        mother_implementation=mother_implementation_str,
+        father_implementation=father_implementation_str,
         novelty_rejection_feedback=novelty_feedback_str,
         rationalization=RATIONALIZATION_PLACEHOLDER,
         # Legacy placeholder for optimization_survey prompts that still
@@ -195,6 +221,8 @@ def build_crossover_prompt_from_artifacts(
             father_genetic_code=father_code_str,
             father_lineage_summary=father_lineage_str,
             parent_fitness_signal=parent_fitness_signal,
+            mother_implementation=mother_implementation_str,
+            father_implementation=father_implementation_str,
             lineage_regime_hint=lineage_regime_hint,
             novelty_rejection_feedback=novelty_feedback_str,
         )
