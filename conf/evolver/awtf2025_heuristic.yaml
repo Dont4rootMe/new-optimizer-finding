@@ -50,6 +50,14 @@ prompts:
   repair_system: conf/experiments/awtf2025_heuristic/prompts/repair/system.txt
   repair_user: conf/experiments/awtf2025_heuristic/prompts/repair/user.txt
 
+  # FunSearch / Shinka-style multi-program prompting: how many top-K
+  # survivors from the parent's island to inline into Step 1 / Step 2
+  # prompts (alongside the parent itself). Set to 0 to disable and fall
+  # back to single-parent reasoning. Effective only after the survivor
+  # pool has filled — early gens with too few survivors get an empty
+  # block regardless.
+  num_inspirations: 2
+
 reproduction:
   offspring_per_generation: 10
   operator_selection_strategy: random

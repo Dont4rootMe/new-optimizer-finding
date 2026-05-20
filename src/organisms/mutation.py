@@ -31,6 +31,7 @@ from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
     format_implementation_code,
+    format_inspiration_organisms,
     format_lineage_summary,
     format_parent_fitness_signal,
     read_organism_genetic_code,
@@ -183,6 +184,7 @@ def build_mutation_design_bundle(
     novelty_feedback: list[str] | None = None,
     compatibility_feedback: list[CompatibilityJudgment] | None = None,
     family_id: str | None = None,
+    inspirations: list[OrganismMeta] | None = None,
 ) -> DesignPromptBundle:
     """Build the full two-step prompt bundle for a mutation child.
 
@@ -190,6 +192,14 @@ def build_mutation_design_bundle(
     (``supports_two_step_mutation`` is False) the returned bundle has
     ``rationalization_*`` fields set to None and only the formalization
     prompts populated — the generator then routes the call as single-step.
+
+    ``inspirations`` is the top-K archive sample from the parent's
+    island (excluding the parent itself). When non-empty, each
+    inspiration's score, change_description, and implementation.py are
+    rendered into the Step 1 / Step 2 prompts so the LLM has multiple
+    high-scoring reference programs to contrast against — Shinka/
+    FunSearch-style "show the best programs" pattern. Empty list is
+    fine: the prompt placeholder renders as ``(no inspirations)``.
     """
 
     parent_genetic_code = read_organism_genetic_code(parent)
@@ -212,6 +222,7 @@ def build_mutation_design_bundle(
         family_id=family_id,
         parent_simple_score=parent.simple_score,
         parent_implementation=parent_implementation,
+        inspirations=inspirations,
     )
 
 
@@ -225,6 +236,7 @@ def build_mutation_prompt_from_artifacts(
     family_id: str | None = None,
     parent_simple_score: float | None = None,
     parent_implementation: str | None = None,
+    inspirations: list[OrganismMeta] | None = None,
     # Legacy kwargs accepted for backward compatibility with manual_pipeline.py;
     # both are intentionally unused since pre-LLM gene sampling is disabled.
     inherited_genes: list[str] | None = None,
@@ -249,6 +261,7 @@ def build_mutation_prompt_from_artifacts(
         if parent_implementation is not None
         else "(unavailable)"
     )
+    inspirations_str = format_inspiration_organisms(inspirations)
     novelty_feedback_str = format_novelty_rejection_feedback(list(novelty_feedback or []))
     compatibility_block = ""
     if compatibility_feedback:
@@ -268,6 +281,7 @@ def build_mutation_prompt_from_artifacts(
         parent_lineage_summary=parent_lineage_str,
         parent_fitness_signal=parent_fitness_signal,
         parent_implementation=parent_implementation_str,
+        inspirations=inspirations_str,
         novelty_rejection_feedback=novelty_feedback_str,
         rationalization=RATIONALIZATION_PLACEHOLDER,
         # Legacy placeholders kept for backward compat with optimization_survey
@@ -292,6 +306,7 @@ def build_mutation_prompt_from_artifacts(
             parent_lineage_summary=parent_lineage_str,
             parent_fitness_signal=parent_fitness_signal,
             parent_implementation=parent_implementation_str,
+            inspirations=inspirations_str,
             lineage_regime_hint=lineage_regime_hint,
             novelty_rejection_feedback=novelty_feedback_str,
         )
@@ -328,8 +343,20 @@ class MutationOperator:
         org_dir: Path,
         generator: Any,
         pipeline_state_callback: Any = None,
+        inspirations: list[OrganismMeta] | None = None,
     ) -> OrganismMeta:
-        """Create a child organism via mutation."""
+        """Create a child organism via mutation.
+
+        ``inspirations`` is the top-K archive sample picked by the
+        evolution loop (typically 2-3 best programs from the parent's
+        island excluding the parent itself). When non-empty their
+        implementations are formatted into Step 1 / Step 2 prompts so
+        the LLM has multiple high-scoring reference programs to
+        contrast against — Shinka/FunSearch-style multi-program
+        prompting. When ``None`` or empty the prompts render
+        ``(no inspirations)`` and the LLM falls back to single-parent
+        reasoning.
+        """
 
         inherited_genes: list[str] = []
         removed_genes: list[str] = []
@@ -340,6 +367,7 @@ class MutationOperator:
             parent=parent,
             prompts=generator.prompt_bundle,
             family_id=family_id,
+            inspirations=inspirations,
         )
 
         # Step 1 (rationalization) runs once per organism creation attempt.
@@ -367,6 +395,7 @@ class MutationOperator:
                 novelty_feedback=novelty_feedback,
                 compatibility_feedback=compatibility_feedback,
                 family_id=family_id,
+                inspirations=inspirations,
             )
             return retry_bundle.render_formalization(rationale_text)
 

@@ -32,6 +32,7 @@ from src.organisms.organism import (
     build_organism_from_response,
     format_genetic_code,
     format_implementation_code,
+    format_inspiration_organisms,
     format_lineage_summary,
     format_parent_fitness_signal,
     read_organism_genetic_code,
@@ -111,6 +112,7 @@ def build_crossover_design_bundle(
     novelty_feedback: list[str] | None = None,
     compatibility_feedback: list[CompatibilityJudgment] | None = None,
     family_id: str | None = None,
+    inspirations: list[OrganismMeta] | None = None,
 ) -> DesignPromptBundle:
     """Build the full two-step prompt bundle for a crossover child."""
 
@@ -132,6 +134,7 @@ def build_crossover_design_bundle(
         # mechanisms that may not even exist in the parents' Python.
         mother_implementation=read_organism_implementation(mother),
         father_implementation=read_organism_implementation(father),
+        inspirations=inspirations,
     )
 
 
@@ -149,6 +152,7 @@ def build_crossover_prompt_from_artifacts(
     father_simple_score: float | None = None,
     mother_implementation: str | None = None,
     father_implementation: str | None = None,
+    inspirations: list[OrganismMeta] | None = None,
     # Legacy kwarg accepted for backward compatibility with manual_pipeline.py;
     # intentionally unused since pre-LLM gene merging is disabled.
     inherited_genes: list[str] | None = None,
@@ -172,6 +176,7 @@ def build_crossover_prompt_from_artifacts(
         if father_implementation is not None
         else "(unavailable)"
     )
+    inspirations_str = format_inspiration_organisms(inspirations)
     parent_fitness_signal = format_parent_fitness_signal(
         primary_label="mother",
         primary_score=mother_simple_score,
@@ -198,6 +203,7 @@ def build_crossover_prompt_from_artifacts(
         parent_fitness_signal=parent_fitness_signal,
         mother_implementation=mother_implementation_str,
         father_implementation=father_implementation_str,
+        inspirations=inspirations_str,
         novelty_rejection_feedback=novelty_feedback_str,
         rationalization=RATIONALIZATION_PLACEHOLDER,
         # Legacy placeholder for optimization_survey prompts that still
@@ -223,6 +229,7 @@ def build_crossover_prompt_from_artifacts(
             parent_fitness_signal=parent_fitness_signal,
             mother_implementation=mother_implementation_str,
             father_implementation=father_implementation_str,
+            inspirations=inspirations_str,
             lineage_regime_hint=lineage_regime_hint,
             novelty_rejection_feedback=novelty_feedback_str,
         )
@@ -260,8 +267,14 @@ class CrossbreedingOperator:
         org_dir: Path,
         generator: Any,
         pipeline_state_callback: Any = None,
+        inspirations: list[OrganismMeta] | None = None,
     ) -> OrganismMeta:
-        """Create a child organism via crossbreeding."""
+        """Create a child organism via crossbreeding.
+
+        ``inspirations`` — see :meth:`MutationOperator.produce`. Top-K
+        archive sample from the mother's island, formatted into Step 1
+        / Step 2 prompts for FunSearch-style multi-program reference.
+        """
 
         child_dna: list[str] = []
         LOGGER.info(
@@ -276,6 +289,7 @@ class CrossbreedingOperator:
             father=father,
             prompts=generator.prompt_bundle,
             family_id=family_id,
+            inspirations=inspirations,
         )
 
         rationale_text = _maybe_run_step1(
@@ -296,6 +310,7 @@ class CrossbreedingOperator:
                 prompts=generator.prompt_bundle,
                 novelty_feedback=novelty_feedback,
                 compatibility_feedback=compatibility_feedback,
+                inspirations=inspirations,
                 family_id=family_id,
             )
             return retry_bundle.render_formalization(rationale_text)

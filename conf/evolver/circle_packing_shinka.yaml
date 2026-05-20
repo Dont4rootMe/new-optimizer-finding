@@ -48,6 +48,11 @@ prompts:
   repair_system: conf/experiments/circle_packing_shinka/prompts/repair/system.txt
   repair_user: conf/experiments/circle_packing_shinka/prompts/repair/user.txt
 
+  # Top-K survivors from the parent's island inlined into Step 1 /
+  # Step 2 prompts. See ``conf/evolver/awtf2025_heuristic.yaml`` for
+  # the full description.
+  num_inspirations: 2
+
 reproduction:
   offspring_per_generation: 5
   operator_selection_strategy: random

@@ -33,6 +33,10 @@ The actual `implementation.py` the secondary parent runs. When picking the impor
 Higher score = better.
 {father_lineage_summary}
 
+=== TOP-K INSPIRATION PROGRAMS (mother's island, sorted best first) ===
+Highest-scoring survivors on the primary parent's island, excluding both parents. Reference programs for the child's CORE_GENES.
+{inspirations}
+
 === LINEAGE REGIME HINT (PRIMARY PARENT'S LINEAGE) ===
 Auto-generated convergence diagnosis from the primary parent's recent ancestors.
 {lineage_regime_hint}

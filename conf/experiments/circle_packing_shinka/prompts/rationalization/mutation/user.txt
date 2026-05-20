@@ -17,6 +17,10 @@ Below is the parent's actual `implementation.py` — the code that produced the 
 Past idea changes in this lineage and their outcomes (higher score = better).
 {parent_lineage_summary}
 
+=== TOP-K INSPIRATION PROGRAMS (same island, sorted best first) ===
+Highest-scoring organisms currently surviving on the parent's island, excluding the parent. Use them as reference programs to spot common patterns. If this block reads "(no inspirations)" the survivor pool is too small to sample yet.
+{inspirations}
+
 === LINEAGE REGIME HINT ===
 Auto-generated convergence diagnosis from the last several ancestors.
 {lineage_regime_hint}

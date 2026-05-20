@@ -26,6 +26,10 @@ Use score trends to identify which mechanisms helped, and to spot regime converg
 If the lineage shows convergence, prefer a mutation that breaks out of that regime instead of tuning inside it.
 {parent_lineage_summary}
 
+=== TOP-K INSPIRATION PROGRAMS (same island, sorted best first) ===
+Highest-scoring survivors on the parent's island, excluding the parent. Use them as additional reference programs when designing the child's CORE_GENES. When the child's `STEP 1 DESIGN RATIONALE` proposed a mechanism import or invention, check whether one of these inspirations already implements something similar — if so, mention the resemblance in `## CHANGE_DESCRIPTION` so novelty validators can see the lineage.
+{inspirations}
+
 === NOVELTY REJECTION FEEDBACK ===
 If a previous candidate child was rejected for lacking novelty, address those issues explicitly.
 If there was no prior rejection, this section will say so.

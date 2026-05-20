@@ -38,6 +38,10 @@ The actual `implementation.py` the secondary parent runs. When picking the impor
 Scores in lineage: higher is better. Use score trends to identify which mechanisms in the secondary parent's ancestry actually helped.
 {father_lineage_summary}
 
+=== TOP-K INSPIRATION PROGRAMS (mother's island, sorted best first) ===
+Highest-scoring survivors on the primary parent's island, excluding both parents. Use them as additional reference programs when designing the child's CORE_GENES.
+{inspirations}
+
 === NOVELTY REJECTION FEEDBACK ===
 If a previous candidate child was rejected for lacking novelty, address those issues explicitly.
 If there was no prior rejection, this section will say so.

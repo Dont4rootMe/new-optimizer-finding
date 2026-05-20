@@ -111,6 +111,78 @@ def _format_core_gene_block(genetic_code: dict[str, Any]) -> str:
     return rendered.strip() or "(none)"
 
 
+def format_inspiration_organisms(
+    inspirations: list[OrganismMeta] | None,
+    *,
+    max_implementation_chars: int = 8000,
+) -> str:
+    """Render top-K archive inspirations into a single prompt block.
+
+    Shinka and FunSearch both show the LLM multiple "best programs"
+    alongside the parent so the LLM can identify what high-scoring
+    organisms have in common. Our prompt builders previously showed only
+    the single parent (no inspiration pool), so the LLM had no contrast
+    to anchor its mutation against. This helper formats up to N
+    inspirations as labeled blocks containing the inspiration's score,
+    island, and a truncated view of its implementation.py plus the most
+    recent change_description from its lineage.
+
+    The implementations are truncated to ``max_implementation_chars`` so
+    the prompt doesn't balloon past the local model's effective context;
+    8 kB is roughly 2 kB per inspiration when 3 are shown, comfortable
+    on a 32k-context Qwen.
+
+    Returns ``"(no inspirations)"`` when the list is empty so the prompt
+    placeholder is non-empty for ``str.format()`` and signals to the
+    LLM that no archive samples were available (e.g. on early gens
+    before the survivor pool has filled).
+    """
+
+    if not inspirations:
+        return "(no inspirations)"
+
+    blocks: list[str] = []
+    for index, organism in enumerate(inspirations, start=1):
+        score_value = getattr(organism, "simple_score", None)
+        score_str = f"{score_value:.4f}" if isinstance(score_value, (int, float)) else "(unscored)"
+        island_str = str(getattr(organism, "island_id", "(unknown)"))
+        change_desc = ""
+        try:
+            lineage = read_organism_lineage(organism)
+            if lineage:
+                latest = lineage[-1]
+                change_desc = str(latest.get("change_description", "")).strip()
+        except Exception:  # noqa: BLE001
+            change_desc = ""
+        if not change_desc:
+            change_desc = "(no recorded change description)"
+        impl_path = getattr(organism, "implementation_path", "")
+        impl_text = ""
+        try:
+            if impl_path:
+                impl_text = Path(impl_path).read_text(encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            impl_text = ""
+        impl_text = impl_text.rstrip()
+        if not impl_text:
+            impl_text = "(implementation unavailable)"
+        elif len(impl_text) > max_implementation_chars:
+            head = impl_text[: max_implementation_chars // 2]
+            tail = impl_text[-max_implementation_chars // 2 :]
+            impl_text = f"{head}\n# ... <truncated for prompt length> ...\n{tail}"
+
+        block_lines = [
+            f"--- INSPIRATION #{index} (simple_score={score_str}, island={island_str}) ---",
+            f"change_description: {change_desc}",
+            "implementation.py:",
+            "```python",
+            impl_text,
+            "```",
+        ]
+        blocks.append("\n".join(block_lines))
+    return "\n\n".join(blocks)
+
+
 def format_parent_fitness_signal(
     *,
     primary_label: str,

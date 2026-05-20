@@ -891,6 +891,52 @@ class EvolutionLoop:
         organism_id = uuid.uuid4().hex
         return organism_id, organism_dir(gen_dir, organism_id, island_id=island_id)
 
+    def _pick_inspirations(
+        self,
+        *,
+        parent: OrganismMeta,
+        exclude_ids: list[str] | None = None,
+    ) -> list[OrganismMeta]:
+        """Top-K archive sample from the parent's island for prompt injection.
+
+        Mirrors the Shinka/FunSearch "show the LLM the best programs"
+        pattern. We pick the highest-scoring organisms on the parent's
+        island (``simple_score`` is negated mean_absolute_score, so
+        ``reverse=True`` puts the best — least negative — first), skip
+        the parent itself and any ids in ``exclude_ids`` (used in
+        crossover to also skip the second parent), and clip to the
+        configured budget.
+
+        Budget is controlled by ``evolver.prompts.num_inspirations``,
+        default 2 — keeps the prompt size reasonable on local 32k-
+        context models while still giving the LLM more than one
+        reference program to contrast against. Set to 0 to disable
+        entirely (the prompt placeholder renders as ``(no inspirations)``
+        and the LLM falls back to single-parent reasoning).
+
+        The early generations (when survivor pool is empty or only
+        contains the parent) just produce an empty list — the formatter
+        handles that gracefully.
+        """
+
+        budget = int(
+            getattr(getattr(self.cfg.evolver, "prompts", object()), "num_inspirations", 2)
+        )
+        if budget <= 0:
+            return []
+        exclude = {parent.organism_id, *(exclude_ids or [])}
+        pool = [
+            organism
+            for organism in self.population
+            if organism.island_id == parent.island_id
+            and organism.organism_id not in exclude
+            and getattr(organism, "simple_score", None) is not None
+        ]
+        if not pool:
+            return []
+        pool.sort(key=lambda organism: float(organism.simple_score), reverse=True)
+        return pool[:budget]
+
     def _create_mutation_offspring(
         self,
         *,
@@ -911,6 +957,7 @@ class EvolutionLoop:
             org_dir=org_dir,
             generator=self.generator,
             pipeline_state_callback=pipeline_state_callback,
+            inspirations=self._pick_inspirations(parent=parent),
         )
 
     def _create_within_island_crossover_offspring(
@@ -935,6 +982,7 @@ class EvolutionLoop:
             org_dir=org_dir,
             generator=self.generator,
             pipeline_state_callback=pipeline_state_callback,
+            inspirations=self._pick_inspirations(parent=mother, exclude_ids=[father.organism_id]),
         )
 
     def _create_inter_island_crossover_offspring(
@@ -959,6 +1007,7 @@ class EvolutionLoop:
             org_dir=org_dir,
             generator=self.generator,
             pipeline_state_callback=pipeline_state_callback,
+            inspirations=self._pick_inspirations(parent=mother, exclude_ids=[father.organism_id]),
         )
 
     def _simple_evaluation_request(
