@@ -525,10 +525,22 @@ class CandidateGenerator(BaseLlmGenerator):
             # token budget is the same, the parser is more brittle, and the LLM has
             # to track changed-section bookkeeping it would otherwise skip. Snap to
             # FULL once at most one region would stay unchanged.
+            #
+            # NOTE: ``base_parent_implementation`` is intentionally kept
+            # populated even in FULL mode. The earlier version cleared it
+            # to "NONE" here, which forced the implementer-LLM to
+            # re-synthesize the entire Python from the prose CORE_GENES
+            # alone — losing the parent's helpers, idioms, and bug-fixed
+            # corner cases. With the parent code in scope the LLM can
+            # diff-from-baseline even in FULL mode (the FULL/PATCH switch
+            # is only about output format, not about whether the LLM may
+            # consult the parent). ``base_source_text`` and
+            # ``maternal_base_required`` are cleared because the
+            # implementation-patch parser uses them for region-level
+            # post-processing, which FULL mode doesn't need.
             if not full_source_rewrite and len(changed_sections) >= len(implementation_regions) - 1:
                 compilation_mode = "FULL"
                 changed_sections = implementation_regions
-                base_parent_implementation = "NONE"
                 base_source_text = None
                 maternal_base_required = False
 

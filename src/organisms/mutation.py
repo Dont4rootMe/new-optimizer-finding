@@ -413,8 +413,17 @@ class MutationOperator:
         }
         if compatibility_context is not None:
             creation_kwargs["compatibility_context"] = compatibility_context
-        if getattr(generator, "uses_section_patch_compilation", lambda: False)():
-            creation_kwargs["implementation_base_parent"] = parent
+        # Always pass the parent as the implementation base (was previously
+        # gated on ``uses_section_patch_compilation``). The implementation
+        # stage uses it as a reference baseline — when FULL-mode compilation
+        # would otherwise drop ``base_parent_implementation`` to the literal
+        # string "NONE" and ask the LLM to re-synthesize Python from prose,
+        # the parent's working code being in scope lets the LLM reuse
+        # helpers and idioms instead of inventing them. The gate stays in
+        # ``_prepare_implementation_stage`` for the inner FULL-vs-PATCH
+        # mode-switch decision; this gate just makes sure the parent flows
+        # in at all.
+        creation_kwargs["implementation_base_parent"] = parent
         if pipeline_state_callback is not None:
             creation_kwargs["pipeline_state_callback"] = pipeline_state_callback
         creation = run_creation(**creation_kwargs)

@@ -71,6 +71,7 @@ Produce scaffold region bodies for this organism.
 If COMPILATION_MODE is FULL:
 - compile all canonical regions from the scaffold
 - realize the supplied genes faithfully and preserve the score-seeking behavior they describe
+- when `MATERNAL BASE IMPLEMENTATION` is not `NONE`, use it as a reference baseline: helpers, variable conventions, and small invariants that the parent already has working should be reused verbatim where the child genes are silent about them. Re-synthesizing every function from prose is wasted work and a common source of subtle bugs (off-by-one in wall indexing, wrong move-resolution ordering, group/individual confusion). Read the maternal Python before writing; write new code only where the child genes demand a new mechanism.
 
 If COMPILATION_MODE is PATCH:
 - compile only the listed CHANGED_SECTIONS

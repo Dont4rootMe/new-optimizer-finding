@@ -343,8 +343,13 @@ class CrossbreedingOperator:
         }
         if compatibility_context is not None:
             creation_kwargs["compatibility_context"] = compatibility_context
-        if getattr(generator, "uses_section_patch_compilation", lambda: False)():
-            creation_kwargs["implementation_base_parent"] = mother
+        # Always pass the mother as the implementation base (was previously
+        # gated on ``uses_section_patch_compilation``). See the matching
+        # change in ``src/organisms/mutation.py`` for the rationale: the
+        # parent's working Python being in scope at the implementation
+        # stage lets the LLM reuse helpers instead of re-synthesizing
+        # from the genetic_code prose.
+        creation_kwargs["implementation_base_parent"] = mother
         if pipeline_state_callback is not None:
             creation_kwargs["pipeline_state_callback"] = pipeline_state_callback
         creation = run_creation(**creation_kwargs)
