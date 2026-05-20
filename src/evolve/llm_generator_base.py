@@ -84,6 +84,24 @@ class BaseLlmGenerator:
         # sampling above stays in effect.
         pipelines_cfg = OmegaConf.select(self.cfg, "evolver.llm.pipelines", default=None)
         self.pipelines: list[PipelineConfig] = parse_pipelines(pipelines_cfg)
+        # Diagnostic — the previous run distributed 98.6% of calls to gemma
+        # and 1.4% to qwen despite the awtf2025 yaml declaring a
+        # ``qwen_creative_gemma_check`` pipeline. The leading hypothesis is
+        # that ``pipelines`` is either not loading or is being shadowed by
+        # the legacy ``route_sampling`` path. Surface the loaded list on
+        # stderr so the post-mortem can confirm at-a-glance which branch is
+        # actually live.
+        if self.pipelines:
+            LOGGER.info(
+                "[pipelines] loaded %d pipeline(s): %s — pipeline-bandit path is ACTIVE",
+                len(self.pipelines),
+                [p.id for p in self.pipelines],
+            )
+        else:
+            LOGGER.info(
+                "[pipelines] no `evolver.llm.pipelines` configured — "
+                "legacy `route_sampling` path stays in effect"
+            )
         if self.pipelines:
             validate_pipeline_routes(self.pipelines, self.registry.available_route_ids)
             pipeline_sampling_cfg = OmegaConf.select(
@@ -257,6 +275,17 @@ class BaseLlmGenerator:
 
         with self._rng_lock:
             self._organism_pipeline_ids[organism_id] = pipeline_id
+        # One-line diagnostic so the post-mortem can confirm the bandit
+        # is actually splitting work across pipelines when more than one
+        # is configured. Logged once per organism (first lookup wins;
+        # subsequent stages of the same organism short-circuit on the
+        # cache above).
+        LOGGER.info(
+            "[pipelines] organism=%s assigned pipeline=%s (from %s)",
+            organism_id,
+            pipeline_id,
+            available_ids,
+        )
         return self._pipelines_by_id[pipeline_id]
 
     def pipeline_id_for_organism(self, organism_id: str) -> str | None:
