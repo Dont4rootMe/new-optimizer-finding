@@ -298,12 +298,45 @@ class EvolutionLoop:
         return None
 
     def _load_islands(self) -> list[Island]:
-        islands_dir = str(self._require_cfg_value("evolver.islands.dir")).strip()
-        if not islands_dir:
-            raise ValueError("Canonical evolve config must define evolver.islands.dir")
-        return load_islands(islands_dir)
+        # New ``from_seed`` mode synthesises ``Island`` records from a
+        # flat list of ids and copies a single baseline program into
+        # K×N organisms (no per-island LLM authoring). The legacy
+        # ``from_island_prompts`` mode reads handwritten descriptions
+        # from disk and asks the LLM to author each seed organism.
+        mode = self._islands_mode()
+        if mode == "from_seed":
+            from src.evolve.islands import synthesize_islands_from_ids
+            island_ids_cfg = self._require_cfg_value("evolver.islands.island_ids")
+            island_ids = [str(item) for item in island_ids_cfg]
+            return synthesize_islands_from_ids(island_ids)
+        if mode == "from_island_prompts":
+            islands_dir = str(self._require_cfg_value("evolver.islands.dir")).strip()
+            if not islands_dir:
+                raise ValueError("Canonical evolve config must define evolver.islands.dir")
+            return load_islands(islands_dir)
+        raise ValueError(
+            f"Unknown evolver.islands.mode={mode!r}; expected 'from_seed' or 'from_island_prompts'"
+        )
+
+    def _islands_mode(self) -> str:
+        # Default to legacy ``from_island_prompts`` so untouched configs
+        # keep their old behaviour. Anything new must opt in explicitly
+        # via ``evolver.islands.mode: from_seed``.
+        return str(
+            OmegaConf.select(self.cfg, "evolver.islands.mode", default="from_island_prompts")
+        ).strip()
 
     def _seed_organisms_per_island(self) -> int:
+        # In ``from_seed`` mode the user-facing knob is
+        # ``evolver.islands.seeds_per_island``; the legacy name
+        # ``seed_organisms_per_island`` is still accepted as a fallback.
+        if self._islands_mode() == "from_seed":
+            value = OmegaConf.select(
+                self.cfg, "evolver.islands.seeds_per_island", default=None
+            )
+            if value is None:
+                value = self._require_cfg_value("evolver.islands.seed_organisms_per_island")
+            return int(value)
         return int(self._require_cfg_value("evolver.islands.seed_organisms_per_island"))
 
     def _max_organisms_per_island(self) -> int:
@@ -1305,13 +1338,20 @@ class EvolutionLoop:
                         created_at=timestamp,
                     )
                 )
+                # In ``from_seed`` mode we plan a file-copy instead of a
+                # full LLM-generated seed. The route label ``seed_copy``
+                # makes ``_materialize_planned_organism`` skip the
+                # generator's heavy 3-stage seed path and call the
+                # lightweight ``materialize_seed_from_file`` instead.
+                route = "seed_copy" if self._islands_mode() == "from_seed" else "seed"
+                operator = "seed_copy" if route == "seed_copy" else "seed"
                 plan = PlannedOrganismCreation(
                     organism_id=organism_id,
                     organism_dir=str(org_dir),
                     island_id=island.island_id,
                     generation=0,
-                    route="seed",
-                    operator="seed",
+                    route=route,
+                    operator=operator,
                     mother_id=None,
                     mother_organism_dir=None,
                     father_id=None,
@@ -1559,6 +1599,35 @@ class EvolutionLoop:
                 organism_id=plan.organism_id,
                 generation=plan.generation,
                 organism_dir=org_dir,
+                pipeline_state_callback=pipeline_state_callback,
+            )
+        elif plan.route == "seed_copy":
+            # File-copy seed (Shinka / FunSearch / AlphaEvolve pattern):
+            # no LLM call. Copies a single baseline ``implementation.py``
+            # into the new organism's directory and synthesises a
+            # placeholder ``genetic_code.md`` from the family schema.
+            # All ``K × N`` seed organisms share the same baseline; they
+            # diverge later through mutation / crossover.
+            island = self.islands_by_id.get(plan.island_id)
+            if island is None:
+                raise ValueError(
+                    f"Seed_copy plan for organism {plan.organism_id} references unknown island '{plan.island_id}'."
+                )
+            source_path = Path(
+                str(self._require_cfg_value("evolver.islands.seed_program_path"))
+            ).expanduser()
+            if not source_path.is_absolute():
+                # Relative paths are resolved against the project root,
+                # which is the cwd at the time the entrypoint script
+                # (scripts/run_evolution.sh, scripts/seed_population.sh)
+                # launched python.
+                source_path = (Path.cwd() / source_path).resolve()
+            organism = self.generator.materialize_seed_from_file(
+                island=island,
+                organism_id=plan.organism_id,
+                generation=plan.generation,
+                organism_dir=org_dir,
+                source_path=source_path,
                 pipeline_state_callback=pipeline_state_callback,
             )
         elif plan.route == _ROUTE_MUTATION:

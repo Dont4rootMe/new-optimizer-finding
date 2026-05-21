@@ -11,6 +11,16 @@ creation:
   max_parallel_organisms: 20
 
 islands:
+  # See conf/evolver/awtf2025_heuristic.yaml for the full description of
+  # the ``mode`` selector. ``from_island_prompts`` keeps the legacy
+  # handwritten-per-island seed; circle_packing defaults to it because
+  # the seed program path is not wired up yet.
+  mode: from_island_prompts
+  # ``from_seed`` parameters (only used when mode=from_seed).
+  seed_program_path: experiments/circle_packing_shinka/_baselines/shinka/initial_program.py
+  island_ids: []
+  seeds_per_island: 5
+  # ``from_island_prompts`` parameters.
   dir: conf/experiments/circle_packing_shinka/prompts/islands
   seed_organisms_per_island: 5
   max_organisms_per_island: 5

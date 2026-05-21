@@ -13,6 +13,26 @@ creation:
   max_parallel_organisms: 15
 
 islands:
+  # ``mode`` chooses how the seed population is initialized:
+  #   * ``from_seed``           — copy one handwritten baseline program
+  #     (``seed_program_path``) into K×N organisms across the
+  #     ``island_ids``. No LLM calls during the seed phase. This is the
+  #     Shinka / FunSearch / AlphaEvolve pattern: diversity emerges
+  #     from the evolutionary stage (mutation, crossover, bandit
+  #     selection, lineage_regime_hint), not from handwritten
+  #     per-island seed prompts. Seed phase completes in seconds.
+  #   * ``from_island_prompts`` — legacy mode: read island descriptions
+  #     from ``dir``, ask the LLM to author one organism per (island,
+  #     slot) from scratch via the ``seed_system`` / ``seed_user``
+  #     prompts. Heavy (~30 min per organism on qwen 122B because of
+  #     design + compatibility + implementation stages stacked), kept
+  #     for backwards compatibility and ablation experiments.
+  mode: from_seed
+  # ``from_seed`` parameters.
+  seed_program_path: experiments/awtf2025_heuristic/_baselines/shinka/initial_program.py
+  island_ids: [macro_partitioning, staged_routing_repair]
+  seeds_per_island: 5
+  # ``from_island_prompts`` parameters (legacy mode).
   dir: conf/experiments/awtf2025_heuristic/prompts/islands
   seed_organisms_per_island: 5
   max_organisms_per_island: 10

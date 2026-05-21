@@ -2568,3 +2568,120 @@ class CandidateGenerator(BaseLlmGenerator):
             parent_lineage=[],
             expected_core_gene_sections=self.expected_core_gene_sections,
         )
+
+    def materialize_seed_from_file(
+        self,
+        island: Island,
+        organism_id: str,
+        generation: int,
+        organism_dir: Path,
+        source_path: Path,
+        pipeline_state_callback: Callable[[str], None] | None = None,
+    ) -> OrganismMeta:
+        """Build a seed organism by copying a handwritten baseline program.
+
+        This is the lightweight path used when ``evolver.islands.mode``
+        is set to ``from_seed``. Instead of asking the LLM to author a
+        per-island organism from scratch (3 heavy LLM calls × N×K seeds
+        = hours on a 122B model), we copy a single working
+        ``implementation.py`` into every (island, slot) tuple. Each copy
+        runs through the existing ``simple_eval`` path and seeds the
+        bandits with a real fitness measurement immediately.
+
+        The synthetic ``genetic_code.md`` lists every schema subsection
+        with a single ``- baseline seed (file-copy from <source>)``
+        bullet — enough to make the parser happy without inventing
+        prose that the implementer's Python doesn't actually realise.
+        Lineage starts empty: this organism has no LLM-generated
+        ancestors, only the on-disk source.
+
+        Diversity is expected to emerge during the evolutionary stage
+        (mutation, crossover, lineage_regime_hint), not on the seed.
+        """
+
+        if not source_path.exists() or not source_path.is_file():
+            raise FileNotFoundError(
+                f"evolver.islands.seed_program_path does not exist: {source_path}"
+            )
+        implementation_code = source_path.read_text(encoding="utf-8")
+        if not implementation_code.strip():
+            raise ValueError(
+                f"evolver.islands.seed_program_path is empty: {source_path}"
+            )
+        if pipeline_state_callback is not None:
+            pipeline_state_callback("creating")
+
+        # Synthetic CORE_GENES: one schema-conformant bullet per
+        # required subsection plus ``- None.`` for the trailing
+        # optional section. The exact list of subsections is family-
+        # specific and comes from the loaded schema.
+        if self.expected_core_gene_sections is None:
+            raise ValueError(
+                "materialize_seed_from_file requires expected_core_gene_sections; "
+                "this family's genome schema did not load."
+            )
+        baseline_text = f"baseline seed (file-copy from {source_path.name})"
+        core_genes_lines: list[str] = []
+        for index, section_name in enumerate(self.expected_core_gene_sections):
+            core_genes_lines.append(f"### {section_name}")
+            is_last_optional = (
+                section_name == "OPTIONAL_CODE_SKETCH"
+                or index == len(self.expected_core_gene_sections) - 1
+            )
+            if is_last_optional:
+                core_genes_lines.append("- None.")
+            else:
+                core_genes_lines.append(f"- {baseline_text}")
+        core_genes_text = "\n".join(core_genes_lines)
+
+        parsed: dict[str, str] = {
+            "CORE_GENES": core_genes_text,
+            "INTERACTION_NOTES": (
+                f"Seeded directly from {source_path.name}. The CORE_GENES bullets above are "
+                "placeholders for the design intent; the executed behaviour is fully described "
+                "by the baseline Python below. Subsequent mutations will replace these bullets "
+                "with real design rationale as the LLM iterates on the program."
+            ),
+            "COMPUTE_NOTES": (
+                "Compute matches the baseline program: deterministic, bounded by the "
+                "evaluator-side per-case timeout. No new operations are introduced by "
+                "this seed step."
+            ),
+            "CHANGE_DESCRIPTION": (
+                "Initial population seed copied verbatim from the family's baseline "
+                "implementation. Diversity emerges through mutation and crossover on "
+                "subsequent generations, not on this step."
+            ),
+        }
+
+        if pipeline_state_callback is not None:
+            pipeline_state_callback("design")
+            pipeline_state_callback("implementation")
+
+        # ``prompt_hash`` is normally an LLM-prompt digest used for dedup
+        # of identical prompts. Here every copy shares the same source
+        # baseline; we include the organism_id so dedup logic that
+        # rejects exact-prompt collisions doesn't accidentally
+        # garbage-collect the rest of the population.
+        prompt_hash = sha1_text(f"seed_copy:{source_path}:{organism_id}")
+
+        return build_organism_from_response(
+            parsed=parsed,
+            implementation_code=implementation_code,
+            organism_id=organism_id,
+            island_id=island.island_id,
+            generation=generation,
+            mother_id=None,
+            father_id=None,
+            operator="seed_copy",
+            org_dir=organism_dir,
+            llm_route_id="seed_copy",
+            llm_provider="filesystem",
+            provider_model_id="",
+            llm_pipeline_id="",
+            prompt_hash=prompt_hash,
+            seed=self.seed,
+            timestamp=utc_now_iso(),
+            parent_lineage=[],
+            expected_core_gene_sections=self.expected_core_gene_sections,
+        )
