@@ -180,15 +180,9 @@ def test_awtf2025_implementation_prompt_includes_mechanic_audit_step() -> None:
 def test_awtf2025_prompts_avoid_solution_leading_lists() -> None:
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
-    root = ROOT / "conf" / "experiments" / "awtf2025_heuristic" / "prompts"
-
-    macro_text = (root / "islands" / "macro_partitioning.txt").read_text(encoding="utf-8")
-    repair_text = (root / "islands" / "staged_routing_repair.txt").read_text(encoding="utf-8")
 
     banned = ("all robots in one group", "fixed spiral script", "single hardcoded output")
     for token in banned:
         assert token not in bundle.seed_system.lower()
         assert token not in bundle.mutation_system.lower()
         assert token not in bundle.crossover_system.lower()
-        assert token not in macro_text.lower()
-        assert token not in repair_text.lower()

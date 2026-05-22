@@ -14,13 +14,6 @@ from src.evolve.prompt_utils import (
 )
 from src.evolve.storage import utc_now_iso
 from src.evolve.types import OrganismMeta
-from src.organisms.compatibility import (
-    CompatibilityCheckContext,
-    CompatibilityJudgment,
-    CompatibilityValidationContext,
-    build_mutation_compatibility_prompt,
-    format_compatibility_rejection_feedback,
-)
 from src.organisms.lineage_regime import summarize_recent_regime
 from src.organisms.novelty import (
     NoveltyCheckContext,
@@ -159,7 +152,6 @@ def _build_mutate_prompt(
     parent: OrganismMeta,
     prompts: PromptBundle,
     novelty_feedback: list[str] | None = None,
-    compatibility_feedback: list[CompatibilityJudgment] | None = None,
 ) -> tuple[str, str]:
     """Build `(system_prompt, user_prompt)` for mutation LLM call (legacy path).
 
@@ -172,7 +164,6 @@ def _build_mutate_prompt(
         parent=parent,
         prompts=prompts,
         novelty_feedback=novelty_feedback,
-        compatibility_feedback=compatibility_feedback,
     )
     return bundle.render_formalization(rationale_text=None)
 
@@ -182,7 +173,6 @@ def build_mutation_design_bundle(
     parent: OrganismMeta,
     prompts: PromptBundle,
     novelty_feedback: list[str] | None = None,
-    compatibility_feedback: list[CompatibilityJudgment] | None = None,
     family_id: str | None = None,
     inspirations: list[OrganismMeta] | None = None,
 ) -> DesignPromptBundle:
@@ -218,7 +208,6 @@ def build_mutation_design_bundle(
         parent_lineage=parent_lineage,
         prompts=prompts,
         novelty_feedback=novelty_feedback,
-        compatibility_feedback=compatibility_feedback,
         family_id=family_id,
         parent_simple_score=parent.simple_score,
         parent_implementation=parent_implementation,
@@ -232,7 +221,6 @@ def build_mutation_prompt_from_artifacts(
     parent_lineage: list[dict[str, Any]],
     prompts: PromptBundle,
     novelty_feedback: list[str] | None = None,
-    compatibility_feedback: list[CompatibilityJudgment] | None = None,
     family_id: str | None = None,
     parent_simple_score: float | None = None,
     parent_implementation: str | None = None,
@@ -263,12 +251,6 @@ def build_mutation_prompt_from_artifacts(
     )
     inspirations_str = format_inspiration_organisms(inspirations)
     novelty_feedback_str = format_novelty_rejection_feedback(list(novelty_feedback or []))
-    compatibility_block = ""
-    if compatibility_feedback:
-        compatibility_block = (
-            "\n\n=== COMPATIBILITY REJECTION FEEDBACK ===\n"
-            f"{format_compatibility_rejection_feedback(compatibility_feedback)}"
-        )
 
     # Step 2 (formalization) — the {rationalization} placeholder stays literal
     # until the generator substitutes it for either the Step-1 output or the
@@ -289,7 +271,7 @@ def build_mutation_prompt_from_artifacts(
         # Production awtf2025 + circle_packing prompts have dropped them.
         inherited_gene_pool="(none)",
         removed_gene_pool="(none)",
-    ) + compatibility_block
+    )
 
     # Step 1 (rationalization) — only rendered when the family ships the
     # prompts. The lineage regime hint feeds in here exclusively.
@@ -310,11 +292,6 @@ def build_mutation_prompt_from_artifacts(
             lineage_regime_hint=lineage_regime_hint,
             novelty_rejection_feedback=novelty_feedback_str,
         )
-        if compatibility_feedback:
-            rationalization_user = (
-                f"{rationalization_user}\n\n=== COMPATIBILITY REJECTION FEEDBACK ===\n"
-                f"{format_compatibility_rejection_feedback(compatibility_feedback)}"
-            )
 
     return DesignPromptBundle(
         formalization_system=formalization_system,
@@ -371,10 +348,10 @@ class MutationOperator:
         )
 
         # Step 1 (rationalization) runs once per organism creation attempt.
-        # The result is cached and reused across novelty / compatibility
-        # retries: rejections almost always reflect formalization drift, not
-        # a wrong strategic direction, so re-running Step 1 wastes a call
-        # and risks the planner contradicting itself across iterations.
+        # The result is cached and reused across novelty retries: rejections
+        # almost always reflect formalization drift, not a wrong strategic
+        # direction, so re-running Step 1 wastes a call and risks the planner
+        # contradicting itself across iterations.
         rationale_text = _maybe_run_step1(
             generator=generator,
             bundle=initial_bundle,
@@ -388,12 +365,11 @@ class MutationOperator:
         inherited_genes_for_validators: list[str] = []
         removed_genes_for_validators: list[str] = []
 
-        def _rebuild_step2(novelty_feedback=None, compatibility_feedback=None):
+        def _rebuild_step2(novelty_feedback=None):
             retry_bundle = build_mutation_design_bundle(
                 parent=parent,
                 prompts=generator.prompt_bundle,
                 novelty_feedback=novelty_feedback,
-                compatibility_feedback=compatibility_feedback,
                 family_id=family_id,
                 inspirations=inspirations,
             )
@@ -411,26 +387,6 @@ class MutationOperator:
                 expected_core_gene_sections=getattr(generator, "expected_core_gene_sections", None),
             ),
         )
-        compatibility_context = None
-        if (
-            getattr(generator.prompt_bundle, "compatibility_mutation_system", "")
-            and getattr(generator.prompt_bundle, "compatibility_mutation_user", "")
-        ):
-            compatibility_context = CompatibilityValidationContext(
-                check=CompatibilityCheckContext(operator_kind="mutation"),
-                build_design_prompts=lambda novelty_feedback, compatibility_feedback: _rebuild_step2(
-                    novelty_feedback=novelty_feedback,
-                    compatibility_feedback=compatibility_feedback,
-                ),
-                build_compatibility_prompts=lambda candidate_design: build_mutation_compatibility_prompt(
-                    inherited_genes=inherited_genes_for_validators,
-                    removed_genes=removed_genes_for_validators,
-                    parent=parent,
-                    candidate_design=candidate_design,
-                    prompts=generator.prompt_bundle,
-                    expected_core_gene_sections=getattr(generator, "expected_core_gene_sections", None),
-                ),
-            )
         run_creation = getattr(generator, "run_creation_stages_with_retries", generator.run_creation_stages)
         creation_kwargs = {
             "design_system_prompt": system_prompt,
@@ -440,8 +396,6 @@ class MutationOperator:
             "generation": generation,
             "novelty_context": novelty_context,
         }
-        if compatibility_context is not None:
-            creation_kwargs["compatibility_context"] = compatibility_context
         # Always pass the parent as the implementation base (was previously
         # gated on ``uses_section_patch_compilation``). The implementation
         # stage uses it as a reference baseline — when FULL-mode compilation

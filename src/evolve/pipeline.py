@@ -8,8 +8,8 @@ every stage of every organism. That made sense when only one model was
 available, but stopped being expressive enough as soon as we wanted to
 say things like "use the heavy reasoning-capable model only for the
 creative stages (rationalization + design + implementation) and the
-cheap fast model for the validators (compatibility + novelty + repair)."
-With per-stage independent routing the bandit had to learn six small
+cheap fast model for the validators (novelty + repair)."
+With per-stage independent routing the bandit had to learn small
 single-arm problems instead of one joint policy, and the operator had
 no way to express "these stages move together."
 
@@ -26,9 +26,8 @@ addition.
 Stage canonicalization
 ----------------------
 
-Concrete stage strings used at call sites are richer than the six
-pipeline categories (e.g. ``design_attempt`` vs ``design``, or
-``compatibility_check`` vs ``compatibility``).
+Concrete stage strings used at call sites are richer than the canonical
+pipeline categories (e.g. ``design_attempt`` vs ``design``).
 :func:`canonical_pipeline_stage` collapses each concrete stage into one
 of :data:`PIPELINE_STAGES`. Operators write pipelines in the canonical
 form; callers look up routes by passing the concrete stage and the
@@ -50,7 +49,6 @@ PIPELINE_STAGES: tuple[str, ...] = (
     "rationalization",
     "design",
     "implementation",
-    "compatibility",
     "novelty",
     "repair",
 )
@@ -67,7 +65,6 @@ _STAGE_ALIASES: dict[str, str] = {
     "implementation": "implementation",
     "implementation_attempt": "implementation",
     "implementation_template": "implementation",
-    "compatibility_check": "compatibility",
     "novelty_check": "novelty",
     "repair": "repair",
     "repair_attempt": "repair",

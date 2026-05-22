@@ -18,11 +18,6 @@ from src.evolve.prompt_utils import PromptBundle, load_prompt_bundle
 from src.evolve.storage import ensure_dir, parse_genetic_code_text, sha1_text
 from src.evolve.template_parser import parse_llm_response
 from src.evolve.types import Island, OrganismMeta
-from src.organisms.compatibility import (
-    build_crossover_compatibility_prompt,
-    build_mutation_compatibility_prompt,
-    build_seed_compatibility_prompt,
-)
 from src.organisms.crossbreeding import build_crossover_prompt_from_artifacts, merge_gene_pools
 from src.organisms.implementation_patch import (
     compute_changed_genome_sections,
@@ -203,24 +198,30 @@ def _manual_organism_from_genetic_code_text(
 
 
 def _resolve_manual_island(context: ManualPipelineContext, island_id: str | None) -> Island:
-    islands_dir = (ROOT / str(context.cfg.evolver.islands.dir)).resolve()
-    if not islands_dir.exists():
-        raise FileNotFoundError(f"Configured islands directory was not found: {islands_dir}")
+    """Resolve an Island record for manual notebook prompting.
+
+    Reads ``evolver.islands.island_ids`` from the config (the only supported
+    seed mode is ``from_seed``) and returns either the requested id or the
+    first configured one.
+    """
+
+    island_ids_cfg = list(context.cfg.evolver.islands.get("island_ids", []) or [])
+    island_ids = [str(item).strip() for item in island_ids_cfg if str(item).strip()]
+    if not island_ids:
+        raise ValueError(
+            "Manual pipeline requires evolver.islands.island_ids to be a non-empty list."
+        )
     if island_id:
-        candidate = islands_dir / f"{island_id}.txt"
+        if island_id not in island_ids:
+            raise ValueError(
+                f"island_id {island_id!r} not in configured island_ids {island_ids!r}."
+            )
+        resolved_id = island_id
     else:
-        candidates = sorted(path for path in islands_dir.glob("*.txt") if path.is_file())
-        if not candidates:
-            raise FileNotFoundError(f"No island descriptions found in {islands_dir}")
-        candidate = candidates[0]
-    if not candidate.exists():
-        raise FileNotFoundError(f"Island description was not found: {candidate}")
-    resolved_id = candidate.stem
+        resolved_id = island_ids[0]
     return Island(
         island_id=resolved_id,
         name=resolved_id.replace("_", " "),
-        description_path=str(candidate),
-        description_text=candidate.read_text(encoding="utf-8").strip(),
     )
 
 
@@ -481,69 +482,6 @@ def build_manual_crossover_novelty_prompts(
     father = _manual_organism_from_genetic_code_text(context, father_genetic_code_text, organism_id="manual_father")
     parsed_candidate = _parse_design_text(context, candidate_design_text)
     system_prompt, user_prompt = build_crossover_novelty_prompt(
-        inherited_genes=inherited_genes,
-        mother=mother,
-        father=father,
-        candidate_design=parsed_candidate,
-        prompts=context.prompt_bundle,
-        expected_core_gene_sections=_expected_sections(context),
-    )
-    return {"system_prompt": system_prompt, "user_prompt": user_prompt}
-
-
-def build_manual_seed_compatibility_prompts(
-    context: ManualPipelineContext,
-    *,
-    candidate_design_text: str,
-) -> dict[str, Any]:
-    """Build seed compatibility-check prompts from a manual candidate design."""
-
-    parsed_candidate = _parse_design_text(context, candidate_design_text)
-    system_prompt, user_prompt = build_seed_compatibility_prompt(
-        candidate_design=parsed_candidate,
-        prompts=context.prompt_bundle,
-        expected_core_gene_sections=_expected_sections(context),
-    )
-    return {"system_prompt": system_prompt, "user_prompt": user_prompt}
-
-
-def build_manual_mutation_compatibility_prompts(
-    context: ManualPipelineContext,
-    *,
-    inherited_genes: list[str],
-    removed_genes: list[str],
-    parent_genetic_code_text: str,
-    candidate_design_text: str,
-) -> dict[str, Any]:
-    """Build mutation compatibility-check prompts from manual text artifacts."""
-
-    parent = _manual_organism_from_genetic_code_text(context, parent_genetic_code_text, organism_id="manual_parent")
-    parsed_candidate = _parse_design_text(context, candidate_design_text)
-    system_prompt, user_prompt = build_mutation_compatibility_prompt(
-        inherited_genes=inherited_genes,
-        removed_genes=removed_genes,
-        parent=parent,
-        candidate_design=parsed_candidate,
-        prompts=context.prompt_bundle,
-        expected_core_gene_sections=_expected_sections(context),
-    )
-    return {"system_prompt": system_prompt, "user_prompt": user_prompt}
-
-
-def build_manual_crossover_compatibility_prompts(
-    context: ManualPipelineContext,
-    *,
-    inherited_genes: list[str],
-    mother_genetic_code_text: str,
-    father_genetic_code_text: str,
-    candidate_design_text: str,
-) -> dict[str, Any]:
-    """Build crossover compatibility-check prompts from manual text artifacts."""
-
-    mother = _manual_organism_from_genetic_code_text(context, mother_genetic_code_text, organism_id="manual_mother")
-    father = _manual_organism_from_genetic_code_text(context, father_genetic_code_text, organism_id="manual_father")
-    parsed_candidate = _parse_design_text(context, candidate_design_text)
-    system_prompt, user_prompt = build_crossover_compatibility_prompt(
         inherited_genes=inherited_genes,
         mother=mother,
         father=father,

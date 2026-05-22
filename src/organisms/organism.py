@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import re
 from pathlib import Path
@@ -34,10 +35,24 @@ _REQUIRED_RESPONSE_SECTIONS = (
 )
 
 
-def read_organism_implementation(org: OrganismMeta) -> str:
-    """Return the raw implementation.py text for one organism."""
+@functools.lru_cache(maxsize=128)
+def _read_implementation_text_cached(path_str: str) -> str:
+    """Cached implementation.py text reader keyed by path string."""
 
-    return Path(org.implementation_path).read_text(encoding="utf-8")
+    return Path(path_str).read_text(encoding="utf-8")
+
+
+def read_organism_implementation(org: OrganismMeta) -> str:
+    """Return the raw implementation.py text for one organism.
+
+    Backed by an ``lru_cache`` keyed on the path string. Implementation
+    files are written once at organism-creation time and never modified
+    afterwards, so caching saves disk reads on the hot mutation /
+    crossover prompt-building path (each operator pulls the parent's
+    implementation at Step 1, Step 2, and Step 3).
+    """
+
+    return _read_implementation_text_cached(str(org.implementation_path))
 
 
 def format_implementation_code(code: str) -> str:

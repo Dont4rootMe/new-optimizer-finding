@@ -38,12 +38,6 @@ class PromptBundle:
     repair_system: str
     repair_user: str
     genome_schema: str = ""
-    compatibility_seed_system: str = ""
-    compatibility_seed_user: str = ""
-    compatibility_mutation_system: str = ""
-    compatibility_mutation_user: str = ""
-    compatibility_crossover_system: str = ""
-    compatibility_crossover_user: str = ""
     # Step-1 prompts for the two-step design pipeline (rationalization →
     # formalization). Empty strings mean the family hasn't migrated and the
     # single-call legacy path is used unconditionally.
@@ -157,12 +151,6 @@ def load_prompt_bundle(cfg: DictConfig) -> PromptBundle:
         repair_system=_read_path(_resolve_prompt_path(cfg, "repair_system")),
         repair_user=_read_path(_resolve_prompt_path(cfg, "repair_user")),
         genome_schema=_read_optional_prompt_asset(cfg, "genome_schema"),
-        compatibility_seed_system=_read_optional_prompt_asset(cfg, "compatibility_seed_system"),
-        compatibility_seed_user=_read_optional_prompt_asset(cfg, "compatibility_seed_user"),
-        compatibility_mutation_system=_read_optional_prompt_asset(cfg, "compatibility_mutation_system"),
-        compatibility_mutation_user=_read_optional_prompt_asset(cfg, "compatibility_mutation_user"),
-        compatibility_crossover_system=_read_optional_prompt_asset(cfg, "compatibility_crossover_system"),
-        compatibility_crossover_user=_read_optional_prompt_asset(cfg, "compatibility_crossover_user"),
         mutation_rationalization_system=_read_optional_prompt_asset(cfg, "mutation_rationalization_system"),
         mutation_rationalization_user=_read_optional_prompt_asset(cfg, "mutation_rationalization_user"),
         crossover_rationalization_system=_read_optional_prompt_asset(cfg, "crossover_rationalization_system"),

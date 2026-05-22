@@ -44,7 +44,7 @@ def _compose_circle_cfg(tmp_path: Path, *, max_generations: int = 1):
                 f"paths.data_root={tmp_path / 'data'}",
                 f"paths.runs_root={tmp_path / 'runs'}",
                 f"paths.api_platform_runtime_root={tmp_path / '.api_platform_runtime'}",
-                "evolver.islands.seed_organisms_per_island=1",
+                "evolver.islands.seeds_per_island=1",
                 "evolver.islands.max_organisms_per_island=1",
                 "evolver.phases.great_filter.top_h_per_island=1",
                 f"evolver.max_generations={max_generations}",
@@ -301,9 +301,14 @@ def test_circle_packing_seed_and_evolve_with_mock_route(tmp_path: Path) -> None:
     evolve_summary = run_evolution(cfg)
 
     assert seed_summary["total_generations"] == 0
-    assert seed_summary["active_population_size"] == 2
+    # PHASE B (2026-05-21): with the post-refactor single-island
+    # ``from_seed`` config (``island_ids=[packing_default]``,
+    # ``seeds_per_island=1``), the seed phase materialises exactly one
+    # organism. Evolution then runs one mock-LLM generation; the
+    # survival selector keeps the best one and discards the rest.
+    assert seed_summary["active_population_size"] == 1
     assert evolve_summary["total_generations"] == 1
-    assert evolve_summary["active_population_size"] == 2
+    assert evolve_summary["active_population_size"] == 1
 
     population_state = read_json(Path(str(cfg.paths.population_root)) / "population_state.json")
     assert population_state["current_generation"] == 1

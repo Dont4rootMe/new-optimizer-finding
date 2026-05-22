@@ -6,35 +6,26 @@ max_organism_creations: false
 max_retries_per_eval: 0
 
 creation:
-  max_attempts_to_create_organism: 2
+  # PHASE A speedup (2026-05-21): retries cut to 1, validator-retries to 0,
+  # parallelism dropped from 15 → 8 to match real broker capacity. See
+  # plan file "users-artemon-downloads-awtf2025-heuris-merry-stonebraker.md"
+  # for the diagnosis behind these numbers.
+  max_attempts_to_create_organism: 1
   max_attempts_to_repair_organism_after_error: 2
-  max_attempts_to_regenerate_organism_after_novelty_rejection: 1
-  max_attempts_to_regenerate_organism_after_compatibility_rejection: 1
-  max_parallel_organisms: 15
+  max_attempts_to_regenerate_organism_after_novelty_rejection: 0
+  max_parallel_organisms: 8
 
 islands:
-  # ``mode`` chooses how the seed population is initialized:
-  #   * ``from_seed``           — copy one handwritten baseline program
-  #     (``seed_program_path``) into K×N organisms across the
-  #     ``island_ids``. No LLM calls during the seed phase. This is the
-  #     Shinka / FunSearch / AlphaEvolve pattern: diversity emerges
-  #     from the evolutionary stage (mutation, crossover, bandit
-  #     selection, lineage_regime_hint), not from handwritten
-  #     per-island seed prompts. Seed phase completes in seconds.
-  #   * ``from_island_prompts`` — legacy mode: read island descriptions
-  #     from ``dir``, ask the LLM to author one organism per (island,
-  #     slot) from scratch via the ``seed_system`` / ``seed_user``
-  #     prompts. Heavy (~30 min per organism on qwen 122B because of
-  #     design + compatibility + implementation stages stacked), kept
-  #     for backwards compatibility and ablation experiments.
+  # ``from_seed`` is the only supported mode: copy a single handwritten
+  # baseline program (``seed_program_path``) into K×N organisms across
+  # the ``island_ids``. No LLM calls during the seed phase. This is the
+  # Shinka / FunSearch / AlphaEvolve pattern — diversity emerges from
+  # the evolutionary stage (mutation, crossover, bandit selection,
+  # lineage_regime_hint), not from handwritten per-island seed prompts.
   mode: from_seed
-  # ``from_seed`` parameters.
   seed_program_path: experiments/awtf2025_heuristic/_baselines/shinka/initial_program.py
   island_ids: [macro_partitioning, staged_routing_repair]
   seeds_per_island: 5
-  # ``from_island_prompts`` parameters (legacy mode).
-  dir: conf/experiments/awtf2025_heuristic/prompts/islands
-  seed_organisms_per_island: 5
   max_organisms_per_island: 10
 
 prompts:
@@ -43,15 +34,11 @@ prompts:
 
   seed_system: conf/experiments/awtf2025_heuristic/prompts/seed/system.txt
   seed_user: conf/experiments/awtf2025_heuristic/prompts/seed/user.txt
-  compatibility_seed_system: conf/experiments/awtf2025_heuristic/prompts/compatibility/seed/system.txt
-  compatibility_seed_user: conf/experiments/awtf2025_heuristic/prompts/compatibility/seed/user.txt
 
   mutation_system: conf/experiments/awtf2025_heuristic/prompts/mutation/system.txt
   mutation_user: conf/experiments/awtf2025_heuristic/prompts/mutation/user.txt
   mutation_novelty_system: conf/experiments/awtf2025_heuristic/prompts/novelty/mutation/system.txt
   mutation_novelty_user: conf/experiments/awtf2025_heuristic/prompts/novelty/mutation/user.txt
-  compatibility_mutation_system: conf/experiments/awtf2025_heuristic/prompts/compatibility/mutation/system.txt
-  compatibility_mutation_user: conf/experiments/awtf2025_heuristic/prompts/compatibility/mutation/user.txt
   mutation_rationalization_system: conf/experiments/awtf2025_heuristic/prompts/rationalization/mutation/system.txt
   mutation_rationalization_user: conf/experiments/awtf2025_heuristic/prompts/rationalization/mutation/user.txt
 
@@ -59,8 +46,6 @@ prompts:
   crossover_user: conf/experiments/awtf2025_heuristic/prompts/crossover/user.txt
   crossover_novelty_system: conf/experiments/awtf2025_heuristic/prompts/novelty/crossover/system.txt
   crossover_novelty_user: conf/experiments/awtf2025_heuristic/prompts/novelty/crossover/user.txt
-  compatibility_crossover_system: conf/experiments/awtf2025_heuristic/prompts/compatibility/crossover/system.txt
-  compatibility_crossover_user: conf/experiments/awtf2025_heuristic/prompts/compatibility/crossover/user.txt
   crossover_rationalization_system: conf/experiments/awtf2025_heuristic/prompts/rationalization/crossover/system.txt
   crossover_rationalization_user: conf/experiments/awtf2025_heuristic/prompts/rationalization/crossover/user.txt
 
@@ -76,10 +61,15 @@ prompts:
   # back to single-parent reasoning. Effective only after the survivor
   # pool has filled — early gens with too few survivors get an empty
   # block regardless.
-  num_inspirations: 2
+  # PHASE A: 2 → 0. Each inspiration adds ~5kB to design+impl prompts
+  # which trims thinking_chars but the marginal value vs. cost was not
+  # worth the latency hit. Re-enable after PHASE B if measured gain > 0.
+  num_inspirations: 0
 
 reproduction:
-  offspring_per_generation: 10
+  # PHASE A: 10 → 6 offspring per generation. With max_parallel_organisms=8
+  # this lets every offspring run in parallel and avoids broker queueing.
+  offspring_per_generation: 6
   operator_selection_strategy: random
   operator_weights:
     within_island_crossover: 0.4
@@ -198,7 +188,6 @@ llm:
   #   - rationalization        (Step 1 of two-step design)
   #   - design                 (Step 2 of two-step design, also retries)
   #   - implementation         (also implementation_attempt / template)
-  #   - compatibility          (compatibility_check)
   #   - novelty                (novelty_check)
   #   - repair                 (post-eval repair after evaluator failure)
   #
@@ -211,7 +200,6 @@ llm:
         rationalization: ollama_qwen35_122b
         design: ollama_qwen35_122b
         implementation: ollama_qwen35_122b
-        compatibility: ollama_gemma4_31b
         novelty: ollama_gemma4_31b
         repair: ollama_gemma4_31b
 

@@ -16,7 +16,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from api_platforms import ApiPlatformRegistry
 from src.evolve.generator import CandidateGenerator
-from src.evolve.islands import load_islands
+from src.evolve.islands import synthesize_islands_from_ids
 from src.evolve.orchestrator import EvolverOrchestrator
 from src.evolve.selection import (
     select_top_h_per_island,
@@ -298,46 +298,17 @@ class EvolutionLoop:
         return None
 
     def _load_islands(self) -> list[Island]:
-        # New ``from_seed`` mode synthesises ``Island`` records from a
-        # flat list of ids and copies a single baseline program into
-        # K×N organisms (no per-island LLM authoring). The legacy
-        # ``from_island_prompts`` mode reads handwritten descriptions
-        # from disk and asks the LLM to author each seed organism.
-        mode = self._islands_mode()
-        if mode == "from_seed":
-            from src.evolve.islands import synthesize_islands_from_ids
-            island_ids_cfg = self._require_cfg_value("evolver.islands.island_ids")
-            island_ids = [str(item) for item in island_ids_cfg]
-            return synthesize_islands_from_ids(island_ids)
-        if mode == "from_island_prompts":
-            islands_dir = str(self._require_cfg_value("evolver.islands.dir")).strip()
-            if not islands_dir:
-                raise ValueError("Canonical evolve config must define evolver.islands.dir")
-            return load_islands(islands_dir)
-        raise ValueError(
-            f"Unknown evolver.islands.mode={mode!r}; expected 'from_seed' or 'from_island_prompts'"
-        )
-
-    def _islands_mode(self) -> str:
-        # Default to legacy ``from_island_prompts`` so untouched configs
-        # keep their old behaviour. Anything new must opt in explicitly
-        # via ``evolver.islands.mode: from_seed``.
-        return str(
-            OmegaConf.select(self.cfg, "evolver.islands.mode", default="from_island_prompts")
-        ).strip()
+        # ``from_seed`` mode synthesises ``Island`` records from a flat
+        # list of ids and copies a single baseline program into K×N
+        # organisms (no per-island LLM authoring). This is the only
+        # supported mode.
+        from src.evolve.islands import synthesize_islands_from_ids
+        island_ids_cfg = self._require_cfg_value("evolver.islands.island_ids")
+        island_ids = [str(item) for item in island_ids_cfg]
+        return synthesize_islands_from_ids(island_ids)
 
     def _seed_organisms_per_island(self) -> int:
-        # In ``from_seed`` mode the user-facing knob is
-        # ``evolver.islands.seeds_per_island``; the legacy name
-        # ``seed_organisms_per_island`` is still accepted as a fallback.
-        if self._islands_mode() == "from_seed":
-            value = OmegaConf.select(
-                self.cfg, "evolver.islands.seeds_per_island", default=None
-            )
-            if value is None:
-                value = self._require_cfg_value("evolver.islands.seed_organisms_per_island")
-            return int(value)
-        return int(self._require_cfg_value("evolver.islands.seed_organisms_per_island"))
+        return int(self._require_cfg_value("evolver.islands.seeds_per_island"))
 
     def _max_organisms_per_island(self) -> int:
         return int(self._require_cfg_value("evolver.islands.max_organisms_per_island"))
@@ -1146,7 +1117,7 @@ class EvolutionLoop:
                 "active": [
                     plan.organism_id
                     for plan in planned_organisms
-                    if plan.pipeline_state in {"creating", "compatibility_check"}
+                    if plan.pipeline_state in {"creating"}
                 ],
                 "completed": [
                     plan.organism_id
@@ -1338,13 +1309,12 @@ class EvolutionLoop:
                         created_at=timestamp,
                     )
                 )
-                # In ``from_seed`` mode we plan a file-copy instead of a
-                # full LLM-generated seed. The route label ``seed_copy``
-                # makes ``_materialize_planned_organism`` skip the
-                # generator's heavy 3-stage seed path and call the
-                # lightweight ``materialize_seed_from_file`` instead.
-                route = "seed_copy" if self._islands_mode() == "from_seed" else "seed"
-                operator = "seed_copy" if route == "seed_copy" else "seed"
+                # All seed organisms are file-copies from the baseline
+                # program (``materialize_seed_from_file``). The route label
+                # ``seed_copy`` makes ``_materialize_planned_organism``
+                # skip any LLM-generated seed path.
+                route = "seed_copy"
+                operator = "seed_copy"
                 plan = PlannedOrganismCreation(
                     organism_id=organism_id,
                     organism_dir=str(org_dir),
@@ -1590,18 +1560,7 @@ class EvolutionLoop:
         )
         org_dir = Path(plan.organism_dir)
 
-        if plan.route == "seed":
-            island = self.islands_by_id.get(plan.island_id)
-            if island is None:
-                raise ValueError(f"Seed plan for organism {plan.organism_id} references unknown island '{plan.island_id}'.")
-            organism = self.generator.generate_seed_organism(
-                island=island,
-                organism_id=plan.organism_id,
-                generation=plan.generation,
-                organism_dir=org_dir,
-                pipeline_state_callback=pipeline_state_callback,
-            )
-        elif plan.route == "seed_copy":
+        if plan.route == "seed_copy":
             # File-copy seed (Shinka / FunSearch / AlphaEvolve pattern):
             # no LLM call. Copies a single baseline ``implementation.py``
             # into the new organism's directory and synthesises a
@@ -1960,7 +1919,7 @@ class EvolutionLoop:
 
         creation_tasks: set[asyncio.Task[tuple[str, OrganismMeta | None]]] = set()
         for plan in planned_organisms:
-            if plan.pipeline_state in {"planned_creation", "creating", "compatibility_check"}:
+            if plan.pipeline_state in {"planned_creation", "creating"}:
                 creation_tasks.add(asyncio.create_task(_run_creation(plan)))
                 continue
             if plan.pipeline_state == "failed_creation":

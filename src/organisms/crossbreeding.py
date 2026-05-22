@@ -14,13 +14,6 @@ from src.evolve.prompt_utils import (
 )
 from src.evolve.storage import utc_now_iso
 from src.evolve.types import OrganismMeta
-from src.organisms.compatibility import (
-    CompatibilityCheckContext,
-    CompatibilityJudgment,
-    CompatibilityValidationContext,
-    build_crossover_compatibility_prompt,
-    format_compatibility_rejection_feedback,
-)
 from src.organisms.lineage_regime import summarize_recent_regime
 from src.organisms.mutation import _detect_family_id, _maybe_run_step1
 from src.organisms.novelty import (
@@ -85,7 +78,6 @@ def _build_crossbreed_prompt(
     father: OrganismMeta,
     prompts: PromptBundle,
     novelty_feedback: list[str] | None = None,
-    compatibility_feedback: list[CompatibilityJudgment] | None = None,
 ) -> tuple[str, str]:
     """Build `(system_prompt, user_prompt)` for crossover LLM call (legacy path).
 
@@ -99,7 +91,6 @@ def _build_crossbreed_prompt(
         father=father,
         prompts=prompts,
         novelty_feedback=novelty_feedback,
-        compatibility_feedback=compatibility_feedback,
     )
     return bundle.render_formalization(rationale_text=None)
 
@@ -110,7 +101,6 @@ def build_crossover_design_bundle(
     father: OrganismMeta,
     prompts: PromptBundle,
     novelty_feedback: list[str] | None = None,
-    compatibility_feedback: list[CompatibilityJudgment] | None = None,
     family_id: str | None = None,
     inspirations: list[OrganismMeta] | None = None,
 ) -> DesignPromptBundle:
@@ -123,7 +113,6 @@ def build_crossover_design_bundle(
         father_lineage=read_organism_lineage(father),
         prompts=prompts,
         novelty_feedback=novelty_feedback,
-        compatibility_feedback=compatibility_feedback,
         family_id=family_id,
         mother_simple_score=mother.simple_score,
         father_simple_score=father.simple_score,
@@ -146,7 +135,6 @@ def build_crossover_prompt_from_artifacts(
     father_lineage: list[dict[str, Any]],
     prompts: PromptBundle,
     novelty_feedback: list[str] | None = None,
-    compatibility_feedback: list[CompatibilityJudgment] | None = None,
     family_id: str | None = None,
     mother_simple_score: float | None = None,
     father_simple_score: float | None = None,
@@ -186,12 +174,6 @@ def build_crossover_prompt_from_artifacts(
         secondary_lineage=list(father_lineage),
     )
     novelty_feedback_str = format_novelty_rejection_feedback(list(novelty_feedback or []))
-    compatibility_block = ""
-    if compatibility_feedback:
-        compatibility_block = (
-            "\n\n=== COMPATIBILITY REJECTION FEEDBACK ===\n"
-            f"{format_compatibility_rejection_feedback(compatibility_feedback)}"
-        )
 
     formalization_system = compose_system_prompt(prompts.project_context, prompts.crossover_system)
     formalization_user_template = prompts.crossover_user.format(
@@ -209,7 +191,7 @@ def build_crossover_prompt_from_artifacts(
         # Legacy placeholder for optimization_survey prompts that still
         # reference the pre-bandit gene-sampling shape.
         inherited_gene_pool="(none)",
-    ) + compatibility_block
+    )
 
     rationalization_system: str | None = None
     rationalization_user: str | None = None
@@ -233,11 +215,6 @@ def build_crossover_prompt_from_artifacts(
             lineage_regime_hint=lineage_regime_hint,
             novelty_rejection_feedback=novelty_feedback_str,
         )
-        if compatibility_feedback:
-            rationalization_user = (
-                f"{rationalization_user}\n\n=== COMPATIBILITY REJECTION FEEDBACK ===\n"
-                f"{format_compatibility_rejection_feedback(compatibility_feedback)}"
-            )
 
     return DesignPromptBundle(
         formalization_system=formalization_system,
@@ -303,13 +280,12 @@ class CrossbreedingOperator:
 
         system_prompt, user_prompt = initial_bundle.render_formalization(rationale_text)
 
-        def _rebuild_step2(novelty_feedback=None, compatibility_feedback=None):
+        def _rebuild_step2(novelty_feedback=None):
             retry_bundle = build_crossover_design_bundle(
                 mother=mother,
                 father=father,
                 prompts=generator.prompt_bundle,
                 novelty_feedback=novelty_feedback,
-                compatibility_feedback=compatibility_feedback,
                 inspirations=inspirations,
                 family_id=family_id,
             )
@@ -327,26 +303,6 @@ class CrossbreedingOperator:
                 expected_core_gene_sections=getattr(generator, "expected_core_gene_sections", None),
             ),
         )
-        compatibility_context = None
-        if (
-            getattr(generator.prompt_bundle, "compatibility_crossover_system", "")
-            and getattr(generator.prompt_bundle, "compatibility_crossover_user", "")
-        ):
-            compatibility_context = CompatibilityValidationContext(
-                check=CompatibilityCheckContext(operator_kind="crossover"),
-                build_design_prompts=lambda novelty_feedback, compatibility_feedback: _rebuild_step2(
-                    novelty_feedback=novelty_feedback,
-                    compatibility_feedback=compatibility_feedback,
-                ),
-                build_compatibility_prompts=lambda candidate_design: build_crossover_compatibility_prompt(
-                    inherited_genes=child_dna,
-                    mother=mother,
-                    father=father,
-                    candidate_design=candidate_design,
-                    prompts=generator.prompt_bundle,
-                    expected_core_gene_sections=getattr(generator, "expected_core_gene_sections", None),
-                ),
-            )
         run_creation = getattr(generator, "run_creation_stages_with_retries", generator.run_creation_stages)
         creation_kwargs = {
             "design_system_prompt": system_prompt,
@@ -356,8 +312,6 @@ class CrossbreedingOperator:
             "generation": generation,
             "novelty_context": novelty_context,
         }
-        if compatibility_context is not None:
-            creation_kwargs["compatibility_context"] = compatibility_context
         # Always pass the mother as the implementation base (was previously
         # gated on ``uses_section_patch_compilation``). See the matching
         # change in ``src/organisms/mutation.py`` for the rationale: the

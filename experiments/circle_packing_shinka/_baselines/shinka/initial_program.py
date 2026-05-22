@@ -21,6 +21,9 @@ def run_packing():
     grid_n = 6
     coords = np.linspace(0.1, 0.9, grid_n)
     centers = np.array([(float(x), float(y)) for x in coords for y in coords])[:NUM_CIRCLES]
-    radii = np.full(NUM_CIRCLES, 0.5 / grid_n, dtype=float)
+    # spacing between grid points = 0.16; tangent radius = spacing/2 = 0.08.
+    # Use 0.078 to leave a tiny non-overlap margin so the evaluator's
+    # overlap-tolerance check passes on the seed baseline.
+    radii = np.full(NUM_CIRCLES, 0.078, dtype=float)
     return centers, radii, float(radii.sum())
 # EVOLVE-BLOCK-END

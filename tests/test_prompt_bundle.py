@@ -20,20 +20,14 @@ def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
                     "genome_schema": "conf/experiments/optimization_survey/prompts/shared/genome_schema.txt",
                     "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
                     "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
-                    "compatibility_seed_system": "conf/experiments/optimization_survey/prompts/compatibility/seed/system.txt",
-                    "compatibility_seed_user": "conf/experiments/optimization_survey/prompts/compatibility/seed/user.txt",
                     "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
                     "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
                     "mutation_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/mutation/system.txt",
                     "mutation_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/mutation/user.txt",
-                    "compatibility_mutation_system": "conf/experiments/optimization_survey/prompts/compatibility/mutation/system.txt",
-                    "compatibility_mutation_user": "conf/experiments/optimization_survey/prompts/compatibility/mutation/user.txt",
                     "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
                     "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
                     "crossover_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/crossover/system.txt",
                     "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
-                    "compatibility_crossover_system": "conf/experiments/optimization_survey/prompts/compatibility/crossover/system.txt",
-                    "compatibility_crossover_user": "conf/experiments/optimization_survey/prompts/compatibility/crossover/user.txt",
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/optimization_survey/prompts/shared/template.txt",
@@ -49,7 +43,6 @@ def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
     assert "automated evolutionary search for novel optimizer organisms" in bundle.project_context
     assert "## CORE_GENES" in bundle.seed_system
     assert "## NOVELTY_VERDICT" in bundle.mutation_novelty_system
-    assert "{island_description}" in bundle.seed_user
     assert "=== COMPILATION MODE ===" in bundle.implementation_user
     assert "## COMPILATION_MODE" in bundle.implementation_system
     assert "=== ERROR HISTORY ===" in bundle.repair_user
@@ -62,9 +55,6 @@ def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
     assert "valid source of novelty" in bundle.mutation_novelty_user
     assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
     assert "# STATE_REPRESENTATION" in bundle.genome_schema
-    assert "## COMPATIBILITY_VERDICT" in bundle.compatibility_seed_system
-    assert "compatibility is not the same as novelty" in bundle.compatibility_mutation_system
-    assert "compatibility is not the same as novelty" in bundle.compatibility_crossover_system
 
 
 def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contract() -> None:
@@ -76,20 +66,14 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
                     "genome_schema": "conf/experiments/circle_packing_shinka/prompts/shared/genome_schema.txt",
                     "seed_system": "conf/experiments/circle_packing_shinka/prompts/seed/system.txt",
                     "seed_user": "conf/experiments/circle_packing_shinka/prompts/seed/user.txt",
-                    "compatibility_seed_system": "conf/experiments/circle_packing_shinka/prompts/compatibility/seed/system.txt",
-                    "compatibility_seed_user": "conf/experiments/circle_packing_shinka/prompts/compatibility/seed/user.txt",
                     "mutation_system": "conf/experiments/circle_packing_shinka/prompts/mutation/system.txt",
                     "mutation_user": "conf/experiments/circle_packing_shinka/prompts/mutation/user.txt",
                     "mutation_novelty_system": "conf/experiments/circle_packing_shinka/prompts/novelty/mutation/system.txt",
                     "mutation_novelty_user": "conf/experiments/circle_packing_shinka/prompts/novelty/mutation/user.txt",
-                    "compatibility_mutation_system": "conf/experiments/circle_packing_shinka/prompts/compatibility/mutation/system.txt",
-                    "compatibility_mutation_user": "conf/experiments/circle_packing_shinka/prompts/compatibility/mutation/user.txt",
                     "crossover_system": "conf/experiments/circle_packing_shinka/prompts/crossover/system.txt",
                     "crossover_user": "conf/experiments/circle_packing_shinka/prompts/crossover/user.txt",
                     "crossover_novelty_system": "conf/experiments/circle_packing_shinka/prompts/novelty/crossover/system.txt",
                     "crossover_novelty_user": "conf/experiments/circle_packing_shinka/prompts/novelty/crossover/user.txt",
-                    "compatibility_crossover_system": "conf/experiments/circle_packing_shinka/prompts/compatibility/crossover/system.txt",
-                    "compatibility_crossover_user": "conf/experiments/circle_packing_shinka/prompts/compatibility/crossover/user.txt",
                     "implementation_system": "conf/experiments/circle_packing_shinka/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/circle_packing_shinka/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/circle_packing_shinka/prompts/shared/template.txt",
@@ -131,11 +115,8 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
     assert "coherent and visible mechanism shift relative to the parent" in bundle.mutation_novelty_user
     assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
     assert "neither parent presents on its own" in bundle.crossover_novelty_user
-    assert "## COMPATIBILITY_VERDICT" in bundle.compatibility_seed_system
-    assert "score-inert" in bundle.compatibility_seed_system
-    assert "too many loosely coupled mechanisms or role taxonomies" in bundle.compatibility_seed_system
     assert "validity beats score" not in bundle.implementation_system
-    assert "preserve inherited high-score maternal behavior" in bundle.implementation_system
+    assert "preserve strong inherited maternal behavior" in bundle.implementation_system
     assert "feasibility safety pass" not in bundle.implementation_user
     assert "Repair is a full-file rewrite, not a diff." not in bundle.repair_system
     assert "full-file output contract is an interface requirement" in bundle.repair_system
@@ -199,6 +180,4 @@ def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
     assert bundle.implementation_template == "implementation template"
     assert bundle.repair_user == "repair user"
     assert bundle.genome_schema == ""
-    assert bundle.compatibility_seed_system == ""
-    assert bundle.compatibility_mutation_user == ""
     assert compose_system_prompt(bundle.project_context, bundle.seed_system) == "project context\n\nseed system"

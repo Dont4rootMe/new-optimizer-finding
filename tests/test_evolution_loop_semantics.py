@@ -17,10 +17,11 @@ from src.organisms.organism import save_organism_artifacts
 
 
 def _cfg(tmp_path: Path, **overrides) -> object:
-    islands_dir = tmp_path / "islands"
-    islands_dir.mkdir(parents=True, exist_ok=True)
-    (islands_dir / "gradient_methods.txt").write_text("First-order ideas", encoding="utf-8")
-    (islands_dir / "second_order.txt").write_text("Curvature-aware ideas", encoding="utf-8")
+    seed_program_path = tmp_path / "_baseline.py"
+    seed_program_path.write_text(
+        "import numpy as np\n\ndef run_optimizer(*args, **kwargs):\n    return {}\n",
+        encoding="utf-8",
+    )
 
     payload = {
         "seed": 123,
@@ -60,8 +61,10 @@ def _cfg(tmp_path: Path, **overrides) -> object:
                 "max_parallel_organisms": 1,
             },
             "islands": {
-                "dir": str(islands_dir),
-                "seed_organisms_per_island": 3,
+                "mode": "from_seed",
+                "seed_program_path": str(seed_program_path),
+                "island_ids": ["gradient_methods", "second_order"],
+                "seeds_per_island": 3,
                 "max_organisms_per_island": 3,
             },
             "prompts": {
@@ -418,7 +421,7 @@ def test_seed_planning_caps_total_organism_creations(tmp_path: Path) -> None:
         evolver={
             "max_organism_creations": 3,
             "islands": {
-                "seed_organisms_per_island": 2,
+                "seeds_per_island": 2,
             },
         },
     )
@@ -449,7 +452,7 @@ def test_offspring_planning_uses_remaining_total_organism_creation_budget(tmp_pa
         evolver={
             "max_organism_creations": 5,
             "islands": {
-                "seed_organisms_per_island": 2,
+                "seeds_per_island": 2,
             },
             "reproduction": {
                 "offspring_per_generation": 5,
@@ -577,38 +580,6 @@ def test_assign_batch_routes_respects_weight_proportions(tmp_path: Path) -> None
     assert counts == {"heavy": 6, "light": 2}
 
 
-def test_compatibility_check_pipeline_state_is_active_creation_state(tmp_path: Path) -> None:
-    cfg = _cfg(tmp_path)
-    loop = EvolutionLoop(cfg)
-    plan = PlannedOrganismCreation(
-        organism_id="org-compatibility",
-        organism_dir=str(tmp_path / "org-compatibility"),
-        island_id="gradient_methods",
-        generation=1,
-        route="mock",
-        operator="seed",
-        mother_id=None,
-        mother_organism_dir=None,
-        father_id=None,
-        father_organism_dir=None,
-        father_island_id=None,
-        operator_seed=123,
-        timestamp="2026-01-01T00:00:00Z",
-        pipeline_state="compatibility_check",
-    )
-
-    round_tripped = PlannedOrganismCreation.from_dict(plan.to_dict())
-    payload = loop._serialize_planned_creation_state(
-        [round_tripped],
-        planned_key="planned_seed",
-        include_parent_snapshot=False,
-    )
-
-    assert round_tripped.pipeline_state == "compatibility_check"
-    assert payload["creation_queue"]["active"] == ["org-compatibility"]
-    assert payload["creation_queue"]["pending"] == []
-
-
 def test_max_parallel_organisms_bounds_seed_parallelism(tmp_path: Path, monkeypatch) -> None:
     cfg = _cfg(
         tmp_path,
@@ -617,7 +588,7 @@ def test_max_parallel_organisms_bounds_seed_parallelism(tmp_path: Path, monkeypa
                 "max_parallel_organisms": 2,
             },
             "islands": {
-                "seed_organisms_per_island": 4,
+                "seeds_per_island": 4,
             },
         },
     )
@@ -626,8 +597,8 @@ def test_max_parallel_organisms_bounds_seed_parallelism(tmp_path: Path, monkeypa
     max_active = 0
     lock = threading.Lock()
 
-    def fake_generate_seed_organism(*, island, organism_id, generation, organism_dir):
-        del island, organism_id, generation, organism_dir
+    def fake_materialize_seed_from_file(*, island, organism_id, generation, organism_dir, source_path, pipeline_state_callback=None):
+        del island, organism_id, generation, organism_dir, source_path, pipeline_state_callback
         nonlocal active, max_active
         with lock:
             active += 1
@@ -637,7 +608,7 @@ def test_max_parallel_organisms_bounds_seed_parallelism(tmp_path: Path, monkeypa
             active -= 1
         return _make_organism(tmp_path, f"seed_{time.time_ns()}", "gradient_methods")
 
-    monkeypatch.setattr(loop.generator, "generate_seed_organism", fake_generate_seed_organism)
+    monkeypatch.setattr(loop.generator, "materialize_seed_from_file", fake_materialize_seed_from_file)
 
     asyncio.run(loop._seed_initial_population())
 

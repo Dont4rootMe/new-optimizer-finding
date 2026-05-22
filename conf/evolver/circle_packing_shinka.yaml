@@ -7,22 +7,15 @@ creation:
   max_attempts_to_create_organism: 1
   max_attempts_to_repair_organism_after_error: 3
   max_attempts_to_regenerate_organism_after_novelty_rejection: 1
-  max_attempts_to_regenerate_organism_after_compatibility_rejection: 1
   max_parallel_organisms: 20
 
 islands:
-  # See conf/evolver/awtf2025_heuristic.yaml for the full description of
-  # the ``mode`` selector. ``from_island_prompts`` keeps the legacy
-  # handwritten-per-island seed; circle_packing defaults to it because
-  # the seed program path is not wired up yet.
-  mode: from_island_prompts
-  # ``from_seed`` parameters (only used when mode=from_seed).
+  # ``from_seed`` is the only supported mode. See
+  # conf/evolver/awtf2025_heuristic.yaml for details.
+  mode: from_seed
   seed_program_path: experiments/circle_packing_shinka/_baselines/shinka/initial_program.py
-  island_ids: []
+  island_ids: [packing_default]
   seeds_per_island: 5
-  # ``from_island_prompts`` parameters.
-  dir: conf/experiments/circle_packing_shinka/prompts/islands
-  seed_organisms_per_island: 5
   max_organisms_per_island: 5
 
 prompts:
@@ -31,15 +24,11 @@ prompts:
 
   seed_system: conf/experiments/circle_packing_shinka/prompts/seed/system.txt
   seed_user: conf/experiments/circle_packing_shinka/prompts/seed/user.txt
-  compatibility_seed_system: conf/experiments/circle_packing_shinka/prompts/compatibility/seed/system.txt
-  compatibility_seed_user: conf/experiments/circle_packing_shinka/prompts/compatibility/seed/user.txt
 
   mutation_system: conf/experiments/circle_packing_shinka/prompts/mutation/system.txt
   mutation_user: conf/experiments/circle_packing_shinka/prompts/mutation/user.txt
   mutation_novelty_system: conf/experiments/circle_packing_shinka/prompts/novelty/mutation/system.txt
   mutation_novelty_user: conf/experiments/circle_packing_shinka/prompts/novelty/mutation/user.txt
-  compatibility_mutation_system: conf/experiments/circle_packing_shinka/prompts/compatibility/mutation/system.txt
-  compatibility_mutation_user: conf/experiments/circle_packing_shinka/prompts/compatibility/mutation/user.txt
   mutation_rationalization_system: conf/experiments/circle_packing_shinka/prompts/rationalization/mutation/system.txt
   mutation_rationalization_user: conf/experiments/circle_packing_shinka/prompts/rationalization/mutation/user.txt
 
@@ -47,8 +36,6 @@ prompts:
   crossover_user: conf/experiments/circle_packing_shinka/prompts/crossover/user.txt
   crossover_novelty_system: conf/experiments/circle_packing_shinka/prompts/novelty/crossover/system.txt
   crossover_novelty_user: conf/experiments/circle_packing_shinka/prompts/novelty/crossover/user.txt
-  compatibility_crossover_system: conf/experiments/circle_packing_shinka/prompts/compatibility/crossover/system.txt
-  compatibility_crossover_user: conf/experiments/circle_packing_shinka/prompts/compatibility/crossover/user.txt
   crossover_rationalization_system: conf/experiments/circle_packing_shinka/prompts/rationalization/crossover/system.txt
   crossover_rationalization_user: conf/experiments/circle_packing_shinka/prompts/rationalization/crossover/user.txt
 
@@ -165,7 +152,6 @@ llm:
         rationalization: ollama_gemma4_31b
         design: ollama_gemma4_31b
         implementation: ollama_gemma4_31b
-        compatibility: ollama_gemma4_31b
         novelty: ollama_gemma4_31b
         repair: ollama_gemma4_31b
     - id: qwen_only
@@ -173,7 +159,6 @@ llm:
         rationalization: ollama_qwen35_35b
         design: ollama_qwen35_35b
         implementation: ollama_qwen35_35b
-        compatibility: ollama_qwen35_35b
         novelty: ollama_qwen35_35b
         repair: ollama_qwen35_35b
 

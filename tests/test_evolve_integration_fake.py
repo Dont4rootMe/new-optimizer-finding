@@ -32,10 +32,11 @@ def _write_baseline(stats_root: Path, exp_name: str, objective_last: float = 1.0
 def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> object:
     pop_root = tmp_path / "populations"
     stats_root = tmp_path / "stats"
-    islands_dir = tmp_path / "islands"
-    islands_dir.mkdir(parents=True, exist_ok=True)
-    (islands_dir / "gradient_methods.txt").write_text("Favor robust first-order methods.", encoding="utf-8")
-    (islands_dir / "second_order.txt").write_text("Favor curvature-aware preconditioning.", encoding="utf-8")
+    seed_program_path = tmp_path / "_baseline.py"
+    seed_program_path.write_text(
+        "import numpy as np\n\ndef run_optimizer(*args, **kwargs):\n    return {}\n",
+        encoding="utf-8",
+    )
 
     for exp_name in ("simple_a", "hard_b"):
         _write_baseline(stats_root, exp_name)
@@ -94,8 +95,10 @@ def _canonical_cfg(tmp_path: Path, *, max_generations: int, resume: bool) -> obj
                     "max_parallel_organisms": 1,
                 },
                 "islands": {
-                    "dir": str(islands_dir),
-                    "seed_organisms_per_island": 1,
+                    "mode": "from_seed",
+                    "seed_program_path": str(seed_program_path),
+                    "island_ids": ["gradient_methods", "second_order"],
+                    "seeds_per_island": 1,
                     "max_organisms_per_island": 1,
                 },
                 "prompts": {

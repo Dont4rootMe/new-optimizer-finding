@@ -8,12 +8,10 @@ from typing import Any, TypedDict
 
 @dataclass(slots=True)
 class Island:
-    """Canonical research-island definition."""
+    """Canonical research-island definition (Shinka-style: id + name only)."""
 
     island_id: str
     name: str
-    description_path: str
-    description_text: str
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

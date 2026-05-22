@@ -29,9 +29,9 @@ paths:
 
 api_platforms:
   # Gemma 4 31B holds GPUs 6 and 7 as two single-GPU instances. It
-  # runs the cheap validator stages of every pipeline (compatibility,
-  # novelty, repair) and one all-gemma pipeline keeps the legacy
-  # fast-and-cheap path available for the bandit.
+  # runs the cheap validator stages of every pipeline (novelty, repair)
+  # and one all-gemma pipeline keeps the legacy fast-and-cheap path
+  # available for the bandit.
   ollama_gemma4_31b:
     base_url: ${oc.env:OLLAMA_GEMMA4_31B_BASE_URL,http://127.0.0.1:12454/api}
     gpu_ranks:
@@ -62,7 +62,11 @@ api_platforms:
     gpu_ranks:
       - [0, 1, 2]
       - [3, 4, 5]
-    max_concurrency: 2
+    # PHASE A speedup: 2 → 4 per instance (so 4×2 = 8 concurrent qwen
+    # requests total, doubled from the previous 4× empirical ceiling).
+    # Diagnosis: the 122B model on 3 GPUs can comfortably handle 4
+    # parallel requests; the prior `2` was over-conservative.
+    max_concurrency: 4
 
 comet:
   enabled: true

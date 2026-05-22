@@ -24,7 +24,6 @@ def test_canonical_stage_collapses_aliases() -> None:
     assert canonical_pipeline_stage("implementation") == "implementation"
     assert canonical_pipeline_stage("implementation_attempt") == "implementation"
     assert canonical_pipeline_stage("implementation_template") == "implementation"
-    assert canonical_pipeline_stage("compatibility_check") == "compatibility"
     assert canonical_pipeline_stage("novelty_check") == "novelty"
     assert canonical_pipeline_stage("repair") == "repair"
     assert canonical_pipeline_stage("repair_attempt") == "repair"
@@ -47,7 +46,6 @@ def test_parse_pipelines_accepts_omegaconf_list() -> None:
                     "rationalization": "ollama_gemma4_31b",
                     "design": "ollama_gemma4_31b",
                     "implementation": "ollama_gemma4_31b",
-                    "compatibility": "ollama_gemma4_31b",
                     "novelty": "ollama_gemma4_31b",
                     "repair": "ollama_gemma4_31b",
                 },
@@ -58,7 +56,6 @@ def test_parse_pipelines_accepts_omegaconf_list() -> None:
                     "rationalization": "ollama_qwen_122b",
                     "design": "ollama_qwen_122b",
                     "implementation": "ollama_qwen_122b",
-                    "compatibility": "ollama_gemma4_31b",
                     "novelty": "ollama_gemma4_31b",
                     "repair": "ollama_gemma4_31b",
                 },
@@ -72,7 +69,6 @@ def test_parse_pipelines_accepts_omegaconf_list() -> None:
     creative = pipelines[1]
     assert creative.route_for("design") == "ollama_qwen_122b"
     assert creative.route_for("design_attempt") == "ollama_qwen_122b"
-    assert creative.route_for("compatibility_check") == "ollama_gemma4_31b"
     assert creative.route_for("novelty_check") == "ollama_gemma4_31b"
     assert creative.route_for("repair") == "ollama_gemma4_31b"
 
@@ -107,7 +103,6 @@ def test_parse_pipelines_rejects_missing_canonical_stage() -> None:
                 "rationalization": "a",
                 "design": "a",
                 "implementation": "a",
-                "compatibility": "a",
                 "novelty": "a",
                 # repair intentionally missing
             },
@@ -230,7 +225,6 @@ def test_generator_sample_route_id_routes_through_pipeline() -> None:
                     "rationalization": "ollama_qwen_122b",
                     "design": "ollama_qwen_122b",
                     "implementation": "ollama_qwen_122b",
-                    "compatibility": "ollama_gemma4_31b",
                     "novelty": "ollama_gemma4_31b",
                     "repair": "ollama_gemma4_31b",
                 },
@@ -242,7 +236,6 @@ def test_generator_sample_route_id_routes_through_pipeline() -> None:
 
     assert generator.sample_route_id(organism_id="o1", stage="design") == "ollama_qwen_122b"
     assert generator.sample_route_id(organism_id="o1", stage="implementation") == "ollama_qwen_122b"
-    assert generator.sample_route_id(organism_id="o1", stage="compatibility_check") == "ollama_gemma4_31b"
     assert generator.sample_route_id(organism_id="o1", stage="novelty_check") == "ollama_gemma4_31b"
     assert generator.sample_route_id(organism_id="o1", stage="repair") == "ollama_gemma4_31b"
     # design_attempt should alias to design.
@@ -277,10 +270,10 @@ def test_generator_sticky_pipeline_per_organism() -> None:
     for organism_id in [f"org_{i}" for i in range(20)]:
         design_route = generator.sample_route_id(organism_id=organism_id, stage="design")
         impl_route = generator.sample_route_id(organism_id=organism_id, stage="implementation")
-        compat_route = generator.sample_route_id(
-            organism_id=organism_id, stage="compatibility_check"
+        novelty_route = generator.sample_route_id(
+            organism_id=organism_id, stage="novelty_check"
         )
-        assert design_route == impl_route == compat_route
+        assert design_route == impl_route == novelty_route
         # And the cached pipeline_id matches what we'd resolve from the route.
         cached_pipeline = generator.pipeline_id_for_organism(organism_id)
         assert cached_pipeline in {"all_gemma", "all_qwen"}

@@ -47,7 +47,7 @@ def _compose_awtf_cfg(tmp_path: Path, *, max_generations: int = 1):
                 f"paths.data_root={tmp_path / 'data'}",
                 f"paths.runs_root={tmp_path / 'runs'}",
                 f"paths.api_platform_runtime_root={tmp_path / '.api_platform_runtime'}",
-                "evolver.islands.seed_organisms_per_island=1",
+                "evolver.islands.seeds_per_island=1",
                 "evolver.islands.max_organisms_per_island=1",
                 "evolver.phases.great_filter.top_h_per_island=1",
                 f"evolver.max_generations={max_generations}",
@@ -118,9 +118,8 @@ def test_awtf2025_config_composes() -> None:
     assert set(cfg.experiments.keys()) == {"group_commands_and_wall_planning"}
     assert "safety" not in cfg
     assert set(cfg.api_platforms.keys()) == {
-        "ollama_nemotron_cascade_2_30b",
-        "ollama_qwen35_35b",
         "ollama_gemma4_31b",
+        "ollama_qwen35_122b",
     }
     assert cfg.experiments.group_commands_and_wall_planning.need_cuda is False
     assert cfg.evolver.phases.simple.experiments == ["group_commands_and_wall_planning"]
@@ -129,7 +128,6 @@ def test_awtf2025_config_composes() -> None:
     assert cfg.resources.evaluation.cpu_parallel_jobs == 25
     assert cfg.evolver.prompts.project_context == "conf/experiments/awtf2025_heuristic/prompts/shared/project_context.txt"
     assert cfg.evolver.prompts.genome_schema == "conf/experiments/awtf2025_heuristic/prompts/shared/genome_schema.txt"
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 1
     assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
 
 

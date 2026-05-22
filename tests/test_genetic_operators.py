@@ -151,7 +151,6 @@ class _FakeCanonicalGenerator:
         generation: int,
         island_id: str | None = None,
         novelty_context=None,
-        compatibility_context=None,
         implementation_base_parent: OrganismMeta | None = None,
     ) -> CreationStageResult:
         self.implementation_base_parent = implementation_base_parent

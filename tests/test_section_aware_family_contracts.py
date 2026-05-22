@@ -85,20 +85,6 @@ def test_family_config_exposes_section_aware_surface(family: str) -> None:
     cfg = _compose(str(spec["config"]))
 
     assert cfg.evolver.prompts.genome_schema == f"conf/experiments/{family}/prompts/shared/genome_schema.txt"
-    assert cfg.evolver.prompts.compatibility_seed_system.endswith("/compatibility/seed/system.txt")
-    assert cfg.evolver.prompts.compatibility_seed_user.endswith("/compatibility/seed/user.txt")
-    assert cfg.evolver.prompts.compatibility_mutation_system.endswith("/compatibility/mutation/system.txt")
-    assert cfg.evolver.prompts.compatibility_mutation_user.endswith("/compatibility/mutation/user.txt")
-    assert cfg.evolver.prompts.compatibility_crossover_system.endswith("/compatibility/crossover/system.txt")
-    assert cfg.evolver.prompts.compatibility_crossover_user.endswith("/compatibility/crossover/user.txt")
-    # awtf2025_heuristic was reduced to 1 retry as part of the post-mortem on the
-    # 426-organism atcoder run: cascading retries multiplied wasted LLM calls
-    # without lifting the per-organism success rate.
-    expected_compatibility_retries = 1 if family in {"circle_packing_shinka", "awtf2025_heuristic"} else 3
-    assert (
-        cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection
-        == expected_compatibility_retries
-    )
     assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
     assert cfg.evolver.reproduction.selection_score.normalize_weights is True
     assert cfg.evolver.reproduction.selection_score.weights.simple_score == 1.0
@@ -143,19 +129,6 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
         assert "## NOVELTY_VERDICT" in prompt
         assert "## REJECTION_REASON" in prompt
         assert "## SECTIONS_AT_ISSUE" in prompt
-
-    for prompt in (
-        bundle.compatibility_seed_system,
-        bundle.compatibility_mutation_system,
-        bundle.compatibility_crossover_system,
-    ):
-        assert "Do not propose edits" in prompt
-        assert "## COMPATIBILITY_VERDICT" in prompt
-        assert "## REJECTION_REASON" in prompt
-        assert "## SECTIONS_AT_ISSUE" not in prompt
-        assert "The first line of your answer must be `## COMPATIBILITY_VERDICT`." in prompt
-        assert "Do not put the verdict on the same line as `## COMPATIBILITY_VERDICT`." in prompt
-        assert "Canonical accepted response:" in prompt
 
     if family == "circle_packing_shinka":
         assert "Single rewrite contract:" in bundle.implementation_system
@@ -216,5 +189,4 @@ def test_manual_pipeline_loads_section_aware_prompt_bundle_for_each_family(famil
     )
 
     assert context.prompt_bundle.genome_schema
-    assert context.prompt_bundle.compatibility_seed_system
     assert context.prompt_bundle.implementation_template
