@@ -1,12 +1,17 @@
 resume: true
-max_generations: false
-max_organism_creations: 150
+max_generations: 150
+# false or -1 disables this cap. If both generation and organism caps are enabled,
+# evolution stops at whichever cap is reached first.
+max_organism_creations: false
 max_retries_per_eval: 0
 
 creation:
+  # PHASE A retry tightening (mirrors awtf2025_heuristic): retries cut to 1,
+  # validator-retries to 0. The repair budget for explicit evaluator errors
+  # stays at 2 so a broken organism gets two shots at recovery.
   max_attempts_to_create_organism: 1
-  max_attempts_to_repair_organism_after_error: 3
-  max_attempts_to_regenerate_organism_after_novelty_rejection: 1
+  max_attempts_to_repair_organism_after_error: 2
+  max_attempts_to_regenerate_organism_after_novelty_rejection: 0
   max_parallel_organisms: 20
 
 islands:
@@ -16,7 +21,7 @@ islands:
   seed_program_path: experiments/circle_packing_shinka/_baselines/shinka/initial_program.py
   island_ids: [packing_default]
   seeds_per_island: 5
-  max_organisms_per_island: 5
+  max_organisms_per_island: 10
 
 prompts:
   project_context: conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt
@@ -45,13 +50,19 @@ prompts:
   repair_system: conf/experiments/circle_packing_shinka/prompts/repair/system.txt
   repair_user: conf/experiments/circle_packing_shinka/prompts/repair/user.txt
 
-  # Top-K survivors from the parent's island inlined into Step 1 /
-  # Step 2 prompts. See ``conf/evolver/awtf2025_heuristic.yaml`` for
-  # the full description.
-  num_inspirations: 2
+  # FunSearch / Shinka-style multi-program prompting: how many top-K
+  # survivors from the parent's island to inline into Step 1 / Step 2
+  # prompts (alongside the parent itself). Set to 0 to disable and fall
+  # back to single-parent reasoning. Effective only after the survivor
+  # pool has filled — early gens with too few survivors get an empty
+  # block regardless.
+  # PHASE A: 2 → 0 (mirrors awtf2025_heuristic). Each inspiration adds
+  # ~5kB to design+impl prompts; the marginal value vs. cost was not
+  # worth the latency hit. Re-enable after PHASE B if measured gain > 0.
+  num_inspirations: 0
 
 reproduction:
-  offspring_per_generation: 5
+  offspring_per_generation: 6
   operator_selection_strategy: random
   operator_weights:
     within_island_crossover: 0.7
@@ -61,18 +72,26 @@ reproduction:
     within_island_crossover: unified
     inter_island_crossover: unified
     mutation: unified
+  # Adaptive parent-island sampling. See conf/evolver/awtf2025_heuristic.yaml
+  # for the full description. For circle_packing the island_ids list is
+  # currently a single island, so the bandit has only one arm and
+  # behaviour is identical to uniform — kept on `bandit` so the config
+  # matches awtf2025_heuristic and adding islands later requires no
+  # config surgery.
   parent_island_sampling:
-    strategy: uniform                  # uniform | bandit
+    strategy: bandit                   # uniform | bandit
     bandit:
       algorithm: discounted_thompson
       discount: 0.97
       prior_alpha: 1.0
       prior_beta: 1.0
-      reward_mode: score_quantile
+      reward_mode: score_quantile      # survival | score_quantile | hybrid
       reward_window: 50
       survival_weight: 0.3
+  # Adaptive partner-island sampling for inter_island_crossover. See
+  # conf/evolver/awtf2025_heuristic.yaml for the full description.
   cross_island_partner_sampling:
-    strategy: uniform                  # uniform | bandit
+    strategy: bandit                   # uniform | bandit
     bandit:
       algorithm: discounted_thompson
       discount: 0.97
@@ -127,16 +146,18 @@ llm:
     ollama_gemma4_31b: 1.0
     ollama_qwen35_35b: 1.0
 
-  # When `pipelines` (below) is defined the route-bandit path here is
-  # bypassed in favour of pipeline-bandit sampling.
+  # Adaptive LLM-route sampling. See conf/evolver/awtf2025_heuristic.yaml
+  # for the full description. When `pipelines` (below) is defined and
+  # non-empty this route path is bypassed for organism stages — the
+  # pipeline mapping owns route selection.
   route_sampling:
-    strategy: weighted_static          # uniform | weighted_static | bandit
+    strategy: bandit                   # uniform | weighted_static | bandit
     bandit:
       algorithm: discounted_thompson
       discount: 0.97
       prior_alpha: 1.0
       prior_beta: 1.0
-      reward_mode: score_quantile
+      reward_mode: score_quantile      # survival | score_quantile | hybrid
       reward_window: 50
       survival_weight: 0.3
 

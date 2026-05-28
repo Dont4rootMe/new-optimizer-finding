@@ -214,13 +214,15 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 20
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
-    assert cfg.evolver.max_generations is False
-    assert cfg.evolver.max_organism_creations == 150
+    assert cfg.evolver.max_generations == 150
+    assert cfg.evolver.max_organism_creations is False
     assert cfg.mode == "evolve"
     assert "organism_dir" not in cfg
+    # PHASE A retry tightening (mirrors awtf2025_heuristic): retries cut
+    # to 1 / 2 / 0 to stop cascading retries from burning wall-time.
     assert cfg.evolver.creation.max_attempts_to_create_organism == 1
-    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 3
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 1
+    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 0
     assert cfg.evolver.creation.max_parallel_organisms == 20
     assert cfg.evolver.prompts.genome_schema == "conf/experiments/circle_packing_shinka/prompts/shared/genome_schema.txt"
     assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
@@ -228,7 +230,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.reproduction.selection_score.weights.simple_score == 1.0
     assert cfg.evolver.reproduction.selection_score.weights.inheritance_fitness == 0.0
     assert cfg.evolver.islands.seeds_per_island == 5
-    assert cfg.evolver.islands.max_organisms_per_island == 5
+    assert cfg.evolver.islands.max_organisms_per_island == 10
     assert cfg.evolver.reproduction.species_sampling.strategy == "weighted_rule"
     assert cfg.evolver.reproduction.species_sampling.weighted_rule_lambda == 1.0
     assert cfg.evolver.reproduction.species_sampling.mutation_softmax_temperature == 1.0
@@ -236,7 +238,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.reproduction.species_sampling.inter_island_crossover_softmax_temperature == 1.0
     assert "top_k_per_island" not in cfg.evolver.phases.simple
     assert cfg.evolver.phases.great_filter.top_h_per_island == 5
-    assert cfg.evolver.reproduction.offspring_per_generation == 5
+    assert cfg.evolver.reproduction.offspring_per_generation == 6
     assert set(cfg.evolver.llm.route_weights.keys()) == {
         "ollama_gemma4_31b",
         "ollama_qwen35_35b",
@@ -275,8 +277,8 @@ def test_circle_packing_canonical_preset_accepts_standalone_validation_overrides
     assert cfg.mode == "run"
     assert cfg.organism_dir == "/tmp/organism"
     assert cfg.evolver.creation.max_attempts_to_create_organism == 1
-    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 3
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 1
+    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 0
     assert cfg.evolver.creation.max_parallel_organisms == 20
 
 
