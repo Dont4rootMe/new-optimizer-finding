@@ -432,6 +432,11 @@ class MutationOperator:
             prompt_hash=creation.prompt_hash,
             seed=generator.seed,
             timestamp=utc_now_iso(),
+            token_usage=(
+                generator.pop_token_usage(organism_id)
+                if hasattr(generator, "pop_token_usage")
+                else None
+            ),
             parent_lineage=parent_lineage,
             ancestor_ids=parent.ancestor_ids,
             cross_island=False,

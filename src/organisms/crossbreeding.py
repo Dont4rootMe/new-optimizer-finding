@@ -348,6 +348,11 @@ class CrossbreedingOperator:
             prompt_hash=creation.prompt_hash,
             seed=generator.seed,
             timestamp=utc_now_iso(),
+            token_usage=(
+                generator.pop_token_usage(organism_id)
+                if hasattr(generator, "pop_token_usage")
+                else None
+            ),
             parent_lineage=mother_lineage,
             ancestor_ids=ancestor_ids,
             cross_island=mother.island_id != father.island_id,

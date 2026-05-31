@@ -29,8 +29,10 @@ from typing import Any, Iterable
 
 from src.evolve.visualization import (
     OrganismVizRecord,
+    _creation_ordered,
     _evaluated_records,
     _maternal_lineage_points_by_evaluations,
+    _token_routes,
     build_ancestor_chains,
 )
 
@@ -698,6 +700,188 @@ def render_cumulative_max_score_by_model_plotly(
 
 
 # ---------------------------------------------------------------------------
+# Token-usage panels
+#   (a) per-model cumulative token curves over generation / organisms / runtime
+#   (b) headline metrics over a cumulative-tokens x-axis
+# ---------------------------------------------------------------------------
+
+
+def _render_tokens_by_model_plotly(
+    *,
+    routes: list[str],
+    xs: list[Any],
+    cumulative: dict[str, list[int]],
+    out_path: Path,
+    title: str,
+    xaxis_title: str,
+    hover_x_format: str,
+) -> Path | None:
+    go = _try_import_plotly()
+    if go is None:
+        return None
+    fig = go.Figure()
+    for route in routes:
+        fig.add_trace(
+            go.Scatter(
+                x=xs,
+                y=cumulative[route],
+                mode="lines+markers",
+                name=route,
+                hovertemplate=(
+                    f"<b>{route}</b><br>{xaxis_title}: %{{x{hover_x_format}}}<br>"
+                    "tokens: %{y}<extra></extra>"
+                ),
+            )
+        )
+    fig.update_layout(
+        title=title,
+        xaxis_title=xaxis_title,
+        yaxis_title="# Tokens (cumulative)",
+        template="plotly_white",
+        hovermode="x unified",
+    )
+    return _write_plotly(fig, out_path)
+
+
+def render_tokens_by_model_over_generation_plotly(
+    records: list[OrganismVizRecord], *, out_path: Path
+) -> Path | None:
+    routes = _token_routes(records)
+    if not routes:
+        return None
+    generations = sorted({r.generation_created for r in records})
+    per_gen_per_route: dict[int, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for r in records:
+        for route, tokens in r.tokens_by_route.items():
+            per_gen_per_route[r.generation_created][route] += tokens
+    cumulative: dict[str, list[int]] = {route: [] for route in routes}
+    running: dict[str, int] = {route: 0 for route in routes}
+    for gen in generations:
+        for route in routes:
+            running[route] += per_gen_per_route[gen].get(route, 0)
+            cumulative[route].append(running[route])
+    return _render_tokens_by_model_plotly(
+        routes=routes,
+        xs=generations,
+        cumulative=cumulative,
+        out_path=out_path,
+        title="Cumulative Tokens by Model (over generations)",
+        xaxis_title="Generation Created",
+        hover_x_format="",
+    )
+
+
+def render_tokens_by_model_over_evaluations_plotly(
+    records: list[OrganismVizRecord], *, out_path: Path
+) -> Path | None:
+    routes = _token_routes(records)
+    if not routes:
+        return None
+    ordered = _creation_ordered(records)
+    cumulative: dict[str, list[int]] = {route: [] for route in routes}
+    running: dict[str, int] = {route: 0 for route in routes}
+    xs: list[int] = []
+    for index, r in enumerate(ordered, start=1):
+        xs.append(index)
+        for route in routes:
+            running[route] += r.tokens_by_route.get(route, 0)
+            cumulative[route].append(running[route])
+    return _render_tokens_by_model_plotly(
+        routes=routes,
+        xs=xs,
+        cumulative=cumulative,
+        out_path=out_path,
+        title="Cumulative Tokens by Model (over organisms)",
+        xaxis_title="# Created Organisms",
+        hover_x_format="",
+    )
+
+
+def render_tokens_by_model_over_runtime_plotly(
+    records: list[OrganismVizRecord], *, out_path: Path
+) -> Path | None:
+    routes = _token_routes(records)
+    timed = [r for r in records if r.created_at is not None]
+    if not routes or not timed:
+        return None
+    timed.sort(key=lambda r: (r.created_at, r.organism_id))
+    t0 = timed[0].created_at
+    cumulative: dict[str, list[int]] = {route: [] for route in routes}
+    running: dict[str, int] = {route: 0 for route in routes}
+    xs: list[float] = []
+    for r in timed:
+        xs.append((r.created_at - t0).total_seconds())
+        for route in routes:
+            running[route] += r.tokens_by_route.get(route, 0)
+            cumulative[route].append(running[route])
+    return _render_tokens_by_model_plotly(
+        routes=routes,
+        xs=xs,
+        cumulative=cumulative,
+        out_path=out_path,
+        title="Cumulative Tokens by Model (over runtime)",
+        xaxis_title="Elapsed Runtime (s)",
+        hover_x_format=":.0f",
+    )
+
+
+def render_best_vs_tokens_plotly(
+    records: list[OrganismVizRecord], *, out_path: Path
+) -> Path | None:
+    go = _try_import_plotly()
+    if go is None:
+        return None
+    evaluated = _evaluated_records(records)
+    if not evaluated:
+        return None
+    xs: list[int] = []
+    running = 0
+    for r in evaluated:
+        running += r.total_tokens
+        xs.append(running)
+    if running <= 0:
+        return None
+    ys = [r.simple_score for r in evaluated]
+    best: list[float] = []
+    running_best: float | None = None
+    for value in ys:
+        if value is not None and (running_best is None or value > running_best):
+            running_best = value
+        best.append(running_best if running_best is not None else float("nan"))
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=xs,
+            y=ys,
+            mode="markers",
+            name="Individual Evals",
+            marker={"color": "black", "size": 6},
+            customdata=[_organism_hover_payload(r) for r in evaluated],
+            hovertemplate=_ORGANISM_HOVER_TEMPLATE,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=xs,
+            y=best,
+            mode="lines",
+            name="Best Score",
+            line={"color": "#d62728", "width": 2.0},
+            hovertemplate="tokens: %{x}<br>best so far: %{y:.4f}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title="Best Score vs Tokens (interactive)",
+        xaxis_title="# Tokens (cumulative over evaluated organisms)",
+        yaxis_title="Simple Score",
+        template="plotly_white",
+        hovermode="closest",
+    )
+    return _write_plotly(fig, out_path)
+
+
+# ---------------------------------------------------------------------------
 # Survival panels (ratio + cumulative counts). Three Ox bases.
 # ---------------------------------------------------------------------------
 
@@ -886,6 +1070,44 @@ def render_survival_by_generation_plotly(
         out_path=out_path,
         title="Survival by Generation (interactive)",
         xaxis_title="Generation Created",
+        hover_x_format="",
+    )
+
+
+def render_survival_by_tokens_plotly(
+    records: list[OrganismVizRecord], *, out_path: Path
+) -> Path | None:
+    ordered = _creation_ordered(records)
+    if not ordered:
+        return None
+    xs: list[int] = []
+    cumulative_scored = 0
+    cumulative_dead = 0
+    scored_series: list[int] = []
+    dead_series: list[int] = []
+    ratio_series: list[float] = []
+    running_tokens = 0
+    for r in ordered:
+        running_tokens += r.total_tokens
+        if r.simple_score is None:
+            cumulative_dead += 1
+        else:
+            cumulative_scored += 1
+        xs.append(running_tokens)
+        scored_series.append(cumulative_scored)
+        dead_series.append(cumulative_dead)
+        total = cumulative_scored + cumulative_dead
+        ratio_series.append(cumulative_scored / total if total else 0.0)
+    if running_tokens <= 0:
+        return None
+    return _render_survival_plotly(
+        xs=xs,
+        scored_series=scored_series,
+        dead_series=dead_series,
+        ratio_series=ratio_series,
+        out_path=out_path,
+        title="Survival by Tokens (interactive)",
+        xaxis_title="# Tokens (cumulative)",
         hover_x_format="",
     )
 

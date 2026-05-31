@@ -5,10 +5,11 @@ from __future__ import annotations
 import ast
 import logging
 import sys
+import threading
 import time
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 from omegaconf import DictConfig
 
@@ -112,6 +113,44 @@ def _response_summary(*, text: str, raw_response: object, usage: object | None =
         if value is not None:
             parts.append(f"{key}={value}")
     return ", ".join(parts)
+
+
+def _normalize_token_usage(usage: object) -> dict[str, int]:
+    """Map a provider-specific ``usage`` blob to canonical token counts.
+
+    Different providers expose token counts under different keys:
+      * Ollama   -> ``prompt_eval_count`` / ``eval_count``
+      * OpenAI   -> ``prompt_tokens`` / ``completion_tokens`` / ``total_tokens``
+      * Anthropic-> ``input_tokens`` / ``output_tokens``
+      * mock     -> ``{}`` (no counts)
+
+    Returns ``{"prompt_tokens", "completion_tokens", "total_tokens"}`` with
+    ``total_tokens`` backfilled from prompt+completion when the provider does
+    not report a total. All-zero results are returned as-is; the caller skips
+    recording them so empty mock usage never pollutes the accounting.
+    """
+
+    payload = usage if isinstance(usage, dict) else {}
+
+    def _coerce(*keys: str) -> int:
+        for key in keys:
+            value = payload.get(key)
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                return int(value)
+        return 0
+
+    prompt = _coerce("prompt_tokens", "prompt_eval_count", "input_tokens")
+    completion = _coerce("completion_tokens", "eval_count", "output_tokens")
+    total = _coerce("total_tokens")
+    if total <= 0:
+        total = prompt + completion
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
+    }
 
 
 def _structured_response_text(response: object) -> _StructuredResponseText:
@@ -279,6 +318,14 @@ class CandidateGenerator(BaseLlmGenerator):
         self.expected_core_gene_sections = load_expected_core_gene_sections_from_config(cfg)
         self._implementation_region_order_error: ValueError | None = None
         self.expected_implementation_regions = self._load_expected_implementation_regions()
+        # Per-organism LLM token accounting. Organisms are created on parallel
+        # worker threads (one per organism), so the accumulator is keyed by
+        # organism_id and guarded by a lock. Within one organism the stages
+        # run sequentially on a single thread. The bucket is *popped* when the
+        # organism meta is finalised (creation) and again after each repair
+        # attempt, so the dict never holds stale cross-phase data.
+        self._token_usage_lock = threading.Lock()
+        self._token_usage_by_organism: dict[str, dict[str, dict[str, int]]] = {}
 
     def _load_expected_implementation_regions(self) -> tuple[str, ...] | None:
         expected_sections = self.expected_core_gene_sections
@@ -375,7 +422,63 @@ class CandidateGenerator(BaseLlmGenerator):
                 usage=response.usage,
             ),
         )
+        self._record_token_usage(organism_id=organism_id, route_id=route_id, usage=response.usage)
         return response
+
+    def _record_token_usage(self, *, organism_id: str, route_id: str, usage: object) -> None:
+        """Accumulate one LLM call's token usage into the per-organism bucket."""
+
+        normalized = _normalize_token_usage(usage)
+        if not any(normalized.values()):
+            # Mock provider / providers that do not report usage. Nothing to
+            # record — skip so empty calls don't create noise buckets.
+            return
+        with self._token_usage_lock:
+            org_bucket = self._token_usage_by_organism.setdefault(organism_id, {})
+            route_bucket = org_bucket.setdefault(
+                route_id,
+                {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
+            )
+            route_bucket["prompt_tokens"] += normalized["prompt_tokens"]
+            route_bucket["completion_tokens"] += normalized["completion_tokens"]
+            route_bucket["total_tokens"] += normalized["total_tokens"]
+            route_bucket["calls"] += 1
+
+    def pop_token_usage(self, organism_id: str) -> dict[str, dict[str, int]]:
+        """Return and clear the accumulated token usage for one organism.
+
+        Called once when the organism meta is built (capturing all creation
+        stages) and again after each repair attempt (capturing that attempt's
+        delta). Returns ``{}`` when the organism made no recorded LLM calls
+        (e.g. seed-copy organisms or the mock provider).
+        """
+
+        with self._token_usage_lock:
+            return self._token_usage_by_organism.pop(organism_id, {})
+
+    def merge_token_usage_into_meta(self, organism: OrganismMeta) -> bool:
+        """Fold any pending token-usage delta for ``organism`` into its meta.
+
+        Additive merge keyed by route_id, so it is correct whether the meta's
+        existing ``token_usage`` came from this process (creation) or was
+        reloaded from disk on resume. Returns ``True`` when the meta changed.
+        """
+
+        delta = self.pop_token_usage(organism.organism_id)
+        if not delta:
+            return False
+        merged: dict[str, dict[str, int]] = {
+            str(route): dict(counts) for route, counts in organism.token_usage.items()
+        }
+        for route, counts in delta.items():
+            route_bucket = merged.setdefault(
+                route,
+                {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
+            )
+            for metric, value in counts.items():
+                route_bucket[metric] = int(route_bucket.get(metric, 0)) + int(value)
+        organism.token_usage = merged
+        return True
 
     def _resolve_max_novelty_regeneration_attempts(self) -> int:
         value = int(self.evolver_cfg.creation.max_attempts_to_regenerate_organism_after_novelty_rejection)
@@ -1790,6 +1893,9 @@ class CandidateGenerator(BaseLlmGenerator):
         organism.llm_route_id = route_id
         organism.llm_provider = repair_response.provider
         organism.provider_model_id = repair_response.provider_model_id
+        # Fold this repair attempt's token spend into the organism's running
+        # per-route accounting before persisting the refreshed meta.
+        self.merge_token_usage_into_meta(organism)
         write_organism_meta(organism)
         write_json(request_path, request_payload)
         write_json(response_path, response_payload)

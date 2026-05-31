@@ -623,6 +623,7 @@ def build_organism_from_response(
     father_island_id: str | None = None,
     expected_core_gene_sections: tuple[str, ...] | None = None,
     llm_pipeline_id: str = "",
+    token_usage: dict[str, Any] | None = None,
 ) -> OrganismMeta:
     """Build `OrganismMeta` from a canonical design response and raw implementation text."""
 
@@ -678,6 +679,10 @@ def build_organism_from_response(
         llm_pipeline_id=llm_pipeline_id,
         prompt_hash=prompt_hash,
         seed=seed,
+        token_usage={
+            str(route): dict(counts) if isinstance(counts, dict) else counts
+            for route, counts in (token_usage or {}).items()
+        },
     )
 
     save_organism_artifacts(org, genetic_code=genetic_code, lineage=lineage)

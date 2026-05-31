@@ -7,7 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from src.evolve.storage import read_genetic_code, read_lineage, read_organism_meta, write_json, write_organism_meta
+from src.evolve.storage import (
+    organism_meta_path,
+    read_genetic_code,
+    read_lineage,
+    read_organism_meta,
+    write_json,
+    write_organism_meta,
+)
 from src.organisms.genetic_code_format import load_genome_schema
 from src.organisms.organism import (
     build_organism_from_response,
@@ -378,6 +385,42 @@ def test_canonical_organism_meta_round_trips_error_msg(tmp_path: Path) -> None:
 
     reloaded = read_organism_meta(org.organism_dir)
     assert reloaded.error_msg == "design response is missing COMPUTE_NOTES"
+
+
+def test_canonical_organism_meta_round_trips_token_usage(tmp_path: Path) -> None:
+    org = _build(tmp_path, _base_parsed())
+    org.token_usage = {
+        "ollama_gemma4_31b": {
+            "prompt_tokens": 120,
+            "completion_tokens": 340,
+            "total_tokens": 460,
+            "calls": 3,
+        },
+        "ollama_qwen35_35b": {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30,
+            "calls": 1,
+        },
+    }
+    write_organism_meta(org)
+
+    reloaded = read_organism_meta(org.organism_dir)
+    assert reloaded.token_usage == org.token_usage
+
+
+def test_canonical_organism_meta_defaults_token_usage_for_legacy_files(tmp_path: Path) -> None:
+    """organism.json written before token accounting omits the field entirely."""
+
+    org = _build(tmp_path, _base_parsed())
+    write_organism_meta(org)
+    meta_path = organism_meta_path(org.organism_dir)
+    payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    payload.pop("token_usage", None)
+    meta_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    reloaded = read_organism_meta(org.organism_dir)
+    assert reloaded.token_usage == {}
 
 
 def test_parent_fitness_signal_renders_gap_and_best_ancestor() -> None:

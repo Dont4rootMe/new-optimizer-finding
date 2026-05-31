@@ -13,7 +13,9 @@ from src.evolve.visualization import (
     RenderedSnapshot,
     _best_active_simple_score,
     _evenly_sample_records,
+    _extract_token_usage,
     _format_score,
+    _load_records,
     _maternal_lineage,
     _offspring_operator_counts_by_generation,
     _offspring_operator_totals,
@@ -21,6 +23,7 @@ from src.evolve.visualization import (
     _plot_best_vs_evaluations_with_dead,
     _plot_best_vs_runtime,
     _plot_best_vs_runtime_with_dead,
+    _plot_best_vs_tokens,
     _plot_cumulative_creations_by_island_over_generation,
     _plot_cumulative_creations_by_operator_over_generation,
     _plot_cumulative_evaluations_by_island_over_generation,
@@ -30,7 +33,12 @@ from src.evolve.visualization import (
     _plot_survival_by_evaluations,
     _plot_survival_by_generation,
     _plot_survival_by_runtime,
+    _plot_survival_by_tokens,
+    _plot_tokens_by_model_over_evaluations,
+    _plot_tokens_by_model_over_generation,
+    _plot_tokens_by_model_over_runtime,
     _sample_records_for_render,
+    _token_routes,
     build_ancestor_chains,
     render_evolution_snapshot,
 )
@@ -47,6 +55,9 @@ def _record(
     mother_id: str | None = None,
     father_id: str | None = None,
     simple_eval_finished_at: datetime | None = None,
+    created_at: datetime | None = None,
+    tokens_by_route: dict[str, int] | None = None,
+    total_tokens: int = 0,
 ) -> OrganismVizRecord:
     return OrganismVizRecord(
         organism_id=organism_id,
@@ -61,9 +72,11 @@ def _record(
         father_id=father_id,
         simple_score=simple_score,
         hard_score=None,
-        created_at=None,
+        created_at=created_at,
         simple_eval_finished_at=simple_eval_finished_at,
         active=active,
+        tokens_by_route=tokens_by_route or {},
+        total_tokens=total_tokens,
     )
 
 
@@ -675,6 +688,7 @@ def _write_organism(
     mother_id: str | None = None,
     father_id: str | None = None,
     timestamp_iso: str = "2026-01-01T00:00:00+00:00",
+    token_usage: dict[str, dict[str, int]] | None = None,
 ) -> None:
     """Write a minimal organism.json/summary.json pair for snapshot tests."""
 
@@ -696,6 +710,7 @@ def _write_organism(
                 "hard_score": None,
                 "model_name": "modelX",
                 "timestamp": timestamp_iso,
+                "token_usage": token_usage or {},
             }
         ),
         encoding="utf-8",
@@ -802,3 +817,113 @@ def test_render_evolution_snapshot_writes_grouped_artifacts(tmp_path: Path) -> N
     assert "cumulative_creations_by_operator" in snapshot.timeline_panels
     assert "cumulative_creations_by_island" in snapshot.timeline_panels
     assert "cumulative_max_score_by_model" in snapshot.timeline_panels
+    # Token-usage panels: per-model curves over the three x-axes plus the
+    # cumulative-tokens variants of the headline metrics.
+    assert "tokens_by_model_over_generation" in snapshot.timeline_panels
+    assert "tokens_by_model_over_evaluations" in snapshot.timeline_panels
+    assert "tokens_by_model_over_runtime" in snapshot.timeline_panels
+    assert "best_vs_tokens" in snapshot.overview_panels
+    assert "by_tokens" in snapshot.survival_panels
+
+
+def test_extract_token_usage_projects_route_totals() -> None:
+    by_route, total = _extract_token_usage(
+        {
+            "ollama_gemma4_31b": {"prompt_tokens": 100, "completion_tokens": 200, "total_tokens": 300, "calls": 2},
+            "ollama_qwen35_35b": {"total_tokens": 50},
+            "zero_route": {"total_tokens": 0},
+        }
+    )
+    # Routes with zero total are dropped; grand total sums the rest.
+    assert by_route == {"ollama_gemma4_31b": 300, "ollama_qwen35_35b": 50}
+    assert total == 350
+    # Legacy / malformed payloads coerce to empty.
+    assert _extract_token_usage(None) == ({}, 0)
+    assert _extract_token_usage({"r": "not-a-dict"}) == ({}, 0)
+
+
+def test_load_records_surfaces_token_usage(tmp_path: Path) -> None:
+    population_root = tmp_path / "population"
+    population_root.mkdir()
+    (population_root / "population_state.json").write_text(
+        json.dumps({"current_generation": 1, "active_organisms": []}),
+        encoding="utf-8",
+    )
+    _write_organism(
+        population_root,
+        organism_id="seed_a",
+        generation=0,
+        island_id="i_a",
+        operator="seed",
+        simple_score=0.2,
+        token_usage={},
+    )
+    _write_organism(
+        population_root,
+        organism_id="child_a",
+        generation=1,
+        island_id="i_a",
+        operator="mutation",
+        simple_score=0.7,
+        mother_id="seed_a",
+        token_usage={
+            "ollama_gemma4_31b": {"prompt_tokens": 40, "completion_tokens": 60, "total_tokens": 100, "calls": 1},
+            "ollama_qwen35_35b": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20, "calls": 1},
+        },
+    )
+
+    records, _, _ = _load_records(population_root)
+    by_id = {record.organism_id: record for record in records}
+
+    assert by_id["seed_a"].total_tokens == 0
+    assert by_id["seed_a"].tokens_by_route == {}
+    assert by_id["child_a"].total_tokens == 120
+    assert by_id["child_a"].tokens_by_route == {"ollama_gemma4_31b": 100, "ollama_qwen35_35b": 20}
+    assert _token_routes(records) == ["ollama_gemma4_31b", "ollama_qwen35_35b"]
+
+
+def test_token_panels_draw_one_line_per_model() -> None:
+    # Two token-bearing routes across two organisms in time; the seed only
+    # touched gemma, the child touched both gemma and qwen.
+    records = [
+        _record(
+            organism_id="seed",
+            simple_score=0.2,
+            active=True,
+            generation_created=0,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            tokens_by_route={"gemma": 50},
+            total_tokens=50,
+        ),
+        _record(
+            organism_id="child",
+            simple_score=0.7,
+            active=True,
+            generation_created=1,
+            created_at=datetime(2026, 1, 1, 0, 5, tzinfo=timezone.utc),
+            tokens_by_route={"gemma": 100, "qwen": 200},
+            total_tokens=300,
+        ),
+    ]
+
+    for plot_fn in (
+        _plot_tokens_by_model_over_generation,
+        _plot_tokens_by_model_over_evaluations,
+        _plot_tokens_by_model_over_runtime,
+    ):
+        fig, ax = plt.subplots()
+        try:
+            plot_fn(ax, records)
+            # One line per distinct token-bearing route (gemma, qwen).
+            assert len(ax.get_lines()) == 2, plot_fn.__name__
+        finally:
+            plt.close(fig)
+
+    # Headline metrics over the cumulative-tokens x-axis still render.
+    for plot_fn in (_plot_best_vs_tokens, _plot_survival_by_tokens):
+        fig, ax = plt.subplots()
+        try:
+            plot_fn(ax, records)
+            assert ax.get_lines(), plot_fn.__name__
+        finally:
+            plt.close(fig)

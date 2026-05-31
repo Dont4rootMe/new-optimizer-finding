@@ -477,6 +477,30 @@ def _optional_str_field(payload: dict[str, Any], field_name: str) -> str | None:
     return text or None
 
 
+def _coerce_token_usage_payload(raw: Any) -> dict[str, dict[str, int]]:
+    """Coerce a persisted ``token_usage`` blob into ``{route: {metric: int}}``.
+
+    Missing or malformed payloads (legacy organism.json predating token
+    accounting) coerce to an empty dict so resume stays non-breaking.
+    """
+
+    if not isinstance(raw, dict):
+        return {}
+    coerced: dict[str, dict[str, int]] = {}
+    for route, counts in raw.items():
+        if not isinstance(counts, dict):
+            continue
+        route_bucket: dict[str, int] = {}
+        for metric, value in counts.items():
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                route_bucket[str(metric)] = int(value)
+        if route_bucket:
+            coerced[str(route)] = route_bucket
+    return coerced
+
+
 def _coerce_organism_meta_payload(
     payload: dict[str, Any],
     *,
@@ -520,6 +544,7 @@ def _coerce_organism_meta_payload(
         "pipeline_state": str(payload.get("pipeline_state", "")),
         "error_msg": _optional_str_field(payload, "error_msg"),
         "planned_phase_evaluations": dict(payload.get("planned_phase_evaluations", {})),
+        "token_usage": _coerce_token_usage_payload(payload.get("token_usage", {})),
     }
 
 
@@ -576,6 +601,7 @@ def read_organism_meta(path: str | Path) -> OrganismMeta:
         pipeline_state=canonical["pipeline_state"],
         error_msg=canonical["error_msg"],
         planned_phase_evaluations=canonical["planned_phase_evaluations"],
+        token_usage=canonical["token_usage"],
     )
 
 

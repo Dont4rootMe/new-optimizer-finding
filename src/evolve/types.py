@@ -72,6 +72,13 @@ class OrganismMeta:
     pipeline_state: str = ""
     error_msg: str | None = None
     planned_phase_evaluations: dict[str, Any] = field(default_factory=dict)
+    # Per-route LLM token accounting for this organism. Keyed by route_id
+    # (e.g. ``ollama_gemma4_31b``) -> {"prompt_tokens", "completion_tokens",
+    # "total_tokens", "calls"}. Accumulated across every creation stage
+    # (rationalization/design/novelty/implementation) and any post-eval
+    # repair stages. Seed-copy organisms make no LLM calls and leave this
+    # empty. Consumed by the token-usage visualisation panels.
+    token_usage: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -101,6 +108,10 @@ class OrganismMeta:
             "pipeline_state": self.pipeline_state,
             "error_msg": self.error_msg,
             "planned_phase_evaluations": dict(self.planned_phase_evaluations),
+            "token_usage": {
+                str(route): dict(counts) if isinstance(counts, dict) else counts
+                for route, counts in self.token_usage.items()
+            },
         }
 
     @property

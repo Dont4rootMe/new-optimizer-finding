@@ -74,6 +74,11 @@ class OrganismVizRecord:
     created_at: datetime | None
     simple_eval_finished_at: datetime | None
     active: bool
+    # Per-route LLM token spend for this organism: route_id -> total_tokens.
+    # ``total_tokens`` is the sum across all routes. Both are 0/empty for
+    # seed-copy organisms and for runs that predate token accounting.
+    tokens_by_route: dict[str, int] = field(default_factory=dict)
+    total_tokens: int = 0
 
 
 @dataclass(frozen=True)
@@ -211,6 +216,11 @@ def render_evolution_snapshot(
         overview_dir / "best_vs_runtime_with_dead.png",
         lambda ax: _plot_best_vs_runtime_with_dead(ax, records),
     )
+    # Headline best-score metric over a 4th x-axis: cumulative tokens spent.
+    overview_panels["best_vs_tokens"] = _save_panel(
+        overview_dir / "best_vs_tokens.png",
+        lambda ax: _plot_best_vs_tokens(ax, records),
+    )
 
     survival_panels: dict[str, Path] = {}
     survival_panels["by_evaluations"] = _save_panel(
@@ -224,6 +234,11 @@ def render_evolution_snapshot(
     survival_panels["by_generation"] = _save_panel(
         survival_dir / "by_generation.png",
         lambda ax: _plot_survival_by_generation(ax, records),
+    )
+    # Survival over the same cumulative-tokens x-axis.
+    survival_panels["by_tokens"] = _save_panel(
+        survival_dir / "by_tokens.png",
+        lambda ax: _plot_survival_by_tokens(ax, records),
     )
 
     timeline_panels: dict[str, Path] = {}
@@ -244,6 +259,20 @@ def render_evolution_snapshot(
     timeline_panels["cumulative_max_score_by_model"] = _save_panel(
         timeline_dir / "cumulative_max_score_by_model.png",
         lambda ax: _plot_cumulative_max_score_by_model_over_generation(ax, records),
+    )
+    # Per-model token spend over the three existing x-axes (generation /
+    # organism count / runtime), mirroring the cumulative-by-model idiom.
+    timeline_panels["tokens_by_model_over_generation"] = _save_panel(
+        timeline_dir / "tokens_by_model_over_generation.png",
+        lambda ax: _plot_tokens_by_model_over_generation(ax, records),
+    )
+    timeline_panels["tokens_by_model_over_evaluations"] = _save_panel(
+        timeline_dir / "tokens_by_model_over_evaluations.png",
+        lambda ax: _plot_tokens_by_model_over_evaluations(ax, records),
+    )
+    timeline_panels["tokens_by_model_over_runtime"] = _save_panel(
+        timeline_dir / "tokens_by_model_over_runtime.png",
+        lambda ax: _plot_tokens_by_model_over_runtime(ax, records),
     )
 
     # Every matplotlib panel also gets a Plotly HTML sibling. PNGs give
@@ -364,6 +393,7 @@ def _build_plotly_renderers(
         from src.evolve.visualization_plotly import (
             render_best_vs_evaluations_plotly,
             render_best_vs_runtime_plotly,
+            render_best_vs_tokens_plotly,
             render_cumulative_creations_by_island_plotly,
             render_cumulative_creations_by_operator_plotly,
             render_cumulative_evaluations_by_island_plotly,
@@ -376,6 +406,10 @@ def _build_plotly_renderers(
             render_survival_by_evaluations_plotly,
             render_survival_by_generation_plotly,
             render_survival_by_runtime_plotly,
+            render_survival_by_tokens_plotly,
+            render_tokens_by_model_over_evaluations_plotly,
+            render_tokens_by_model_over_generation_plotly,
+            render_tokens_by_model_over_runtime_plotly,
         )
     except ImportError as exc:  # pragma: no cover - optional dep
         LOGGER.warning("Plotly not installed; skipping interactive HTML (%s)", exc)
@@ -417,6 +451,18 @@ def _build_plotly_renderers(
         "cumulative_max_score_by_model": _bind(
             render_cumulative_max_score_by_model_plotly, "cumulative_max_score_by_model.html"
         ),
+        # token usage — per-model cumulative spend over the three x-axes
+        "tokens_by_model_over_generation": _bind(
+            render_tokens_by_model_over_generation_plotly, "tokens_by_model_over_generation.html"
+        ),
+        "tokens_by_model_over_evaluations": _bind(
+            render_tokens_by_model_over_evaluations_plotly, "tokens_by_model_over_evaluations.html"
+        ),
+        "tokens_by_model_over_runtime": _bind(
+            render_tokens_by_model_over_runtime_plotly, "tokens_by_model_over_runtime.html"
+        ),
+        # headline metrics over the cumulative-tokens x-axis
+        "best_vs_tokens": _bind(render_best_vs_tokens_plotly, "best_vs_tokens.html"),
         # survival
         "survival_by_evaluations": _bind(
             render_survival_by_evaluations_plotly, "survival_by_evaluations.html"
@@ -425,6 +471,7 @@ def _build_plotly_renderers(
         "survival_by_generation": _bind(
             render_survival_by_generation_plotly, "survival_by_generation.html"
         ),
+        "survival_by_tokens": _bind(render_survival_by_tokens_plotly, "survival_by_tokens.html"),
     }
 
 
@@ -468,6 +515,7 @@ def _load_records(population_root: Path) -> tuple[list[OrganismVizRecord], int, 
         simple_phase = phase_results.get("simple", {}) if isinstance(phase_results, dict) else {}
 
         organism_id = str(meta.get("organism_id", org_dir.name))
+        tokens_by_route, total_tokens = _extract_token_usage(meta.get("token_usage"))
         records.append(
             OrganismVizRecord(
                 organism_id=organism_id,
@@ -485,6 +533,8 @@ def _load_records(population_root: Path) -> tuple[list[OrganismVizRecord], int, 
                 created_at=_parse_timestamp(meta.get("timestamp")),
                 simple_eval_finished_at=_parse_timestamp(simple_phase.get("eval_finished_at")),
                 active=organism_id in active_ids,
+                tokens_by_route=tokens_by_route,
+                total_tokens=total_tokens,
             )
         )
 
@@ -1224,6 +1274,181 @@ def _plot_cumulative_max_score_by_model_over_generation(
 
 
 # ---------------------------------------------------------------------------
+# Token-usage panels
+#   (a) per-model cumulative token curves over generation / organisms / runtime
+#   (b) headline metrics (best score, survival) over a cumulative-tokens x-axis
+# ---------------------------------------------------------------------------
+
+
+def _plot_tokens_by_model_over_generation(ax: Any, records: list[OrganismVizRecord]) -> None:
+    routes = _token_routes(records)
+    if not routes:
+        return _empty_panel(ax, "No LLM token usage recorded yet.")
+
+    generations = sorted({record.generation_created for record in records})
+    per_gen_per_route: dict[int, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for record in records:
+        for route, tokens in record.tokens_by_route.items():
+            per_gen_per_route[record.generation_created][route] += tokens
+
+    cumulative: dict[str, list[int]] = {route: [] for route in routes}
+    running: dict[str, int] = {route: 0 for route in routes}
+    for generation in generations:
+        for route in routes:
+            running[route] += per_gen_per_route[generation].get(route, 0)
+            cumulative[route].append(running[route])
+
+    cmap = plt.get_cmap("tab10")
+    for idx, route in enumerate(routes):
+        ax.plot(
+            generations,
+            cumulative[route],
+            color=cmap(idx % 10),
+            linewidth=2.0,
+            marker="o",
+            markersize=4,
+            label=route,
+        )
+
+    ax.set_title("Cumulative Tokens by Model (over generations)", fontsize=15, fontweight="bold")
+    ax.set_xlabel("Generation Created", fontsize=12, fontweight="bold")
+    ax.set_ylabel("# Tokens (cumulative)", fontsize=12, fontweight="bold")
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc="upper left", fontsize=9)
+
+
+def _plot_tokens_by_model_over_evaluations(ax: Any, records: list[OrganismVizRecord]) -> None:
+    routes = _token_routes(records)
+    if not routes:
+        return _empty_panel(ax, "No LLM token usage recorded yet.")
+
+    ordered = _creation_ordered(records)
+    cumulative: dict[str, list[int]] = {route: [] for route in routes}
+    running: dict[str, int] = {route: 0 for route in routes}
+    xs: list[int] = []
+    for index, record in enumerate(ordered, start=1):
+        xs.append(index)
+        for route in routes:
+            running[route] += record.tokens_by_route.get(route, 0)
+            cumulative[route].append(running[route])
+
+    cmap = plt.get_cmap("tab10")
+    for idx, route in enumerate(routes):
+        ax.plot(xs, cumulative[route], color=cmap(idx % 10), linewidth=2.0, label=route)
+
+    ax.set_title("Cumulative Tokens by Model (over organisms)", fontsize=15, fontweight="bold")
+    ax.set_xlabel("# Created Organisms (in creation order)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("# Tokens (cumulative)", fontsize=12, fontweight="bold")
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc="upper left", fontsize=9)
+
+
+def _plot_tokens_by_model_over_runtime(ax: Any, records: list[OrganismVizRecord]) -> None:
+    routes = _token_routes(records)
+    timed = [record for record in records if record.created_at is not None]
+    if not routes or not timed:
+        return _empty_panel(ax, "No timestamped token usage yet.")
+
+    timed.sort(key=lambda record: (record.created_at, record.organism_id))
+    t0 = timed[0].created_at
+    if t0 is None:
+        return _empty_panel(ax, "No timestamped token usage yet.")
+
+    cumulative: dict[str, list[int]] = {route: [] for route in routes}
+    running: dict[str, int] = {route: 0 for route in routes}
+    xs: list[float] = []
+    for record in timed:
+        xs.append((record.created_at - t0).total_seconds())
+        for route in routes:
+            running[route] += record.tokens_by_route.get(route, 0)
+            cumulative[route].append(running[route])
+
+    cmap = plt.get_cmap("tab10")
+    for idx, route in enumerate(routes):
+        ax.plot(xs, cumulative[route], color=cmap(idx % 10), linewidth=2.0, label=route)
+
+    ax.xaxis.set_major_formatter(FuncFormatter(_format_elapsed_seconds))
+    ax.set_title("Cumulative Tokens by Model (over runtime)", fontsize=15, fontweight="bold")
+    ax.set_xlabel("Elapsed Runtime (since first creation)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("# Tokens (cumulative)", fontsize=12, fontweight="bold")
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc="upper left", fontsize=9)
+
+
+def _plot_best_vs_tokens(ax: Any, records: list[OrganismVizRecord]) -> None:
+    """Best simple score against cumulative LLM tokens spent (compute budget)."""
+
+    evaluated = _evaluated_records(records)
+    if not evaluated:
+        return _empty_panel(ax, "No evaluated organisms yet.")
+
+    xs: list[int] = []
+    running = 0
+    for record in evaluated:
+        running += record.total_tokens
+        xs.append(running)
+    if running <= 0:
+        return _empty_panel(ax, "No LLM token usage recorded yet.")
+
+    ys = [record.simple_score for record in evaluated]
+    best_scores = _cumulative_best(ys)
+
+    ax.scatter(xs, ys, color="black", s=18, alpha=0.85, label="Individual Evals")
+    ax.plot(xs, best_scores, color="#d62728", linewidth=2.0, label="Best Score")
+    ax.set_title("Best Score vs Tokens", fontsize=16, fontweight="bold")
+    ax.set_xlabel("# Tokens (cumulative over evaluated organisms)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Simple Score", fontsize=12, fontweight="bold")
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc="lower right", fontsize=10)
+
+
+def _plot_survival_by_tokens(ax: Any, records: list[OrganismVizRecord]) -> None:
+    """Cumulative scored / dead / ratio against cumulative tokens spent."""
+
+    ordered = _creation_ordered(records)
+    if not ordered:
+        return _empty_panel(ax, "No tracked organisms yet.")
+
+    xs: list[int] = []
+    scored_series: list[int] = []
+    dead_series: list[int] = []
+    ratio_series: list[float] = []
+    cumulative_scored = 0
+    cumulative_dead = 0
+    running_tokens = 0
+    for record in ordered:
+        running_tokens += record.total_tokens
+        if record.simple_score is None:
+            cumulative_dead += 1
+        else:
+            cumulative_scored += 1
+        xs.append(running_tokens)
+        scored_series.append(cumulative_scored)
+        dead_series.append(cumulative_dead)
+        total = cumulative_scored + cumulative_dead
+        ratio_series.append(cumulative_scored / total if total else 0.0)
+
+    if running_tokens <= 0:
+        return _empty_panel(ax, "No LLM token usage recorded yet.")
+
+    ax.plot(xs, scored_series, color="#2ca02c", linewidth=2.0, label="Scored (cumulative)")
+    ax.plot(xs, dead_series, color="#d62728", linewidth=2.0, label="Dead (cumulative)")
+    ax.set_ylabel("# Organisms (cumulative)", fontsize=12, fontweight="bold")
+
+    ax_ratio = ax.twinx()
+    ax_ratio.plot(xs, ratio_series, color="#1f77b4", linestyle="--", linewidth=1.8, label="Survival Ratio")
+    ax_ratio.set_ylim(0.0, 1.0)
+    ax_ratio.set_ylabel("scored / (scored + dead)", fontsize=11, color="#1f77b4")
+    ax_ratio.tick_params(axis="y", labelcolor="#1f77b4")
+
+    ax.set_title("Survival by Tokens", fontsize=15, fontweight="bold")
+    ax.set_xlabel("# Tokens (cumulative)", fontsize=12, fontweight="bold")
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc="upper left", fontsize=9)
+    ax_ratio.legend(loc="lower right", fontsize=9)
+
+
+# ---------------------------------------------------------------------------
 # Helper accessors
 # ---------------------------------------------------------------------------
 
@@ -1511,6 +1736,52 @@ def _optional_str(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _extract_token_usage(raw: Any) -> tuple[dict[str, int], int]:
+    """Project a persisted ``token_usage`` blob to ``(route -> total, grand_total)``.
+
+    Accepts the canonical ``{route: {"total_tokens": int, ...}}`` shape and
+    tolerates malformed/legacy payloads by returning an empty mapping. Routes
+    that recorded zero tokens are dropped so they don't create flat legend
+    entries in the per-model panels.
+    """
+
+    if not isinstance(raw, dict):
+        return {}, 0
+    tokens_by_route: dict[str, int] = {}
+    grand_total = 0
+    for route, counts in raw.items():
+        if not isinstance(counts, dict):
+            continue
+        total = _safe_int(counts.get("total_tokens"), default=0)
+        if total <= 0:
+            continue
+        tokens_by_route[str(route)] = total
+        grand_total += total
+    return tokens_by_route, grand_total
+
+
+def _token_routes(records: list[OrganismVizRecord]) -> list[str]:
+    """Sorted union of route ids that recorded any token spend."""
+
+    routes: set[str] = set()
+    for record in records:
+        routes.update(route for route, total in record.tokens_by_route.items() if total)
+    return sorted(routes)
+
+
+def _creation_ordered(records: list[OrganismVizRecord]) -> list[OrganismVizRecord]:
+    """Records sorted in creation order (wall-clock, then generation, then id)."""
+
+    return sorted(
+        records,
+        key=lambda record: (
+            record.created_at.timestamp() if record.created_at else float("inf"),
+            record.generation_created,
+            record.organism_id,
+        ),
+    )
 
 
 def _safe_int(value: Any, *, default: int) -> int:
