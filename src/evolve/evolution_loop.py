@@ -162,6 +162,7 @@ class EvolutionLoop:
         self.max_parallel_organisms = self._max_parallel_organisms()
         self.max_generation_limit = self._max_generation_limit()
         self.max_organism_creations = self._max_organism_creations()
+        self.max_tokens_per_model = self._max_tokens_per_model()
 
         self.islands = self._load_islands()
         self.islands_by_id = {island.island_id: island for island in self.islands}
@@ -274,6 +275,68 @@ class EvolutionLoop:
     def _max_organism_creations(self) -> int | None:
         return self._optional_stop_limit("evolver.max_organism_creations")
 
+    @staticmethod
+    def _coerce_token_limit(value: Any, *, route_id: str) -> int | None:
+        """Coerce one ``max_tokens_per_model`` entry to an int cap or ``None``.
+
+        ``false`` / ``null`` / ``""`` / ``-1`` all mean "no cap for this
+        route". A literal ``true`` is rejected (a token cap must be a count).
+        """
+
+        if value is None or value is False:
+            return None
+        if isinstance(value, bool):  # only ``True`` reaches here
+            raise ValueError(
+                f"Invalid evolve config: evolver.max_tokens_per_model[{route_id}] "
+                "must be a non-negative integer or false, got true."
+            )
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if text in {"", "false", "none", "null"}:
+                return None
+            value = text
+        try:
+            limit = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid evolve config: evolver.max_tokens_per_model[{route_id}] "
+                "must be a non-negative integer or false."
+            ) from exc
+        if limit == -1:
+            return None
+        if limit < 0:
+            raise ValueError(
+                f"Invalid evolve config: evolver.max_tokens_per_model[{route_id}] "
+                "must be a non-negative integer or false."
+            )
+        return limit
+
+    def _max_tokens_per_model(self) -> dict[str, int]:
+        """Parse the optional per-route token-budget stop criterion.
+
+        ``evolver.max_tokens_per_model`` is a mapping of ``route_id -> limit``
+        where ``limit`` is a non-negative integer token cap, or ``false`` /
+        ``null`` / ``-1`` to disable the cap for that route. Absent or
+        all-``false`` (the shipped default for every experiment) means no
+        token stop is active. Returns only the routes carrying an active cap.
+        """
+
+        raw = OmegaConf.select(self.cfg, "evolver.max_tokens_per_model", default=None)
+        if raw is None:
+            return {}
+        container = OmegaConf.to_container(raw, resolve=True)
+        if not isinstance(container, dict):
+            raise ValueError(
+                "Invalid evolve config: evolver.max_tokens_per_model must be a mapping "
+                "of route_id -> int|false."
+            )
+        limits: dict[str, int] = {}
+        for route_id, value in container.items():
+            limit = self._coerce_token_limit(value, route_id=str(route_id))
+            if limit is not None:
+                limits[str(route_id)] = limit
+        return limits
+
     def _validate_stop_limits(self) -> None:
         if self.max_generation_limit is None and self.max_organism_creations is None:
             raise ValueError(
@@ -289,12 +352,60 @@ class EvolutionLoop:
             return None
         return max(0, self.max_organism_creations - self._organism_creation_attempt_count())
 
+    def _tokens_spent_per_route(self) -> dict[str, int]:
+        """Sum ``total_tokens`` per route across every persisted organism.
+
+        Reads from the on-disk ``organism.json`` files (same glob as
+        :meth:`_organism_creation_attempt_count`) so the tally is resume-safe:
+        after a restart the in-memory generator accumulator is empty, but each
+        organism's persisted ``token_usage`` survives on disk.
+        """
+
+        totals: dict[str, int] = {}
+        for meta_path in self.population_root.glob("gen_*/island_*/org_*/organism.json"):
+            try:
+                payload = read_json(meta_path)
+            except Exception:  # noqa: BLE001
+                continue
+            if not isinstance(payload, dict):
+                continue
+            usage = payload.get("token_usage")
+            if not isinstance(usage, dict):
+                continue
+            for route_id, counts in usage.items():
+                if not isinstance(counts, dict):
+                    continue
+                total = counts.get("total_tokens")
+                if isinstance(total, bool) or not isinstance(total, (int, float)):
+                    continue
+                totals[str(route_id)] = totals.get(str(route_id), 0) + int(total)
+        return totals
+
+    def _token_budget_stop_reason(self) -> str | None:
+        """Return a stop reason when any capped route has hit its token budget.
+
+        No-op (returns ``None``) when ``evolver.max_tokens_per_model`` is empty
+        or all-``false`` — the shipped default for every experiment.
+        """
+
+        if not self.max_tokens_per_model:
+            return None
+        spent = self._tokens_spent_per_route()
+        for route_id, limit in self.max_tokens_per_model.items():
+            used = spent.get(route_id, 0)
+            if used >= limit:
+                return f"max_tokens_per_model[{route_id}]={limit} (spent={used})"
+        return None
+
     def _stop_reason_before_generation(self, generation: int) -> str | None:
         if self.max_generation_limit is not None and generation > self.max_generation_limit:
             return f"max_generations={self.max_generation_limit}"
         remaining_budget = self._remaining_organism_creation_budget()
         if remaining_budget is not None and remaining_budget <= 0:
             return f"max_organism_creations={self.max_organism_creations}"
+        token_reason = self._token_budget_stop_reason()
+        if token_reason is not None:
+            return token_reason
         return None
 
     def _load_islands(self) -> list[Island]:

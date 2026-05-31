@@ -216,6 +216,13 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
     assert cfg.evolver.max_generations == 150
     assert cfg.evolver.max_organism_creations is False
+    # Optional per-model token-budget stop: present and disabled by default.
+    assert set(cfg.evolver.max_tokens_per_model.keys()) == {
+        "ollama_gemma4_31b",
+        "ollama_qwen35_35b",
+    }
+    assert cfg.evolver.max_tokens_per_model.ollama_gemma4_31b is False
+    assert cfg.evolver.max_tokens_per_model.ollama_qwen35_35b is False
     assert cfg.mode == "evolve"
     assert "organism_dir" not in cfg
     # PHASE A retry tightening (mirrors awtf2025_heuristic): retries cut
@@ -305,6 +312,13 @@ def test_awtf2025_heuristic_config_composes() -> None:
     assert cfg.resources.evaluation.cpu_parallel_jobs == 25
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
     assert cfg.evolver.max_generations == 150
+    # Optional per-model token-budget stop: present and disabled by default.
+    assert set(cfg.evolver.max_tokens_per_model.keys()) == {
+        "ollama_gemma4_31b",
+        "ollama_qwen35_122b",
+    }
+    assert cfg.evolver.max_tokens_per_model.ollama_gemma4_31b is False
+    assert cfg.evolver.max_tokens_per_model.ollama_qwen35_122b is False
     assert cfg.mode == "evolve"
     assert "organism_dir" not in cfg
     # PHASE A speedup (2026-05-21): retry budgets tightened to (1, 2, 0)

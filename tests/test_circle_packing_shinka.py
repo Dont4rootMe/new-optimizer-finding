@@ -92,6 +92,10 @@ def test_circle_packing_config_composes() -> None:
     assert cfg.resources.evaluation.cpu_parallel_jobs == 20
     assert cfg.evolver.max_generations == 150
     assert cfg.evolver.max_organism_creations is False
+    # Optional per-model token-budget stop: present and disabled (false) by
+    # default for every route.
+    token_caps = OmegaConf.to_container(cfg.evolver.max_tokens_per_model, resolve=True)
+    assert token_caps == {"ollama_gemma4_31b": False, "ollama_qwen35_35b": False}
     assert cfg.evolver.prompts.project_context == "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt"
 
 

@@ -10,6 +10,8 @@ Invoked from `scripts/run_shinka_baseline.sh` after Ollama instances are up.
 from __future__ import annotations
 
 import argparse
+import functools
+import inspect
 import os
 import sys
 from dataclasses import asdict, is_dataclass
@@ -44,6 +46,187 @@ def _resolve_path(value: str | os.PathLike[str], *, root: Path) -> Path:
     if not path.is_absolute():
         path = root / path
     return path.resolve()
+
+
+class _TokenBudgetExceeded(RuntimeError):
+    """Raised inside the wrapped LLM client when a capped model hits its budget."""
+
+    def __init__(self, model_name: str, spent: int, limit: int) -> None:
+        super().__init__(
+            f"per-model token budget exceeded: model={model_name} spent={spent} limit={limit}"
+        )
+        self.model_name = model_name
+        self.spent = spent
+        self.limit = limit
+
+
+def _normalize_model_name(name: str) -> str:
+    """Reduce a shinka model identifier to the bare model id.
+
+    Shinka reports ``QueryResult.model_name`` as the bare ``provider_model_id``
+    (e.g. ``qwen3.5:122b``), but defensively strip the ``local/<model>@<url>``
+    wrapper in case a future version surfaces the full URL form so caps still
+    match.
+    """
+
+    text = str(name).strip()
+    if text.startswith("local/"):
+        text = text[len("local/"):]
+    if "@" in text:
+        text = text.split("@", 1)[0]
+    return text
+
+
+def _parse_token_caps(shinka_block: DictConfig) -> dict[str, int]:
+    """Parse ``shinka_evolve.max_tokens_per_model`` into ``{model: int}``.
+
+    Keyed by the model id Shinka reports (the bare ``provider_model_id``, e.g.
+    ``qwen3.5:122b`` / ``gemma4:31b`` / ``qwen3.5:35b``). A value of ``false`` /
+    ``null`` / ``-1`` disables the cap for that model. Absent or all-``false``
+    (the shipped default) returns ``{}`` — no token stop is installed and the
+    baseline runs exactly as before.
+    """
+
+    raw = shinka_block.get("max_tokens_per_model")
+    if raw is None:
+        return {}
+    container = OmegaConf.to_container(raw, resolve=True) if isinstance(raw, DictConfig) else dict(raw)
+    if not isinstance(container, dict):
+        raise SystemExit(
+            "shinka_evolve.max_tokens_per_model must be a mapping of model -> int|false."
+        )
+    caps: dict[str, int] = {}
+    for model, value in container.items():
+        if value is None or value is False:
+            continue
+        if isinstance(value, bool):  # only ``True`` reaches here
+            raise SystemExit(
+                f"shinka_evolve.max_tokens_per_model[{model}] must be a non-negative integer "
+                "or false, got true."
+            )
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if text in {"", "false", "none", "null"}:
+                continue
+            value = text
+        try:
+            limit = int(value)
+        except (TypeError, ValueError) as exc:
+            raise SystemExit(
+                f"shinka_evolve.max_tokens_per_model[{model}] must be a non-negative integer or false."
+            ) from exc
+        if limit == -1:
+            continue
+        if limit < 0:
+            raise SystemExit(
+                f"shinka_evolve.max_tokens_per_model[{model}] must be a non-negative integer or false."
+            )
+        caps[_normalize_model_name(str(model))] = limit
+    return caps
+
+
+def _install_shinka_token_budget_guard(runner: Any, caps: dict[str, int]) -> bool:
+    """Best-effort per-model token cap for the (opaque, external) Shinka runner.
+
+    ShinkaEvolve has no public per-model token budget hook — its native
+    ``max_api_costs`` is a single global *cost* budget, and cost is 0 for local
+    Ollama models. So we wrap the runner's LLM client query method(s) to tally
+    ``input_tokens + output_tokens (+ thinking_tokens)`` per ``model_name`` from
+    each returned ``QueryResult``. When a capped model reaches its budget we set
+    the runner's ``should_stop`` event (Shinka's own stop mechanism) and raise
+    :class:`_TokenBudgetExceeded` to abort the in-flight call.
+
+    Returns ``True`` when the guard was installed. On any structural mismatch
+    (Shinka internals differ across versions and the package is not installed
+    locally to verify) it logs a loud warning and returns ``False`` rather than
+    crashing the baseline — the run proceeds without the cap.
+    """
+
+    if not caps:
+        return False
+    client = getattr(runner, "llm", None)
+    if client is None:
+        print(
+            "[shinka_baseline] WARNING: could not locate runner.llm; per-model token cap "
+            "NOT enforced for this run.",
+            file=sys.stderr,
+            flush=True,
+        )
+        return False
+    candidate_methods = [
+        name
+        for name in ("query", "batch_query", "async_query", "aquery", "query_batch")
+        if callable(getattr(client, name, None))
+    ]
+    if not candidate_methods:
+        print(
+            "[shinka_baseline] WARNING: no known query method on runner.llm; per-model token "
+            "cap NOT enforced for this run.",
+            file=sys.stderr,
+            flush=True,
+        )
+        return False
+
+    spent: dict[str, int] = {}
+
+    def _as_results(ret: Any) -> list[Any]:
+        if ret is None:
+            return []
+        if isinstance(ret, (list, tuple)):
+            return list(ret)
+        return [ret]
+
+    def _account(ret: Any) -> None:
+        for result in _as_results(ret):
+            model = getattr(result, "model_name", None)
+            if model is None:
+                continue
+            key = _normalize_model_name(str(model))
+            tokens = 0
+            for attr in ("input_tokens", "output_tokens", "thinking_tokens"):
+                value = getattr(result, attr, 0) or 0
+                try:
+                    tokens += int(value)
+                except (TypeError, ValueError):
+                    continue
+            spent[key] = spent.get(key, 0) + tokens
+            cap = caps.get(key)
+            if cap is not None and spent[key] >= cap:
+                stop_event = getattr(runner, "should_stop", None)
+                if stop_event is not None and hasattr(stop_event, "set"):
+                    try:
+                        stop_event.set()
+                    except Exception:  # noqa: BLE001
+                        pass
+                raise _TokenBudgetExceeded(key, spent[key], cap)
+
+    for name in candidate_methods:
+        original = getattr(client, name)
+        if inspect.iscoroutinefunction(original):
+
+            @functools.wraps(original)
+            async def _async_wrapper(*args: Any, __original: Any = original, **kwargs: Any) -> Any:
+                ret = await __original(*args, **kwargs)
+                _account(ret)
+                return ret
+
+            setattr(client, name, _async_wrapper)
+        else:
+
+            @functools.wraps(original)
+            def _sync_wrapper(*args: Any, __original: Any = original, **kwargs: Any) -> Any:
+                ret = __original(*args, **kwargs)
+                _account(ret)
+                return ret
+
+            setattr(client, name, _sync_wrapper)
+
+    print(
+        f"[shinka_baseline] per-model token cap active: {caps} (wrapped {candidate_methods})",
+        file=sys.stderr,
+        flush=True,
+    )
+    return True
 
 
 def _import_shinka() -> dict[str, Any]:
@@ -285,7 +468,18 @@ def main(argv: list[str] | None = None) -> int:
             if k not in {"max_evaluation_jobs", "max_proposal_jobs"}
         }
         runner = shinka["ShinkaEvolveRunner"](**legacy_kwargs)
-    runner.run()
+
+    # Optional per-model token-budget stop (mirrors evolver.max_tokens_per_model
+    # for the main loop). Inert by default — only installs the guard when the
+    # yaml sets a real integer cap for at least one model.
+    token_caps = _parse_token_caps(shinka_block)
+    if token_caps:
+        _install_shinka_token_budget_guard(runner, token_caps)
+    try:
+        runner.run()
+    except _TokenBudgetExceeded as exc:
+        print(f"[shinka_baseline] stopping run: {exc}", file=sys.stderr, flush=True)
+        return 0
     return 0
 
 

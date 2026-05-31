@@ -5,6 +5,16 @@ max_generations: 150
 max_organism_creations: false
 max_retries_per_eval: 0
 
+# Optional per-model token-budget stop (additional to the generation/organism
+# caps above, not a replacement). Maps route_id -> token cap. ``false`` (the
+# default for every model) means no cap on that model; an integer caps the
+# cumulative LLM tokens that route may spend. When any capped route reaches its
+# budget, evolution stops at the next generation boundary. Tokens are summed
+# from each organism's persisted ``token_usage`` so the tally is resume-safe.
+max_tokens_per_model:
+  ollama_gemma4_31b: false
+  ollama_qwen35_35b: false
+
 creation:
   # PHASE A retry tightening (mirrors awtf2025_heuristic): retries cut to 1,
   # validator-retries to 0. The repair budget for explicit evaluator errors

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 import time
 from pathlib import Path
@@ -613,3 +614,132 @@ def test_max_parallel_organisms_bounds_seed_parallelism(tmp_path: Path, monkeypa
     asyncio.run(loop._seed_initial_population())
 
     assert max_active <= 2
+
+
+def _write_token_organism(
+    population_root: Path,
+    *,
+    generation: int,
+    island_id: str,
+    organism_id: str,
+    tokens_by_route: dict[str, int],
+) -> None:
+    """Write a minimal organism.json carrying ``token_usage`` under the glob layout.
+
+    ``_tokens_spent_per_route`` only reads the ``token_usage`` field, so a
+    minimal payload is enough to exercise the per-model token-budget stop.
+    """
+
+    org_dir = population_root / f"gen_{generation:04d}" / f"island_{island_id}" / f"org_{organism_id}"
+    org_dir.mkdir(parents=True, exist_ok=True)
+    usage = {
+        route: {
+            "prompt_tokens": 0,
+            "completion_tokens": int(total),
+            "total_tokens": int(total),
+            "calls": 1,
+        }
+        for route, total in tokens_by_route.items()
+    }
+    (org_dir / "organism.json").write_text(
+        json.dumps({"organism_id": organism_id, "token_usage": usage}),
+        encoding="utf-8",
+    )
+
+
+def test_max_tokens_per_model_parses_false_and_int(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        evolver={
+            "max_tokens_per_model": {
+                "ollama_gemma4_31b": False,
+                "ollama_qwen35_122b": 500000,
+                "disabled_minus_one": -1,
+            }
+        },
+    )
+    loop = EvolutionLoop(cfg)
+    # false / -1 drop out; only the real integer cap survives.
+    assert loop.max_tokens_per_model == {"ollama_qwen35_122b": 500000}
+
+
+def test_max_tokens_per_model_rejects_true(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path, evolver={"max_tokens_per_model": {"ollama_gemma4_31b": True}})
+    with pytest.raises(ValueError, match="max_tokens_per_model"):
+        EvolutionLoop(cfg)
+
+
+def test_token_budget_absent_is_inert(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path, evolver={"max_tokens_per_model": {"ollama_gemma4_31b": False}})
+    loop = EvolutionLoop(cfg)
+    _write_token_organism(
+        loop.population_root,
+        generation=1,
+        island_id="gradient_methods",
+        organism_id="a",
+        tokens_by_route={"ollama_gemma4_31b": 10**9},
+    )
+    # All-false config => no cap installed, never stops on tokens.
+    assert loop.max_tokens_per_model == {}
+    assert loop._token_budget_stop_reason() is None
+    assert loop._stop_reason_before_generation(loop.generation + 1) is None
+
+
+def test_token_budget_stops_when_route_exceeds(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        evolver={
+            "max_generations": 100,
+            "max_tokens_per_model": {
+                "ollama_gemma4_31b": 1000,
+                "ollama_qwen35_122b": False,
+            },
+        },
+    )
+    loop = EvolutionLoop(cfg)
+    # Nothing spent yet -> no stop.
+    assert loop._token_budget_stop_reason() is None
+
+    _write_token_organism(
+        loop.population_root,
+        generation=1,
+        island_id="gradient_methods",
+        organism_id="a",
+        tokens_by_route={"ollama_gemma4_31b": 600, "ollama_qwen35_122b": 9_999_999},
+    )
+    _write_token_organism(
+        loop.population_root,
+        generation=1,
+        island_id="gradient_methods",
+        organism_id="b",
+        tokens_by_route={"ollama_gemma4_31b": 500},
+    )
+
+    # gemma total = 1100 >= 1000 -> stop; qwen is uncapped (false) so ignored.
+    reason = loop._token_budget_stop_reason()
+    assert reason is not None
+    assert "ollama_gemma4_31b" in reason
+    assert "ollama_qwen35_122b" not in reason
+    # The generation-boundary stop check surfaces the same reason.
+    assert loop._stop_reason_before_generation(loop.generation + 1) == reason
+
+
+def test_tokens_spent_per_route_sums_across_organisms(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path, evolver={"max_tokens_per_model": {"ollama_gemma4_31b": 10**9}})
+    loop = EvolutionLoop(cfg)
+    _write_token_organism(
+        loop.population_root,
+        generation=1,
+        island_id="gradient_methods",
+        organism_id="a",
+        tokens_by_route={"ollama_gemma4_31b": 100, "ollama_qwen35_122b": 200},
+    )
+    _write_token_organism(
+        loop.population_root,
+        generation=2,
+        island_id="second_order",
+        organism_id="c",
+        tokens_by_route={"ollama_gemma4_31b": 50},
+    )
+    spent = loop._tokens_spent_per_route()
+    assert spent == {"ollama_gemma4_31b": 150, "ollama_qwen35_122b": 200}

@@ -30,4 +30,14 @@ shinka_evolve:
   # for the full description.
   task_sys_msg_path: null
   task_sys_msg: null
+  # Optional per-model token-budget stop. Keyed by the model id ShinkaEvolve
+  # reports (the bare provider_model_id, NOT our route_id). ``false`` (the
+  # default for every model) disables the cap; an integer caps cumulative
+  # input+output tokens for that model, stopping the run as soon as it is hit.
+  # Best-effort: ShinkaEvolve exposes no native per-model budget, so we wrap its
+  # LLM client to count tokens; on a version mismatch the run logs a warning and
+  # proceeds without the cap. See src/baselines/shinka/run.py.
+  max_tokens_per_model:
+    "gemma4:31b": false
+    "qwen3.5:35b": false
   extra_runner_kwargs: {}
