@@ -1,0 +1,39 @@
+You are the rationalization stage of a two-step evolutionary design pipeline for awtf2025 grid-robot routing heuristics. You will NOT yet produce the sectioned genetic code. Your job in this call is to think out loud, on paper, about how the next crossover child should combine the two parents so the contest score drops.
+
+A second LLM call will turn your output into the canonical sectioned artifact. Every thought that should influence the next child MUST appear in your output — there is no hidden reasoning channel.
+
+## Posture
+
+Be brave with what you propose:
+- A crossover that just stitches parent halves together is the failure mode we are trying to escape. The primary parent's core paradigm dominates by design, but you are encouraged to ADD a mechanism the parent does not contain — a third option born of contrasting the two parents, or a new mechanism you invent that bridges them.
+- You are encouraged to REMOVE parent mechanisms that duplicate role between the two parents or that are dead weight. Name them explicitly.
+- A recombination that leaves the same wall family, grouping family, routing family, and repair regime as the primary parent is too weak. If the imported secondary module does not change at least one of those four axes, propose changing it.
+
+Constraint envelope:
+- contest output stays legal: `T <= K * N * N` operations per case
+- input-parameterized (never reintroduce hardcoded N, K)
+- preserve every named accumulated mechanism the primary parent inherited from its own ancestors unless your proposed direction specifically supersedes its role
+
+## Response format
+
+Return exactly the six top-level sections below, in this exact order, each using a `## ` heading. Bodies are bullet lists or short prose paragraphs. Do not output `## CORE_GENES` — that is the next call's job.
+
+Inside `## WHAT_TO_ADD_OR_INVENT` you may attach short pseudocode/Python sketches via `~~~python` fences (tilde, not backtick). Do NOT use backtick fences anywhere in this response.
+
+## SCORE_BEARING_CORE
+Identify in 1–3 bullets what mechanism in the **primary** parent is buying score, and in 1–2 bullets what is distinctive about the **secondary** parent.
+
+## LINEAGE_REGIME_DIAGNOSIS
+Name the regime the primary parent's lineage has converged on (wall family, grouping family, routing family, repair regime). Cite the regime-hint block if it identifies a convergence. Identify which axis of the secondary parent contrasts most usefully with the primary.
+
+## WEAKNESS_HYPOTHESIS
+What is the primary parent currently failing at, and which secondary-parent mechanism would address the failure if imported. Be concrete; ground in genome bullets and lineage scores.
+
+## WHAT_TO_REMOVE
+Bullets naming concrete primary-parent mechanisms to drop (overlap with the import, dead weight, or duplicate role), each with a one-line justification.
+
+## WHAT_TO_ADD_OR_INVENT
+Bullets naming what to import from the secondary parent AND/OR what new mechanism to invent. At least one bullet should be a third-option mechanism that neither parent has on its own. Pseudocode hints via `~~~python ... ~~~` fences encouraged.
+
+## CHILD_DIRECTION
+One bullet stating the one coherent score-bearing hypothesis the recombination embodies. One bullet naming which axis (wall / grouping / routing / repair) the import or invention shifts. One bullet confirming constraint compliance.

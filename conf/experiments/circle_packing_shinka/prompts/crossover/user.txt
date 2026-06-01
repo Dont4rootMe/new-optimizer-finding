@@ -4,40 +4,57 @@ Create one crossover child from these two parents.
 The schema below is authoritative for the structure and meaning of CORE_GENES.
 {genome_schema}
 
-=== CHILD GENETIC CODE DRAFT ===
-This merged draft was already selected by evolution.
-This is the main object you must refine.
-{inherited_gene_pool}
+=== STEP 1 DESIGN RATIONALE ===
+A prior rationalization call produced the design plan below. Materialize WHAT_TO_REMOVE, WHAT_TO_ADD_OR_INVENT and CHILD_DIRECTION in the structured artifact. If the block reads "(rationalization disabled — single-call mode)", proceed without it.
+{rationalization}
+
+=== PRIMARY PARENT GENETIC CODE ===
+Use this as the structural base for the child. Its core paradigm should dominate the recombination.
+{mother_genetic_code}
+
+=== PRIMARY PARENT IMPLEMENTATION (ground truth Python) ===
+The actual `implementation.py` the primary parent runs.
+
+```python
+{mother_implementation}
+```
+
+=== PRIMARY PARENT LINEAGE SUMMARY ===
+Scores in lineage: higher is better. Use score trends to identify which mechanisms in the primary parent's ancestry actually helped.
+{mother_lineage_summary}
+
+=== SECONDARY PARENT GENETIC CODE ===
+Use this as the donor of one coherent imported module that complements the primary parent's structure.
+{father_genetic_code}
+
+=== SECONDARY PARENT IMPLEMENTATION (ground truth Python) ===
+The actual `implementation.py` the secondary parent runs.
+
+```python
+{father_implementation}
+```
+
+=== SECONDARY PARENT LINEAGE SUMMARY ===
+Scores in lineage: higher is better. Use score trends to identify which mechanisms in the secondary parent's ancestry actually helped.
+{father_lineage_summary}
+
+=== TOP-K INSPIRATION PROGRAMS (mother's island, sorted best first) ===
+Highest-scoring survivors on the primary parent's island, excluding both parents.
+{inspirations}
 
 === NOVELTY REJECTION FEEDBACK ===
-If a previous child draft was rejected for lacking novelty, address these issues explicitly.
+If a previous candidate child was rejected for lacking novelty, address those issues explicitly.
 If there was no prior rejection, this section will say so.
 {novelty_rejection_feedback}
 
-=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ===
-Use this to understand continuity and provenance of ideas.
-{mother_genetic_code}
-
-=== PRIMARY PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
-Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
-{mother_lineage_summary}
-
-=== SECONDARY PARENT GENETIC CODE (REFERENCE ONLY) ===
-Use this to understand complementary idea sources.
-{father_genetic_code}
-
-=== SECONDARY PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
-Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
-{father_lineage_summary}
-
 === TASK ===
-Refine the child genetic code draft into one coherent organism.
+Design one crossover child from these two parents.
 The result must be a full sectioned genetic code in the canonical format, internally consistent, and summarized by one unified novelty statement for lineage.
 The child remains a unit-square packing organism and must still produce exactly 26 total circles.
-Strengthen the child into a primary-parent-dominant organism with one coherent score-bearing imported module from the secondary parent if needed.
-If the child draft already contains too many partially merged ideas, simplify it toward one dominant primary structure plus one truly consequential secondary module.
+Build a primary-parent-dominant organism with one coherent score-bearing imported module from the secondary parent.
+Pick exactly one module from the secondary parent worth importing. Do not synthesize many partial ideas across both parents.
 The imported module must change the expected packing family or operating regime, not only the provenance story.
-If both parents still imply the same phenotype family, reject weak recombination instead of assembling a cosmetic child.
-Do not preserve a weak recombination merely because it is coherent.
+If both parents still imply the same effective regime, the crossover should escape that convergence by importing or designing one component that introduces a different family rather than tuning inside the shared regime.
+Verbatim cloning of the primary parent is invalid — at least one CORE_GENES section must contain a recombination that neither parent presents on its own.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing one parent.
 Return the structured design directly. Do not add preface text before `## CORE_GENES`.

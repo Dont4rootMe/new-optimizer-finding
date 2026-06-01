@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import re
 from pathlib import Path
@@ -34,10 +35,24 @@ _REQUIRED_RESPONSE_SECTIONS = (
 )
 
 
-def read_organism_implementation(org: OrganismMeta) -> str:
-    """Return the raw implementation.py text for one organism."""
+@functools.lru_cache(maxsize=128)
+def _read_implementation_text_cached(path_str: str) -> str:
+    """Cached implementation.py text reader keyed by path string."""
 
-    return Path(org.implementation_path).read_text(encoding="utf-8")
+    return Path(path_str).read_text(encoding="utf-8")
+
+
+def read_organism_implementation(org: OrganismMeta) -> str:
+    """Return the raw implementation.py text for one organism.
+
+    Backed by an ``lru_cache`` keyed on the path string. Implementation
+    files are written once at organism-creation time and never modified
+    afterwards, so caching saves disk reads on the hot mutation /
+    crossover prompt-building path (each operator pulls the parent's
+    implementation at Step 1, Step 2, and Step 3).
+    """
+
+    return _read_implementation_text_cached(str(org.implementation_path))
 
 
 def format_implementation_code(code: str) -> str:
@@ -111,6 +126,159 @@ def _format_core_gene_block(genetic_code: dict[str, Any]) -> str:
     return rendered.strip() or "(none)"
 
 
+def format_inspiration_organisms(
+    inspirations: list[OrganismMeta] | None,
+    *,
+    max_implementation_chars: int = 8000,
+) -> str:
+    """Render top-K archive inspirations into a single prompt block.
+
+    Shinka and FunSearch both show the LLM multiple "best programs"
+    alongside the parent so the LLM can identify what high-scoring
+    organisms have in common. Our prompt builders previously showed only
+    the single parent (no inspiration pool), so the LLM had no contrast
+    to anchor its mutation against. This helper formats up to N
+    inspirations as labeled blocks containing the inspiration's score,
+    island, and a truncated view of its implementation.py plus the most
+    recent change_description from its lineage.
+
+    The implementations are truncated to ``max_implementation_chars`` so
+    the prompt doesn't balloon past the local model's effective context;
+    8 kB is roughly 2 kB per inspiration when 3 are shown, comfortable
+    on a 32k-context Qwen.
+
+    Returns ``"(no inspirations)"`` when the list is empty so the prompt
+    placeholder is non-empty for ``str.format()`` and signals to the
+    LLM that no archive samples were available (e.g. on early gens
+    before the survivor pool has filled).
+    """
+
+    if not inspirations:
+        return "(no inspirations)"
+
+    blocks: list[str] = []
+    for index, organism in enumerate(inspirations, start=1):
+        score_value = getattr(organism, "simple_score", None)
+        score_str = f"{score_value:.4f}" if isinstance(score_value, (int, float)) else "(unscored)"
+        island_str = str(getattr(organism, "island_id", "(unknown)"))
+        change_desc = ""
+        try:
+            lineage = read_organism_lineage(organism)
+            if lineage:
+                latest = lineage[-1]
+                change_desc = str(latest.get("change_description", "")).strip()
+        except Exception:  # noqa: BLE001
+            change_desc = ""
+        if not change_desc:
+            change_desc = "(no recorded change description)"
+        impl_path = getattr(organism, "implementation_path", "")
+        impl_text = ""
+        try:
+            if impl_path:
+                impl_text = Path(impl_path).read_text(encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            impl_text = ""
+        impl_text = impl_text.rstrip()
+        if not impl_text:
+            impl_text = "(implementation unavailable)"
+        elif len(impl_text) > max_implementation_chars:
+            head = impl_text[: max_implementation_chars // 2]
+            tail = impl_text[-max_implementation_chars // 2 :]
+            impl_text = f"{head}\n# ... <truncated for prompt length> ...\n{tail}"
+
+        block_lines = [
+            f"--- INSPIRATION #{index} (simple_score={score_str}, island={island_str}) ---",
+            f"change_description: {change_desc}",
+            "implementation.py:",
+            "```python",
+            impl_text,
+            "```",
+        ]
+        blocks.append("\n".join(block_lines))
+    return "\n\n".join(blocks)
+
+
+def format_parent_fitness_signal(
+    *,
+    primary_label: str,
+    primary_score: float | None,
+    primary_lineage: list[dict[str, Any]],
+    secondary_label: str | None = None,
+    secondary_score: float | None = None,
+    secondary_lineage: list[dict[str, Any]] | None = None,
+) -> str:
+    """Render the explicit score-gap block injected at the top of Step 1.
+
+    Earlier prompt versions only carried per-ancestor scores inside the
+    free-form lineage summary; the LLM consistently produced "plausibility"
+    weakness hypotheses instead of grounding them in the actual fitness
+    signal. This helper pulls the parent score and best-ancestor score
+    forward into a labeled block so the rationalizer must reason against
+    a concrete number gap rather than infer one.
+
+    Layout:
+
+        === PARENT FITNESS SIGNAL ===
+        Higher simple_score = better. Use this gap to ground the weakness
+        hypothesis in actual evidence, not in plausibility arguments.
+
+        parent simple_score: <value>
+        best ancestor simple_score: <value>
+        gap (best_ancestor - parent): <delta>
+        best ancestor's mechanism shift: <change_description excerpt>
+
+    For crossover the primary parent is the mother and the secondary is
+    the father; both scores appear and the best ancestor is taken across
+    both lineages. When the parent already matches the best ancestor the
+    gap is 0 — the LLM should read this as "do not regress" rather than
+    "recover a lost mechanism".
+    """
+
+    def _fmt(value: float | None) -> str:
+        return f"{value:.4f}" if isinstance(value, (int, float)) else "(unknown)"
+
+    lines: list[str] = []
+    lines.append(
+        "Higher simple_score = better (less negative). Ground the weakness "
+        "hypothesis in this number gap rather than in plausibility arguments."
+    )
+    lines.append("")
+    lines.append(f"{primary_label} simple_score: {_fmt(primary_score)}")
+    if secondary_label is not None:
+        lines.append(f"{secondary_label} simple_score: {_fmt(secondary_score)}")
+
+    merged: list[dict[str, Any]] = list(primary_lineage)
+    if secondary_lineage:
+        merged.extend(secondary_lineage)
+
+    best_entry: dict[str, Any] | None = None
+    best_score: float | None = None
+    for entry in merged:
+        score = entry.get("simple_score")
+        if not isinstance(score, (int, float)):
+            continue
+        if best_score is None or score > best_score:
+            best_entry = entry
+            best_score = score
+
+    if best_entry is not None and best_score is not None:
+        lines.append(f"best ancestor simple_score: {_fmt(best_score)}")
+        if isinstance(primary_score, (int, float)):
+            gap = best_score - primary_score
+            lines.append(
+                f"gap (best_ancestor - {primary_label}): {gap:+.4f}"
+            )
+        change = str(best_entry.get("change_description", "")).strip()
+        if change:
+            if len(change) > 300:
+                change = change[:300].rstrip() + "..."
+            lines.append(f"best ancestor's mechanism shift: {change}")
+    else:
+        lines.append("best ancestor simple_score: (lineage has no scored entries yet)")
+
+    return "\n".join(lines)
+
+
 def format_lineage_summary(
     entries: list[dict[str, Any]],
     limit: int = _MAX_LINEAGE_IN_PROMPT,
@@ -167,6 +335,28 @@ def format_error_history(errors: list[dict[str, Any]]) -> str:
         r"(?:required|target)\s+(?:radius|radii)?\s*shape\s*[:=]?\s*\(\s*\d+\s*,\s*\)",
         re.IGNORECASE,
     )
+    def _tail_log(path_value: object, *, max_bytes: int = 3072) -> str | None:
+        # Read the last ``max_bytes`` of a logfile if the path exists on
+        # disk. The repair prompt previously only saw the formatted
+        # ``error_msg`` summary; the raw stderr/stdout was missing even
+        # though the orchestrator wrote it. Truncate from the front so the
+        # actual traceback (which is always near the tail) is preserved.
+        if not path_value:
+            return None
+        try:
+            log_path = Path(str(path_value))
+            if not log_path.exists():
+                return None
+            text = log_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            return None
+        text = text.rstrip()
+        if not text:
+            return None
+        if len(text) > max_bytes:
+            text = "...<truncated>...\n" + text[-max_bytes:]
+        return text
+
     lines: list[str] = []
     for entry in errors:
         attempt = entry.get("attempt", "?")
@@ -178,6 +368,21 @@ def format_error_history(errors: list[dict[str, Any]]) -> str:
         error_msg = required_vector_re.sub("required radius shape", error_msg)
         timestamp = str(entry.get("timestamp", "")).strip() or "(unknown time)"
         lines.append(f"- attempt={attempt} status={status} timestamp={timestamp} error={error_msg}")
+        # Inline the actual evaluator stderr/stdout when the orchestrator
+        # recorded them (``orchestrator._append_error_entry`` adds the
+        # file paths to each entry as of the FIX-mode plumbing work). The
+        # repair LLM needs the raw traceback, not just the one-line
+        # ``error_msg`` summary, to diagnose runtime crashes.
+        stderr_tail = _tail_log(entry.get("stderr_path"))
+        if stderr_tail:
+            lines.append("  --- LAST STDERR (truncated) ---")
+            lines.append(stderr_tail)
+            lines.append("  --- END STDERR ---")
+        stdout_tail = _tail_log(entry.get("stdout_path"))
+        if stdout_tail:
+            lines.append("  --- LAST STDOUT (truncated) ---")
+            lines.append(stdout_tail)
+            lines.append("  --- END STDOUT ---")
     return "\n".join(lines)
 
 
@@ -417,6 +622,8 @@ def build_organism_from_response(
     cross_island: bool = False,
     father_island_id: str | None = None,
     expected_core_gene_sections: tuple[str, ...] | None = None,
+    llm_pipeline_id: str = "",
+    token_usage: dict[str, Any] | None = None,
 ) -> OrganismMeta:
     """Build `OrganismMeta` from a canonical design response and raw implementation text."""
 
@@ -469,8 +676,13 @@ def build_organism_from_response(
         llm_route_id=llm_route_id,
         llm_provider=llm_provider,
         provider_model_id=provider_model_id,
+        llm_pipeline_id=llm_pipeline_id,
         prompt_hash=prompt_hash,
         seed=seed,
+        token_usage={
+            str(route): dict(counts) if isinstance(counts, dict) else counts
+            for route, counts in (token_usage or {}).items()
+        },
     )
 
     save_organism_artifacts(org, genetic_code=genetic_code, lineage=lineage)

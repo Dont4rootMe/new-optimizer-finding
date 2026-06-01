@@ -1,13 +1,24 @@
+You are the FORMALIZATION stage of a two-step design pipeline. A prior rationalization call has produced a `## CHILD_DIRECTION` plus a `## WHAT_TO_REMOVE` and `## WHAT_TO_ADD_OR_INVENT` directive. The user prompt embeds that rationale below as `=== STEP 1 DESIGN RATIONALE ===`. Treat the rationale as your primary design directive:
+
+- materialize every bullet of `## WHAT_TO_ADD_OR_INVENT` as a real bullet in the matching CORE_GENES section, including any `~~~python ... ~~~` pseudocode hints lifted into proper ```python``` fenced blocks
+- honour every `## WHAT_TO_REMOVE` bullet — do not preserve a parent mechanism just because the parent had it
+- the `## CHILD_DIRECTION` is the one coherent hypothesis the child embodies
+- if the rationale block is empty (single-call mode) fall back to designing the child from the parent genome alone
+
+You may sharpen, split bullets across sections, or add minimum supporting bullets, but do NOT silently revert to a parent-shaped artifact when the rationale proposed a regime shift.
+
 You are mutating one awtf2025 heuristic organism into a child.
 
 ## Mutation philosophy
 
 Mutation is hill climbing, not random restart.
 The parent already works and has a known score.
-Your job is to make one coherent score-seeking hypothesis change to the child draft.
+You are given the parent's full genetic code. There is no pre-sampled child draft and no externally excluded gene pool — those random pre-LLM steps are gone. You decide what to keep, what to evolve, and what to drop.
+
+Your job is to design one coherent score-seeking hypothesis change to the parent.
 This is not one literal tiny edit. If the mechanism is coupled, the change may span multiple sections.
-A multi-section mutation is still valid when it remains one coherent extension or refinement of the inherited organism rather than a hidden paradigm restart.
-Preserve the core heuristic paradigm of the parent and of the selected child draft.
+A multi-section mutation is still valid when it remains one coherent extension or refinement of the parent rather than a hidden paradigm restart.
+Preserve the core heuristic paradigm of the parent.
 
 The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
 The section schema is authoritative. Use each section only for the kind of heuristic content its description allows.
@@ -15,28 +26,29 @@ The section schema is authoritative. Use each section only for the kind of heuri
 Code, pseudocode, and Python fragments are first-class content. Every section except `MACRO_STRATEGY` accepts them, and a mutation that adds or sharpens a procedural mechanism should normally land as a short code or pseudocode block right inside the affected section (`STATE_REPRESENTATION`, `CONSTRUCTION_POLICY`, or `LOCAL_REPAIR_POLICY`) rather than being shoved into `OPTIONAL_CODE_SKETCH` as the only place code lives. Concentrating every fragment into `OPTIONAL_CODE_SKETCH` while leaving the other three code-bearing sections as bullet-prose only is a regression we are trying to escape. A textual mutation is still fully valid when the change is naturally a story-level decision — pick whichever form locks the new mechanism in most clearly.
 
 Priority order:
-1. analyze the child genetic code draft selected by evolution
-2. use excluded genes and lineage as context
-3. use the parent genetic code only to understand continuity boundaries
+1. read the parent genetic code carefully and identify which mechanism is the real score-bearing core
+2. use the parent lineage to see what has already been tried and what worked
+3. pick exactly one mechanism shift that targets a plausible score improvement and design the full child genome around it
 
 Do:
-- treat the child draft as the current research object
-- strengthen the child draft into a more score-seeking organism instead of restarting from the parent
-- edit the smallest coherent module needed to test the new hypothesis
+- treat the parent as the current research object you are evolving forward
+- pick exactly one mechanism shift that you believe will lower the absolute score, and rebuild the affected sections around it; leave the other sections substantively as in the parent
 - the coherent change should usually alter at most one causal module; avoid appending extra support machinery unless it is strictly required
 - if a real mechanism requires coordinated changes across multiple sections (for example, a new wall family that only pays off under a matching group definition and a matching staged release), make those changes together
-- if the mutation touches more than three sections, that is usually too broad unless the draft itself already tightly couples those sections
+- if the mutation touches more than three sections, that is usually too broad unless the parent itself already tightly couples those sections
 - do not create fake locality by changing one section while leaving its dependencies stale
 - preserve the parent's core structural ideas — refine, extend, or tune them rather than replacing the paradigm
 - ensure the changed sections define a plausible causal route to a lower absolute score, not merely a different but coherent draft
 - ensure the changed sections imply a distinguishable wall family, grouping family, routing family, or repair regime rather than only retuned coefficients inside the parent's effective behavior
+- you must materially change at least one CORE_GENES section relative to the parent — verbatim repetition of the entire parent genome is an invalid mutation
 - do not strengthen the child by adding explanatory redundancy or extra optional detail; strengthen it by sharpening the actual mechanism
 - never reintroduce hardcoded `N` or `K` constants; the mutation must remain input-parameterized
 - never propose a mechanism that would push `T` above the per-case budget `K * N * N`
 - preserve every named accumulated mechanism the parent inherited from its own ancestors (wait counters, bottleneck scores, axis-phasing schedules, density gates, stagnation triggers, etc.) unless the new mutation specifically supersedes that mechanism's role; silently dropping evolved machinery is a regression and must be avoided
 - if the parent population has converged on a no-added-walls regime and the island style permits walls, a mutation that introduces a small concrete wall pattern (one corridor, one separator, one bottleneck divider) and ties it to the existing routing or grouping mechanism is a particularly useful direction; do not propose walls in the abstract without a deterministic construction
+- if the parent lineage shows multiple recent children converging on the same regime, prefer a mutation that breaks out of that regime (introduce walls where there were none, switch grouping family, replace the routing family) rather than tuning inside the regime
 - make `CHANGE_DESCRIPTION` a claim-by-claim summary of the actual changed mechanism only; every named mechanism must appear in `CORE_GENES`
-- when describing provenance, distinguish inherited parent material from the new mutation and do not claim a mechanism was newly introduced if the child genes simply retained it
+- when describing provenance, distinguish inherited parent material from the new mutation
 - keep genes atomic within each section
 - when a section accepts code or pseudocode, keep that detail focused on the mechanism the section is responsible for; cross-section helpers belong in `OPTIONAL_CODE_SKETCH`
 - inline parameter changes (thresholds, schedules, ratios, iteration caps) directly inside the section that uses them, expressed in terms of `N` and `K`; there is no separate parameter section
@@ -46,12 +58,10 @@ Do not:
 - replace the parent's core heuristic paradigm
 - make more than one major hypothesis change at a time
 - rebuild the whole organism when a coherent inherited refinement suffices
+- copy the parent verbatim and call it a mutation
 - move ideas into a different section unless that move is genuinely required for coherence
 - force a coupled change into one section and leave supporting sections stale
-- backfill excluded ideas just to make the draft look more complete
-- reintroduce excluded ideas casually
 - present a coefficient-only retuning inside the same wall, group, routing, and repair regime as a major mutation unless the genes make a new operating regime explicit
-- attribute a mechanism to the mutation, to excluded material, or to the parent unless that attribution is directly supported by the child draft, parent genome, and changed sections
 - treat the implementation as the main artifact
 - output a ready-made full move script instead of a sectioned gene-level design
 - put a full end-to-end implementation in any genome section
@@ -76,10 +86,13 @@ Inside `## CORE_GENES`, return exactly these subsection headings, in this exact 
 ### LOCAL_REPAIR_POLICY
 ### OPTIONAL_CODE_SKETCH
 
+All five subsection headings above are mandatory and must appear once each, in this exact order. If you have no helper code to share, still emit `### OPTIONAL_CODE_SKETCH` and put the single bullet `- None.` underneath it — omitting the heading is the most common contract violation and rejects the whole response.
+
 Rules for subsection bodies:
 - `STATE_REPRESENTATION` through `LOCAL_REPAIR_POLICY` must each contain at least one `- ` bullet
 - every line of every required subsection must either start with `- ` (a fresh bullet) or be a continuation indented by exactly two spaces; paragraph prose without a leading `- ` is a hard parse error
-- `MACRO_STRATEGY` in particular must remain a bullet list, not flowing prose; write each global hypothesis as its own `- ...` line
+- code blocks fenced with triple backticks (with or without a `python` language tag) are tolerated inside `STATE_REPRESENTATION`, `CONSTRUCTION_POLICY`, `LOCAL_REPAIR_POLICY`, and `OPTIONAL_CODE_SKETCH`; you may attach them either as a bullet body (`- ```python ... ```` `) or as their own fenced block on plain lines, and the parser will recognize the closing fence on the next reread
+- `MACRO_STRATEGY` in particular must remain a bullet list, not flowing prose; write each global hypothesis as its own `- ...` line — `MACRO_STRATEGY` is the only section that does NOT accept fenced code blocks
 - `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
 - `- None.` is allowed only in `OPTIONAL_CODE_SKETCH` and is fully valid when no code-shaped detail is helpful
 - if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces

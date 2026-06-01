@@ -7,7 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from src.evolve.storage import read_genetic_code, read_lineage, read_organism_meta, write_json, write_organism_meta
+from src.evolve.storage import (
+    organism_meta_path,
+    read_genetic_code,
+    read_lineage,
+    read_organism_meta,
+    write_json,
+    write_organism_meta,
+)
 from src.organisms.genetic_code_format import load_genome_schema
 from src.organisms.organism import (
     build_organism_from_response,
@@ -378,3 +385,107 @@ def test_canonical_organism_meta_round_trips_error_msg(tmp_path: Path) -> None:
 
     reloaded = read_organism_meta(org.organism_dir)
     assert reloaded.error_msg == "design response is missing COMPUTE_NOTES"
+
+
+def test_canonical_organism_meta_round_trips_token_usage(tmp_path: Path) -> None:
+    org = _build(tmp_path, _base_parsed())
+    org.token_usage = {
+        "ollama_gemma4_31b": {
+            "prompt_tokens": 120,
+            "completion_tokens": 340,
+            "total_tokens": 460,
+            "calls": 3,
+        },
+        "ollama_qwen35_35b": {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30,
+            "calls": 1,
+        },
+    }
+    write_organism_meta(org)
+
+    reloaded = read_organism_meta(org.organism_dir)
+    assert reloaded.token_usage == org.token_usage
+
+
+def test_canonical_organism_meta_defaults_token_usage_for_legacy_files(tmp_path: Path) -> None:
+    """organism.json written before token accounting omits the field entirely."""
+
+    org = _build(tmp_path, _base_parsed())
+    write_organism_meta(org)
+    meta_path = organism_meta_path(org.organism_dir)
+    payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    payload.pop("token_usage", None)
+    meta_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    reloaded = read_organism_meta(org.organism_dir)
+    assert reloaded.token_usage == {}
+
+
+def test_parent_fitness_signal_renders_gap_and_best_ancestor() -> None:
+    """Task A regression: Step 1 prompts now carry an explicit fitness gap.
+
+    The free-form lineage summary buried per-ancestor scores in a multi-line
+    block that the LLM tended to skim past. Pulling parent_score +
+    best_ancestor_score + the explicit gap into a labeled block forces the
+    rationalizer to engage with the actual fitness signal instead of doing
+    armchair plausibility reasoning.
+    """
+
+    from src.organisms.organism import format_parent_fitness_signal
+
+    rendered = format_parent_fitness_signal(
+        primary_label="parent",
+        primary_score=-50000.0,
+        primary_lineage=[
+            {"simple_score": -26000.0, "change_description": "Seed: quadrant isolation."},
+            {"simple_score": -45000.0, "change_description": "Urgency-weighted BFS routing."},
+            {"simple_score": -50000.0, "change_description": "Lane-priority vacuum mechanism."},
+        ],
+    )
+
+    assert "parent simple_score: -50000" in rendered
+    assert "best ancestor simple_score: -26000" in rendered
+    # Gap with explicit sign forces the LLM to read "+ means I regressed".
+    assert "gap (best_ancestor - parent): +24000" in rendered
+    # The best ancestor's mechanism is surfaced so the LLM can target it.
+    assert "Seed: quadrant isolation" in rendered
+
+
+def test_parent_fitness_signal_handles_crossover_two_parents() -> None:
+    from src.organisms.organism import format_parent_fitness_signal
+
+    rendered = format_parent_fitness_signal(
+        primary_label="mother",
+        primary_score=-30000.0,
+        primary_lineage=[
+            {"simple_score": -26000.0, "change_description": "Seed mother."}
+        ],
+        secondary_label="father",
+        secondary_score=-40000.0,
+        secondary_lineage=[
+            {"simple_score": -35000.0, "change_description": "Father with BFS routing."}
+        ],
+    )
+
+    assert "mother simple_score: -30000" in rendered
+    assert "father simple_score: -40000" in rendered
+    # Best ancestor is taken across both lineages.
+    assert "best ancestor simple_score: -26000" in rendered
+    assert "gap (best_ancestor - mother): +4000" in rendered
+
+
+def test_parent_fitness_signal_handles_empty_lineage_gracefully() -> None:
+    from src.organisms.organism import format_parent_fitness_signal
+
+    rendered = format_parent_fitness_signal(
+        primary_label="parent",
+        primary_score=None,
+        primary_lineage=[],
+    )
+
+    assert "parent simple_score: (unknown)" in rendered
+    assert "lineage has no scored entries" in rendered
+    # No explicit gap line — there is no anchor to compare to.
+    assert "gap (best_ancestor" not in rendered

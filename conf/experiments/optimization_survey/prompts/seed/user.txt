@@ -3,9 +3,6 @@ Design a seed optimizer for this research island.
 Island id: {island_id}
 Island name: {island_name}
 
-Island research direction:
-{island_description}
-
 === GENOME SECTION SCHEMA ===
 The schema below is authoritative for the structure and meaning of CORE_GENES.
 {genome_schema}

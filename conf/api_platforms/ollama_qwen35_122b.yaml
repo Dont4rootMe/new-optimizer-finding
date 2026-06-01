@@ -6,7 +6,11 @@ top_p: 0.95
 top_k: 20
 timeout_sec: 1800
 max_retries: 0
-max_concurrency: 4
+# PHASE A speedup (2026-05-21): broker concurrency 4 → 8. The two qwen
+# 122B Ollama instances each support ~4 concurrent requests; raising the
+# per-route ceiling lets max_parallel_organisms (8) actually achieve 8×
+# real parallelism instead of being throttled to 4× at the broker queue.
+max_concurrency: 8
 keep_alive: 30m
 think: low
 raw: null
@@ -40,10 +44,13 @@ request_options:
   vocab_only: null
 
 stage_options:
-  # design = trait/design generation for a new or mutated organism
+  # design = trait/design generation for a new or mutated organism.
+  # PHASE A: think medium → low and max_output_tokens 12288 → 6144.
+  # Measured average design time was 916s (51% of wall-time); halving
+  # the thinking budget + output cap cuts worst-case latency ~2×.
   design: &qwen_stage_defaults
-    think: medium
-    max_output_tokens: 12288
+    think: low
+    max_output_tokens: 6144
     temperature: 1.0
     top_p: 0.95
     top_k: 20
@@ -53,10 +60,15 @@ stage_options:
     logprobs: null
     top_logprobs: null
     request_options: {}
-  # implementation = full implementation.py generation
+  # implementation = full implementation.py generation.
+  # PHASE A: think low → false (disable thinking entirely; implementation
+  # is mostly mechanical code rendering from the genetic_code design).
+  # max_output_tokens 12288 → 8192 (implementation files are rarely
+  # > 5k tokens in practice).
   implementation:
     <<: *qwen_stage_defaults
-    think: low
+    think: false
+    max_output_tokens: 8192
     temperature: 0.4
     top_p: 0.9
   # repair = post-eval code repair after explicit runtime/test failure

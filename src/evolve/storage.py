@@ -185,6 +185,7 @@ def write_population_state(
     best_simple_score: float | None = None,
     inflight_seed: dict[str, Any] | None = None,
     inflight_generation: dict[str, Any] | None = None,
+    bandit_state: dict[str, Any] | None = None,
 ) -> Path:
     payload = {
         "current_generation": int(generation),
@@ -195,6 +196,7 @@ def write_population_state(
         "relationship_history": _build_relationship_history(population_root),
         "inflight_seed": inflight_seed,
         "inflight_generation": inflight_generation,
+        "bandit_state": bandit_state if isinstance(bandit_state, dict) else None,
     }
     return write_json(population_state_path(population_root), payload)
 
@@ -475,6 +477,30 @@ def _optional_str_field(payload: dict[str, Any], field_name: str) -> str | None:
     return text or None
 
 
+def _coerce_token_usage_payload(raw: Any) -> dict[str, dict[str, int]]:
+    """Coerce a persisted ``token_usage`` blob into ``{route: {metric: int}}``.
+
+    Missing or malformed payloads (legacy organism.json predating token
+    accounting) coerce to an empty dict so resume stays non-breaking.
+    """
+
+    if not isinstance(raw, dict):
+        return {}
+    coerced: dict[str, dict[str, int]] = {}
+    for route, counts in raw.items():
+        if not isinstance(counts, dict):
+            continue
+        route_bucket: dict[str, int] = {}
+        for metric, value in counts.items():
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                route_bucket[str(metric)] = int(value)
+        if route_bucket:
+            coerced[str(route)] = route_bucket
+    return coerced
+
+
 def _coerce_organism_meta_payload(
     payload: dict[str, Any],
     *,
@@ -512,11 +538,13 @@ def _coerce_organism_meta_payload(
         "llm_provider": str(payload.get("llm_provider", payload.get("provider", ""))),
         "provider_model_id": str(payload.get("provider_model_id", payload.get("model_name", ""))),
         "model_name": str(payload.get("model_name", payload.get("provider_model_id", ""))),
+        "llm_pipeline_id": str(payload.get("llm_pipeline_id", "")),
         "prompt_hash": str(payload.get("prompt_hash", "")),
         "seed": int(payload.get("seed", 0)),
         "pipeline_state": str(payload.get("pipeline_state", "")),
         "error_msg": _optional_str_field(payload, "error_msg"),
         "planned_phase_evaluations": dict(payload.get("planned_phase_evaluations", {})),
+        "token_usage": _coerce_token_usage_payload(payload.get("token_usage", {})),
     }
 
 
@@ -567,11 +595,13 @@ def read_organism_meta(path: str | Path) -> OrganismMeta:
         llm_provider=canonical["llm_provider"],
         provider_model_id=canonical["provider_model_id"],
         model_name=canonical["model_name"],
+        llm_pipeline_id=canonical["llm_pipeline_id"],
         prompt_hash=canonical["prompt_hash"],
         seed=canonical["seed"],
         pipeline_state=canonical["pipeline_state"],
         error_msg=canonical["error_msg"],
         planned_phase_evaluations=canonical["planned_phase_evaluations"],
+        token_usage=canonical["token_usage"],
     )
 
 

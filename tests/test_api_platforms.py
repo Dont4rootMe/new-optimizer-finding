@@ -19,7 +19,6 @@ from api_platforms._core.config import build_route_config, derive_ollama_instanc
 from api_platforms._core.providers import generate_direct
 from api_platforms._core.types import ApiRouteConfig, LlmResponse
 from src.evolve.generator import CandidateGenerator
-from src.evolve.types import Island
 
 
 def _cfg(tmp_path: Path, *, routes: dict, route_weights: dict[str, float]) -> object:
@@ -35,27 +34,20 @@ def _cfg(tmp_path: Path, *, routes: dict, route_weights: dict[str, float]) -> ob
                     "max_attempts_to_create_organism": 1,
                     "max_attempts_to_repair_organism_after_error": 1,
                     "max_attempts_to_regenerate_organism_after_novelty_rejection": 1,
-                    "max_attempts_to_regenerate_organism_after_compatibility_rejection": 1,
                 },
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
                     "genome_schema": "conf/experiments/optimization_survey/prompts/shared/genome_schema.txt",
                     "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
                     "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
-                    "compatibility_seed_system": "conf/experiments/optimization_survey/prompts/compatibility/seed/system.txt",
-                    "compatibility_seed_user": "conf/experiments/optimization_survey/prompts/compatibility/seed/user.txt",
                     "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
                     "mutation_user": "conf/experiments/optimization_survey/prompts/mutation/user.txt",
                     "mutation_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/mutation/system.txt",
                     "mutation_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/mutation/user.txt",
-                    "compatibility_mutation_system": "conf/experiments/optimization_survey/prompts/compatibility/mutation/system.txt",
-                    "compatibility_mutation_user": "conf/experiments/optimization_survey/prompts/compatibility/mutation/user.txt",
                     "crossover_system": "conf/experiments/optimization_survey/prompts/crossover/system.txt",
                     "crossover_user": "conf/experiments/optimization_survey/prompts/crossover/user.txt",
                     "crossover_novelty_system": "conf/experiments/optimization_survey/prompts/novelty/crossover/system.txt",
                     "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
-                    "compatibility_crossover_system": "conf/experiments/optimization_survey/prompts/compatibility/crossover/system.txt",
-                    "compatibility_crossover_user": "conf/experiments/optimization_survey/prompts/compatibility/crossover/user.txt",
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
                     "implementation_template": "conf/experiments/optimization_survey/prompts/shared/template.txt",
@@ -256,37 +248,6 @@ def test_ollama_broker_dispatches_across_grouped_instances(tmp_path: Path, monke
         broker.stop()
 
 
-def test_seed_generation_uses_one_route_for_both_stages(tmp_path: Path) -> None:
-    cfg = _cfg(
-        tmp_path,
-        routes={"mock": {"_target_": "api_platforms.mock.platform.build_platform"}},
-        route_weights={"mock": 1.0},
-    )
-    generator = CandidateGenerator(cfg)
-    island = Island(
-        island_id="gradient_methods",
-        name="gradient methods",
-        description_path=str(tmp_path / "gradient_methods.txt"),
-        description_text="First-order optimization heuristics.",
-    )
-    organism_dir = tmp_path / "org_seed"
-    organism_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        generator.generate_seed_organism(
-            island=island,
-            organism_id="seed01",
-            generation=0,
-            organism_dir=organism_dir,
-        )
-    finally:
-        generator.close()
-
-    request_payload = json.loads((organism_dir / "llm_request.json").read_text(encoding="utf-8"))
-    response_payload = json.loads((organism_dir / "llm_response.json").read_text(encoding="utf-8"))
-    assert request_payload["design"]["route_id"] == request_payload["implementation"]["route_id"] == "mock"
-    assert response_payload["design"]["route_id"] == response_payload["implementation"]["route_id"] == "mock"
-
-
 def test_ollama_route_posts_chat_payload_and_parses_response(monkeypatch: pytest.MonkeyPatch) -> None:
     route_cfg = ApiRouteConfig(
         route_id="ollama_gemma4_26b",
@@ -443,7 +404,7 @@ def test_ollama_route_uses_content_text_when_thinking_is_present(monkeypatch: py
     )
     request = LlmRequest(
         route_id="ollama_qwen35_27b",
-        stage="compatibility_check",
+        stage="novelty_check",
         system_prompt="system prompt",
         user_prompt="user prompt",
         seed=123,
@@ -463,7 +424,7 @@ def test_ollama_route_uses_content_text_when_thinking_is_present(monkeypatch: py
                     "message": {
                         "role": "assistant",
                         "thinking": "reasoning that should stay out of response.text",
-                        "content": "## COMPATIBILITY_VERDICT\nCOMPATIBILITY_ACCEPTED\n",
+                        "content": "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED\n",
                     },
                 }
             ).encode("utf-8")
@@ -475,7 +436,7 @@ def test_ollama_route_uses_content_text_when_thinking_is_present(monkeypatch: py
 
     response = generate_direct(route_cfg, request)
 
-    assert response.text == "## COMPATIBILITY_VERDICT\nCOMPATIBILITY_ACCEPTED"
+    assert response.text == "## NOVELTY_VERDICT\nNOVELTY_ACCEPTED"
     assert response.raw_response["message"]["thinking"] == "reasoning that should stay out of response.text"
 
 

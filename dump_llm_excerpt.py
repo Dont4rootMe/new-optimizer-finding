@@ -11,7 +11,9 @@ Usage:
 
 from __future__ import annotations
 
+import ast
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Iterable
@@ -24,6 +26,35 @@ STAGE_LIST_KEYS = (
     "repair_attempts",
 )
 STAGE_SINGLE_KEYS = ("design", "implementation", "repair")
+
+
+_STRUCTURED_WRAPPER_RE = re.compile(
+    r"^_StructuredResponseText\(full_text=(.*?), content_text=",
+    re.DOTALL,
+)
+
+
+def _unwrap_structured_text(text: Any) -> str:
+    """Defensively unwrap ``_StructuredResponseText(full_text='...', ...)`` reprs.
+
+    Step-1 rationalization runs from before the wrapper fix persisted the
+    dataclass's default repr instead of its ``full_text`` field. This lets
+    the dump still render those traces readably without re-running them.
+    Returns the unwrapped str when the prefix matches; otherwise the input
+    coerced to str.
+    """
+
+    if not isinstance(text, str):
+        return "" if text is None else str(text)
+    if not text.startswith("_StructuredResponseText"):
+        return text
+    match = _STRUCTURED_WRAPPER_RE.match(text)
+    if not match:
+        return text
+    try:
+        return ast.literal_eval(match.group(1))
+    except (ValueError, SyntaxError):
+        return text
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -82,13 +113,20 @@ def dump_excerpt(org_dir: Path, out_dir: Path, gen_name: str) -> dict[str, Any]:
     req = _read_json(org_dir / "llm_request.json")
     resp = _read_json(org_dir / "llm_response.json")
     summary = _read_json(org_dir / "summary.json")
+    rationalization = _read_json(org_dir / "llm_rationalization.json")
 
     out_file = out_dir / f"{gen_name}__{island}__{org}.md"
 
     pipeline_state = organism.get("pipeline_state")
     operator = organism.get("operator")
     organism_id = organism.get("organism_id")
-    score = summary.get("score")
+    # ``simple_score`` / ``hard_score`` live on ``organism.json`` (the
+    # canonical fitness record). ``summary.json`` is a hand-written sidecar
+    # that may or may not exist and stores a generic ``score`` field; fall
+    # back to it for legacy dumps so existing populations still render.
+    simple_score = organism.get("simple_score")
+    hard_score = organism.get("hard_score")
+    legacy_score = summary.get("score") if simple_score is None else None
 
     route_id = req.get("route_id")
     provider = req.get("provider")
@@ -105,8 +143,15 @@ def dump_excerpt(org_dir: Path, out_dir: Path, gen_name: str) -> dict[str, Any]:
         lines.append(f"- **pipeline_state**: `{pipeline_state}`")
     if operator:
         lines.append(f"- **operator**: `{operator}`")
-    if score is not None:
-        lines.append(f"- **score**: `{score}`")
+    if simple_score is not None:
+        score_line = f"- **simple_score**: `{simple_score}`"
+        if hard_score is not None:
+            score_line += f"  **hard_score**: `{hard_score}`"
+        lines.append(score_line)
+    elif hard_score is not None:
+        lines.append(f"- **hard_score**: `{hard_score}`")
+    elif legacy_score is not None:
+        lines.append(f"- **score**: `{legacy_score}`")
     if provider or model or route_id:
         lines.append(
             "- **llm**: "
@@ -123,6 +168,53 @@ def dump_excerpt(org_dir: Path, out_dir: Path, gen_name: str) -> dict[str, Any]:
 
     lines.append("\n## Stages (excerpt)\n")
     stage_meta_keys = ("status", "verdict", "rejection_reason", "sections_at_issue", "changed_sections", "error_kind")
+
+    # Step 1 of the two-step design pipeline. Lives in its own JSON file so
+    # the design stage's overwrite of llm_request.json doesn't lose it.
+    if rationalization:
+        lines.append("### rationalization (Step 1)")
+        rat_meta_parts: list[str] = []
+        rat_status = rationalization.get("status")
+        if rat_status:
+            rat_meta_parts.append(f"status={rat_status}")
+        rat_route = rationalization.get("route_id")
+        if rat_route:
+            rat_meta_parts.append(f"route={rat_route}")
+        rat_provider = rationalization.get("provider")
+        rat_model = rationalization.get("provider_model_id")
+        if rat_provider:
+            rat_meta_parts.append(f"provider={rat_provider}")
+        if rat_model:
+            rat_meta_parts.append(f"model={rat_model}")
+        rat_parsed = rationalization.get("parsed") or {}
+        if "has_actionable_directive" in rat_parsed:
+            rat_meta_parts.append(f"actionable={rat_parsed['has_actionable_directive']}")
+        if rat_parsed.get("sections_present"):
+            rat_meta_parts.append(
+                f"sections=[{','.join(rat_parsed['sections_present'])}]"
+            )
+        if rat_parsed.get("sections_missing"):
+            rat_meta_parts.append(
+                f"missing=[{','.join(rat_parsed['sections_missing'])}]"
+            )
+        rat_sys = rationalization.get("system_prompt") or ""
+        rat_usr = rationalization.get("user_prompt") or ""
+        if rat_sys or rat_usr:
+            rat_meta_parts.append(
+                f"prompt_chars=sys:{len(rat_sys)}+user:{len(rat_usr)}"
+            )
+        if rat_meta_parts:
+            lines.append(f"- **meta**: {_one_line('; '.join(rat_meta_parts), 600)}")
+        rat_err = rationalization.get("error_msg")
+        if rat_err:
+            lines.append(f"- **stage_error**: {_one_line(rat_err, 500)}")
+        rat_text = _unwrap_structured_text(rationalization.get("text"))
+        if rat_text:
+            lines.append("")
+            lines.append("```")
+            lines.append(rat_text.rstrip())
+            lines.append("```")
+        lines.append("")
 
     for key in (*STAGE_LIST_KEYS, *STAGE_SINGLE_KEYS):
         for label, req_stage, resp_stage in _iter_pairs(req, resp, key):
@@ -169,7 +261,9 @@ def dump_excerpt(org_dir: Path, out_dir: Path, gen_name: str) -> dict[str, Any]:
         "rel": rel,
         "out": str(out_file),
         "pipeline_state": pipeline_state,
-        "score": score,
+        "simple_score": simple_score,
+        "hard_score": hard_score,
+        "score": legacy_score,
         "route_id": route_id,
         "provider_model_id": model,
         "error_msg": error_msg,
@@ -199,8 +293,19 @@ def main() -> None:
         if gen != cur_gen:
             cur_gen = gen
             lines.append(f"\n## {gen}\n")
-        score = s.get("score")
-        score_str = f" score=`{score}`" if score is not None else ""
+        simple_score = s.get("simple_score")
+        hard_score = s.get("hard_score")
+        legacy_score = s.get("score")
+        if simple_score is not None:
+            score_str = f" simple=`{simple_score}`"
+            if hard_score is not None:
+                score_str += f" hard=`{hard_score}`"
+        elif hard_score is not None:
+            score_str = f" hard=`{hard_score}`"
+        elif legacy_score is not None:
+            score_str = f" score=`{legacy_score}`"
+        else:
+            score_str = ""
         err = s.get("error_msg")
         lines.append(
             f"- [{s['rel']}]({Path(s['out']).name}) — state=`{s.get('pipeline_state')}`"

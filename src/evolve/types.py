@@ -8,12 +8,10 @@ from typing import Any, TypedDict
 
 @dataclass(slots=True)
 class Island:
-    """Canonical research-island definition."""
+    """Canonical research-island definition (Shinka-style: id + name only)."""
 
     island_id: str
     name: str
-    description_path: str
-    description_text: str
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -64,11 +62,23 @@ class OrganismMeta:
     llm_provider: str = ""
     provider_model_id: str = ""
     model_name: str = ""  # Deprecated compatibility alias; new writes use provider_model_id.
+    # Identifies the pipeline (named bundle of canonical stage -> route_id
+    # assignments) that produced this organism. Populated only when
+    # ``evolver.llm.pipelines`` is configured; legacy single-route runs
+    # leave this empty and feed reward to ``llm_route_id`` instead.
+    llm_pipeline_id: str = ""
     prompt_hash: str = ""
     seed: int = 0
     pipeline_state: str = ""
     error_msg: str | None = None
     planned_phase_evaluations: dict[str, Any] = field(default_factory=dict)
+    # Per-route LLM token accounting for this organism. Keyed by route_id
+    # (e.g. ``ollama_gemma4_31b``) -> {"prompt_tokens", "completion_tokens",
+    # "total_tokens", "calls"}. Accumulated across every creation stage
+    # (rationalization/design/novelty/implementation) and any post-eval
+    # repair stages. Seed-copy organisms make no LLM calls and leave this
+    # empty. Consumed by the token-usage visualisation panels.
+    token_usage: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -92,11 +102,16 @@ class OrganismMeta:
             "llm_route_id": self.llm_route_id,
             "llm_provider": self.llm_provider,
             "provider_model_id": self.provider_model_id or self.model_name,
+            "llm_pipeline_id": self.llm_pipeline_id,
             "prompt_hash": self.prompt_hash,
             "seed": self.seed,
             "pipeline_state": self.pipeline_state,
             "error_msg": self.error_msg,
             "planned_phase_evaluations": dict(self.planned_phase_evaluations),
+            "token_usage": {
+                str(route): dict(counts) if isinstance(counts, dict) else counts
+                for route, counts in self.token_usage.items()
+            },
         }
 
     @property

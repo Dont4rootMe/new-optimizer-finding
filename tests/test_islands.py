@@ -1,26 +1,31 @@
-"""Tests for island asset loading."""
+"""Tests for island synthesis helpers."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from src.evolve.islands import load_islands
+from src.evolve.islands import synthesize_islands_from_ids
 
 
-def test_load_islands_reads_multiple_files(tmp_path: Path) -> None:
-    (tmp_path / "gradient_methods.txt").write_text("First-order ideas", encoding="utf-8")
-    (tmp_path / "second_order.txt").write_text("Curvature-aware ideas", encoding="utf-8")
-
-    islands = load_islands(tmp_path)
-
+def test_synthesize_islands_from_ids_builds_minimal_record() -> None:
+    islands = synthesize_islands_from_ids(["gradient_methods", "second_order"])
     assert [island.island_id for island in islands] == ["gradient_methods", "second_order"]
-    assert islands[0].description_text == "First-order ideas"
+    assert islands[0].name == "gradient methods"
+    # The simplified Island carries only id + name; no description fields.
+    assert not hasattr(islands[0], "description_text")
+    assert not hasattr(islands[0], "description_path")
 
 
-def test_load_islands_rejects_empty_file(tmp_path: Path) -> None:
-    (tmp_path / "broken.txt").write_text("", encoding="utf-8")
+def test_synthesize_islands_from_ids_rejects_empty_input() -> None:
+    with pytest.raises(ValueError, match="at least one island_id"):
+        synthesize_islands_from_ids([])
 
-    with pytest.raises(ValueError, match="empty"):
-        load_islands(tmp_path)
+
+def test_synthesize_islands_from_ids_rejects_duplicates() -> None:
+    with pytest.raises(ValueError, match="Duplicate island_id"):
+        synthesize_islands_from_ids(["a", "a"])
+
+
+def test_synthesize_islands_from_ids_rejects_blank_entries() -> None:
+    with pytest.raises(ValueError, match="Empty island_id"):
+        synthesize_islands_from_ids(["valid_one", ""])

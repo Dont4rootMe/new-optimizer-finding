@@ -4,42 +4,49 @@ Mutate this awtf2025 heuristic organism into a child.
 The schema below is authoritative for the structure and meaning of CORE_GENES.
 {genome_schema}
 
-=== CHILD GENETIC CODE DRAFT ===
-This is the child-side draft already selected by evolution.
-This is the main object you must work on.
-{inherited_gene_pool}
+=== STEP 1 DESIGN RATIONALE ===
+A prior rationalization call produced the design plan below. Materialize WHAT_TO_REMOVE, WHAT_TO_ADD_OR_INVENT and CHILD_DIRECTION in the structured artifact. If the block reads "(rationalization disabled — single-call mode)", proceed without it.
+{rationalization}
 
-=== EXCLUDED IDEAS ===
-These ideas were deliberately removed during mutation sampling.
-Treat them as excluded-by-evolution context, not as default candidates to restore.
-{removed_gene_pool}
+=== PARENT GENETIC CODE ===
+This is the only parent. There is no pre-sampled child draft and no externally excluded gene pool.
+You decide which mechanism to evolve, which to keep verbatim, and which to drop.
+{parent_genetic_code}
+
+=== PARENT IMPLEMENTATION (ground truth Python) ===
+Below is the parent's actual `implementation.py` — the code that the host evaluator scored. The genetic code above is the design intent; this block is what actually runs. When the two drift apart (a section claims a mechanism that the code does not implement, or vice versa), trust the code for diagnosis but anchor the child's mutation in the genetic code structure. Your structured artifact under `## CORE_GENES` must describe the child's design at the same abstraction level the parent's `## CORE_GENES` was written at — the next stage will compile your new design into Python using this parent code as a baseline.
+
+```python
+{parent_implementation}
+```
+
+=== PARENT LINEAGE SUMMARY ===
+Past idea changes and their outcomes. Scores in lineage: higher is better.
+Use score trends to identify which mechanisms helped, and to spot regime convergence (e.g. several recent children all keeping no walls; several recent children all using the same grouping family).
+If the lineage shows convergence, prefer a mutation that breaks out of that regime instead of tuning inside it.
+{parent_lineage_summary}
+
+=== TOP-K INSPIRATION PROGRAMS (same island, sorted best first) ===
+Highest-scoring survivors on the parent's island, excluding the parent. Use them as additional reference programs when designing the child's CORE_GENES. When the child's `STEP 1 DESIGN RATIONALE` proposed a mechanism import or invention, check whether one of these inspirations already implements something similar — if so, mention the resemblance in `## CHANGE_DESCRIPTION` so novelty validators can see the lineage.
+{inspirations}
 
 === NOVELTY REJECTION FEEDBACK ===
-If a previous child draft was rejected for lacking novelty, address these issues explicitly.
+If a previous candidate child was rejected for lacking novelty, address those issues explicitly.
 If there was no prior rejection, this section will say so.
 {novelty_rejection_feedback}
 
-=== PARENT GENETIC CODE (REFERENCE ONLY) ===
-Use this only to understand where the child draft came from.
-{parent_genetic_code}
-
-=== PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
-Use this only to understand past idea changes and outcomes.
-Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
-{parent_lineage_summary}
-
 === TASK ===
 The parent organism already works and has been evaluated.
-Your goal: make one coherent score-seeking hypothesis change to the child draft that could push the absolute contest score lower.
+Your goal: design one coherent score-seeking hypothesis change to the parent that could push the absolute contest score lower.
 The child remains an awtf2025 heuristic organism and must still produce a contest-legal output that respects the explicit output shape and the operation budget `T <= K * N * N`.
 The result may revise several coupled sections when the mechanism requires it.
 Keep the mutation small in causal scope even when it spans multiple sections.
 Do not solve uncertainty by adding extra support genes everywhere; only add the minimum support needed for the new mechanism to make sense.
 Prefer edits that materially change the operating regime, not merely wording changes or cosmetic parameter nudges.
 A pure coefficient retuning is weak unless it clearly pushes the organism into a different wall, grouping, routing, or repair regime.
+Verbatim repetition of the entire parent genome is invalid — at least one CORE_GENES section must materially change relative to the parent.
 State how the child should differ in expected operating regime, and why the change is not merely the same regime with different repair tuning.
 Do NOT replace the core heuristic structure — refine it.
 The result must be a full sectioned genetic code in the canonical format, not a partial diff.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing the parent.
-Do not preserve the child draft merely because it is coherent; strengthen it until the changed sections define a plausible route to a lower score.
 Return the structured design directly. Do not add preface text before `## CORE_GENES`.

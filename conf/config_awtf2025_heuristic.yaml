@@ -1,6 +1,7 @@
 defaults:
   - evolver: awtf2025_heuristic
   - api_platforms@api_platforms.ollama_gemma4_31b: ollama_gemma4_31b
+  - api_platforms@api_platforms.ollama_qwen35_122b: ollama_qwen35_122b
   - experiments@experiments.group_commands_and_wall_planning: awtf2025_heuristic/group_commands_and_wall_planning
   - _self_
 
@@ -25,21 +26,15 @@ paths:
   api_platform_runtime_root: ${oc.env:API_PLATFORM_RUNTIME_ROOT,./.api_platform_runtime_atcoder_awt}
   ollama_cache_root: ${oc.env:OLLAMA_MODELS,./ollama_cache}
 
-evolver:
-  llm:
-    route_weights:
-      ollama_gemma4_31b: 1.0
 
 api_platforms:
+  # Gemma 4 31B holds GPUs 6 and 7 as two single-GPU instances. It
+  # runs the cheap validator stages of every pipeline (novelty, repair)
+  # and one all-gemma pipeline keeps the legacy fast-and-cheap path
+  # available for the bandit.
   ollama_gemma4_31b:
     base_url: ${oc.env:OLLAMA_GEMMA4_31B_BASE_URL,http://127.0.0.1:12454/api}
-    gpu_ranks: 
-      - [0]
-      - [1]
-      - [2]
-      - [3]
-      - [4]
-      - [5]
+    gpu_ranks:
       - [6]
       - [7]
     max_concurrency: 3
@@ -56,6 +51,34 @@ api_platforms:
       novelty_check:
         think: false
         max_output_tokens: 9000
+
+  # Qwen 3.5 122B holds GPUs 0–5 as two 3-GPU instances. It runs the
+  # creative stages (rationalization, design, implementation) where the
+  # extra reasoning capacity should buy score, but only inside the
+  # "qwen_creative_gemma_check" pipeline so the bandit can compare it
+  # to the all-gemma baseline.
+  ollama_qwen35_122b:
+    base_url: ${oc.env:OLLAMA_QWEN35_122B_BASE_URL,http://127.0.0.1:12422/api}
+    gpu_ranks:
+      - [0, 1, 2]
+      - [3, 4, 5]
+    # PHASE A speedup: 2 → 4 per instance (so 4×2 = 8 concurrent qwen
+    # requests total, doubled from the previous 4× empirical ceiling).
+    # Diagnosis: the 122B model on 3 GPUs can comfortably handle 4
+    # parallel requests; the prior `2` was over-conservative.
+    max_concurrency: 4
+
+comet:
+  enabled: true
+  api_key: RrClhd4FveFQKO4qLo4jBjrKu
+  project_name: ${oc.env:COMET_PROJECT,new-optimizer-search}
+  workspace: ${oc.env:COMET_WORKSPACE,dont4rootme}
+  run_name: ${oc.env:COMET_RUN_NAME,awtf2025_heuristic}
+  experiment_name: null
+  log_combined_overview: true
+  log_individual_panels: true
+  log_plotly: true
+  log_step_per_generation: true
 
 hydra:
   run:

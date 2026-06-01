@@ -1,0 +1,53 @@
+Produce the design rationale for the next crossover child of these two circle-packing parents.
+
+=== PARENT FITNESS SIGNAL ===
+{parent_fitness_signal}
+
+=== PRIMARY PARENT GENETIC CODE ===
+This parent's core paradigm dominates the recombination.
+{mother_genetic_code}
+
+=== PRIMARY PARENT IMPLEMENTATION (ground truth Python) ===
+The actual `implementation.py` the primary parent runs.
+
+```python
+{mother_implementation}
+```
+
+=== PRIMARY PARENT LINEAGE SUMMARY ===
+Higher score = better.
+{mother_lineage_summary}
+
+=== SECONDARY PARENT GENETIC CODE ===
+The donor of one coherent imported module (or contrast for a third-option invention).
+{father_genetic_code}
+
+=== SECONDARY PARENT IMPLEMENTATION (ground truth Python) ===
+The actual `implementation.py` the secondary parent runs. When picking the imported module, confirm against this code that the mechanism really exists in the donor.
+
+```python
+{father_implementation}
+```
+
+=== SECONDARY PARENT LINEAGE SUMMARY ===
+Higher score = better.
+{father_lineage_summary}
+
+=== TOP-K INSPIRATION PROGRAMS (mother's island, sorted best first) ===
+Highest-scoring survivors on the primary parent's island, excluding both parents. Reference programs for the child's CORE_GENES.
+{inspirations}
+
+=== LINEAGE REGIME HINT (PRIMARY PARENT'S LINEAGE) ===
+Auto-generated convergence diagnosis from the primary parent's recent ancestors.
+{lineage_regime_hint}
+
+=== NOVELTY REJECTION FEEDBACK (only present on retries) ===
+If a previous candidate child was rejected for lacking novelty, the critique is below. Adjust your `## CHILD_DIRECTION` to address it.
+{novelty_rejection_feedback}
+
+=== TASK ===
+Use the `PARENT FITNESS SIGNAL` block above as the primary anchor: compare the two parents' scores and look at the gap to the best ancestor across both lineages. If the mother is the best ancestor itself, propose a forward step from her position; if the best ancestor is upstream of either parent and the gap is positive, the import (or invention) should target what that best ancestor had which the current parents lack. Diagnose what the primary parent is currently failing at and how the secondary parent (or a new mechanism you invent) could address it. Propose a direction that materially changes at least one of the four axes (packing / radius / symmetry / repair) for the child relative to the primary parent.
+
+Stitching half of each parent together is not enough. Importing a module unchanged is allowed when it cleanly addresses a primary-parent weakness; inventing a third-option mechanism is also a first-class move. Removing primary-parent material that duplicates the import is a first-class move.
+
+Fill out the six sections in the system-prompt order. Do not emit `## CORE_GENES` — that is the next call's job.

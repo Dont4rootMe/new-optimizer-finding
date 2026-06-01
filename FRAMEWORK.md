@@ -225,6 +225,115 @@ Defined in `src/organisms/implementation_patch.py` and orchestrated in `src/evol
 
 A guard added in P5 promotes PATCH to FULL whenever `len(changed_sections) >= len(implementation_regions) - 1`. PATCH at near-full coverage was the worst of both worlds: same token cost as FULL plus more parser fragility.
 
+## Two-step design pipeline (rationalization → formalization)
+
+For families that ship rationalization prompts, the design stage runs as two consecutive LLM calls instead of one:
+
+- **Step 1 — rationalization** (`generator.run_rationalization_stage`): free-text "design plan" with six `## ` headers — `SCORE_BEARING_CORE`, `LINEAGE_REGIME_DIAGNOSIS`, `WEAKNESS_HYPOTHESIS`, `WHAT_TO_REMOVE`, `WHAT_TO_ADD_OR_INVENT`, `CHILD_DIRECTION`. The model is explicitly told to invent its own ideas and remove parent material, not just recombine genes. Pseudocode hints inside `WHAT_TO_ADD_OR_INVENT` use **tilde-fenced `~~~python` blocks** (different from Step 2's backtick fences) so a sloppy Step 1 cannot contaminate Step 2's strict CORE_GENES parser.
+
+- **Step 2 — formalization**: the existing sectioned-artifact call. The Step-2 user prompt carries a literal `{rationalization}` placeholder that the generator substitutes with the Step 1 text (two-step) or with the `(rationalization disabled — single-call mode)` stub (single-call). The Step 2 system prompt has a short preamble telling the LLM to materialize `WHAT_TO_ADD_OR_INVENT` bullets in the matching CORE_GENES section, honour `WHAT_TO_REMOVE`, and lift `~~~python` hints into proper code blocks.
+
+Step 1 is **cached across validator retries**: novelty/compatibility rejections are almost always formalization drift, not strategic mistakes, so the same rationale is reused with the existing `_append_rejected_candidate_repair_block` feedback added to Step 2's user prompt. Re-running Step 1 each retry both wastes a call and risks the planner contradicting its own previous direction.
+
+Step 1 also receives a **lineage regime hint** (Tier 2 C). `src/organisms/lineage_regime.py::summarize_recent_regime` scans the parent's recent ancestors (last 8 by default), matches their `change_description` against family-specific keyword categories (`wall_family`, `grouping_family`, `routing_family`, `repair_regime` for awtf2025; `packing_family`, `radius_regime`, `symmetry_family`, `repair_family` for circle_packing), and emits a short prose hint marking axes that have converged on a single family vs axes that no recent ancestor has used. The hint is injected **only** into Step 1's user prompt — Step 2 doesn't need it, the rationale already encodes the regime-break decision.
+
+**Persistence**: Step 1's output lives in `org_dir/llm_rationalization.json` (separate from `llm_request.json`/`llm_response.json` so the design stage's overwrite doesn't lose it). Both `dump_llm.py` and `dump_llm_excerpt.py` surface it.
+
+**Soft-fail by design**: if Step 1 LLM call fails, returns malformed output, or the generator lacks `run_rationalization_stage` (test fakes), the operator silently falls back to single-call mode and Step 2 sees the stub. No exceptions reach the loop.
+
+**Configuration**: per family, point `evolver.prompts.{mutation,crossover}_rationalization_{system,user}` at the family's `prompts/rationalization/{mutation,crossover}/{system,user}.txt`. Absent entries mean the family hasn't migrated and the single-call legacy path is used unconditionally. Active families with the two-step pipeline: `awtf2025_heuristic`, `circle_packing_shinka`. `optimization_survey` remains single-call.
+
+Keyword maps for the lineage regime hint live next to the prompt assets at `conf/experiments/<family>/prompts/shared/regime_keywords.yaml`; built-in fallbacks in `lineage_regime.py` keep the hint working even if the YAML is absent.
+
+## Adaptive sampling (bandits)
+
+Three sampling decisions the loop makes per organism creation can run in either uniform or **adaptive bandit** mode:
+
+1. **LLM route** (which model the generator should call) — `BaseLlmGenerator.sample_route_id`
+2. **Parent island** (which island the new organism's primary parent comes from) — `EvolutionLoop._sample_island_ids` for all three reproduction routes
+3. **Cross-island partner island** (the secondary parent's island when `inter_island_crossover` was chosen) — same helper, conditional on the primary's island
+
+Default for all three is **uniform** (or `weighted_static` for routes — preserves the legacy `route_weights` semantics). The non-uniform mode is **discounted Thompson sampling** (Bayesian multi-armed bandit on Beta posteriors with a discount factor γ < 1). Each `update(arm, reward)` call applies `α ← α·γ + r` and `β ← β·γ + (1 − r)` so old observations fade — that's what keeps the bandit honest under non-stationary rewards (an underdog model or island can pull ahead later in a run as the population enters a regime that suits it).
+
+Reward signal is computed by `src.evolve.bandit.RewardComputer` with three modes:
+
+- `survival` — 1 if the organism reached `simple_score`, else 0
+- `score_quantile` (default) — quantile rank of the score within a sliding window of the last `reward_window` evaluated organisms; dead organisms get 0
+- `hybrid` — `survival_weight · 1[survived] + (1 − survival_weight) · quantile`
+
+The sliding window matters: the population's score distribution drifts over a run, so a global quantile would assign every late organism a high score regardless of its true contribution.
+
+Cross-island partner sampling uses a `ConditionalAdaptiveSampler`: one Thompson sampler **per origin island** so the bandit can learn that "from island A, partner B is good" without forcing "from island B, partner A is also good".
+
+When switching `route_sampling.strategy: weighted_static → bandit`, the existing `route_weights` are folded in as a Beta-prior bias: arms with higher weights start with proportionally larger α, so existing per-model tuning is not thrown away on the switch.
+
+Bandit state is serialized into `population_state.json` under the `bandit_state` key (parent-island / partner / route posteriors plus reward windows) so resume restores the bandit faithfully.
+
+Configuration lives under `evolver.{llm.route_sampling, reproduction.parent_island_sampling, reproduction.cross_island_partner_sampling}` per family (see `conf/evolver/<family>.yaml`):
+
+```yaml
+parent_island_sampling:
+  strategy: uniform                    # uniform | bandit
+  bandit:
+    algorithm: discounted_thompson
+    discount: 0.97
+    prior_alpha: 1.0
+    prior_beta: 1.0
+    reward_mode: score_quantile        # survival | score_quantile | hybrid
+    reward_window: 50
+    survival_weight: 0.3
+```
+
+Implementation: `src/evolve/bandit.py` is the single source of truth; `BaseLlmGenerator` and `EvolutionLoop` instantiate `AdaptiveSampler` / `ConditionalAdaptiveSampler` from the config, route ``select(...)`` through them, and call ``observe(arm, simple_score=...)`` exactly once per organism creation attempt (covers `simple_complete`, `failed_simple_eval`, and `failed_creation` outcomes — the helper is idempotent via `_bandit_arm_attribution`).
+
+## Visualization & telemetry
+
+`src/evolve/visualization.py` renders a multi-group dashboard each generation. The legacy six-panel composite PNG (`evolution_overview.png`) still lands at the population root; the new `render_evolution_snapshot(...)` entry point also produces:
+
+- `population_root/viz/overview/` — every legacy panel as a standalone PNG, plus three new ones:
+  - `score_by_generation.png` (Ox = generation index, vertical column of organisms per generation)
+  - `best_vs_evaluations_with_dead.png` and `best_vs_runtime_with_dead.png` (the Best-Score curves where dead organisms still consume an Ox slot, leaving a gap)
+- `population_root/viz/timeline/` — cumulative-over-generation variants of the four aggregate plots: `cumulative_evaluations_by_island.png`, `cumulative_creations_by_operator.png`, `cumulative_creations_by_island.png`, `cumulative_max_score_by_model.png`
+- `population_root/viz/survival/` — survival ratios (`#scored / #total`) plus cumulative scored/dead counts on three Ox bases: `by_evaluations.png`, `by_runtime.png`, `by_generation.png`
+- `population_root/viz/interactive/best_vs_evaluations.html` — Plotly interactive Best vs Evaluations: hovering any point highlights the maternal-ancestor chain of *that* point (not just the current best). Requires the `evolve` extras (plotly).
+
+Each generation, `EvolutionLoop._render_progress_snapshot()` calls `render_evolution_snapshot` and hands the `RenderedSnapshot` bundle to a `CometRunLogger`, which uploads:
+
+- the composite PNG as `overview/composite`
+- each standalone PNG with a group-prefixed name (`overview/best_vs_evaluations`, `timeline/cumulative_creations_by_operator`, `survival/by_runtime`, ...) — Comet groups by the prefix automatically
+- the Plotly HTML as both `comet log_asset` (versioned, downloadable) and `log_html` (latest inline)
+
+The Comet logger is configured under the top-level `comet:` block in each Hydra family config:
+
+```yaml
+comet:
+  enabled: false                         # default off; set to true to log a run
+  api_key: ${oc.env:COMET_API_KEY,null}
+  project_name: ${oc.env:COMET_PROJECT,evolution-runs}
+  workspace: ${oc.env:COMET_WORKSPACE,dont4rootme}
+  experiment_name: null                  # default: "<run_label>-<utc_timestamp>"
+  log_combined_overview: true
+  log_individual_panels: true
+  log_plotly: true
+  log_step_per_generation: true          # use generation as Comet step
+```
+
+If `enabled: false` (default) the logger is a no-op — no imports, no network calls. If `enabled: true` but `comet_ml` isn't installed or the experiment fails to start, the wrapper logs a WARNING and continues without Comet (no exceptions reach the loop). Optional dep `comet_ml>=3.40.0` lives in the `evolve` extra alongside `plotly>=5.20.0`.
+
+Currently configured families (`awtf2025_heuristic`, `circle_packing_shinka`) ship with `enabled: false` — opt in per-run via env or override.
+
+## Per-family status of the gene-sampling refactor (P11)
+
+The production operators `MutationOperator` and `CrossbreedingOperator` are family-blind — they no longer call `prune_gene_pool` / `merge_gene_pools`, so **no family** sees random pre-LLM gene sampling anymore. The prompt files are family-specific, and they have been updated asymmetrically:
+
+| Family                  | Prompts migrated to full-genome flow? | Notes |
+|-------------------------|---------------------------------------|-------|
+| `awtf2025_heuristic`    | **Yes** (P11)                         | Mutation/crossover/compatibility/novelty user+system prompts rewritten end-to-end. This is the family the gene-sampling experiment is targeting. |
+| `circle_packing_shinka` | **Yes** (P11)                         | Same rewrite shape as awtf2025: drop child-draft/excluded-ideas framing, full-genome direct design, ≥1 section materially-different requirement, lineage-aware regime-break nudge. |
+| `optimization_survey`   | **No** (deliberately deferred)        | The user explicitly chose not to touch this family yet. Its prompt files still reference `{inherited_gene_pool}` / `{removed_gene_pool}` placeholders, which the operator now passes as empty lists, so the rendered prompt shows `(none)` for those blocks. The optimizer task is dormant; the prompts will need the same rewrite before the family is run again. |
+
+When you change the operator wiring, change all three families' prompts together — or document explicitly here why a family is being left in the legacy state, so a future reader doesn't assume the asymmetry is accidental.
+
 ## Recent changes (the P-fixes)
 
 P1–P6 came out of the 426-organism atcoder post-mortem; P7–P10 came out of the 1516-organism run that followed.
@@ -241,6 +350,9 @@ P1–P6 came out of the 426-organism atcoder post-mortem; P7–P10 came out of t
 | P8  | `conf/experiments/awtf2025_heuristic/prompts/shared/genome_schema.txt`; all five canonical genome sections                                                              | Genome reduced from 8 to 5 sections: `PRIORITY_MODEL` folded into `CONSTRUCTION_POLICY`, `CONTROL_POLICY` folded into `LOCAL_REPAIR_POLICY`, `PARAMETERS` inlined where used. `MACRO_STRATEGY` stays plain-language; the other four sections explicitly invite code/pseudocode as first-class content (the previous "Full Python code is not allowed here" ban is lifted everywhere except `MACRO_STRATEGY`) |
 | P9  | `prompts/seed/system.txt`, `prompts/mutation/system.txt`, `prompts/crossover/system.txt`, plus the `genome_schema.txt` section descriptions                              | Prompts now declare code/pseudocode the *default* form for substantive mechanisms in `STATE_REPRESENTATION`, `CONSTRUCTION_POLICY`, and `LOCAL_REPAIR_POLICY`, and explicitly call out concentrating every fragment in `OPTIONAL_CODE_SKETCH` as a regression. `OPTIONAL_CODE_SKETCH` is reframed for cross-section helpers only. Seed prompt also carries an explicit bad/good example for `MACRO_STRATEGY` bullets to stop gemma from emitting paragraph prose (~27 organisms in gen_0000 alone failed that way) |
 | P10 | `prompts/mutation/system.txt`, `prompts/crossover/system.txt`, `prompts/compatibility/mutation/system.txt`, `prompts/compatibility/crossover/system.txt`                 | Mutation and crossover must preserve named accumulated mechanisms (wait counters, bottleneck scores, axis-phasing schedules, density gates, stagnation triggers) unless the new module specifically supersedes that role; both compatibility gates reject silent drops. Mutation prompt also nudges toward concrete wall introduction once the parent population converges on a no-walls regime |
+| P11 | `src/organisms/mutation.py::MutationOperator.produce`, `src/organisms/crossbreeding.py::CrossbreedingOperator.produce` (and the awtf2025 + circle_packing_shinka mutation/crossover/compatibility/novelty user prompts) | Random pre-LLM gene sampling is disabled: `prune_gene_pool` (mutation) and `merge_gene_pools` (crossover) are no longer called from production operators. The LLM receives the parent's full genome and designs the child directly. AWTF2025 and circle_packing_shinka prompts rewritten to drop the "child draft / excluded ideas" framing; system prompts now require ≥1 CORE_GENES section to materially change (no verbatim parent copy) and add a lineage-aware regime-break nudge. Helpers `prune_gene_pool` / `merge_gene_pools` and `manual_pipeline.py`'s manual flows still exist for offline debugging. Triggered by the 491-organism run analysis: mutation children failed at 1.79× the crossover rate, but the dominant proximal cause was LLM output-format failures, not shredded inheritance — removing the random sampling is an experiment to test whether handing the LLM full genomes lets it generate meaningful diversity itself. |
+| P12 | `src/organisms/genetic_code_format.py::_parse_sectioned_core_genes` (regression tests in `tests/test_genetic_code_format.py`) | Fenced-code-block tolerance (originally added in P7 for `OPTIONAL_CODE_SKETCH`) extended to `STATE_REPRESENTATION`, `CONSTRUCTION_POLICY`, and `LOCAL_REPAIR_POLICY`. The 491-organism run had 102 `failed_creation` cases (~20% of population) where the LLM emitted ` ```python ... ``` ` inside `STATE_REPRESENTATION` and the parser raised `non-bullet text`. The schema already permits code in those sections (per P8/P9); the parser now matches the schema. `MACRO_STRATEGY` is intentionally still rejected — that section must remain plain-language bullets. |
+| P13 | `conf/experiments/awtf2025_heuristic/prompts/implementation/system.txt` (pre-output checklist) | Added an internal mechanic-to-code audit step: before emitting the patch artifact, the LLM walks `CONSTRUCTION_POLICY` and `LOCAL_REPAIR_POLICY` mechanics and confirms each named mechanism has an actual code path. Targets the "stage collapse" failure mode found in the 491-organism analysis (genome promised 3–5 stages, code implemented 1–2). The checklist is silent — no audit listing in the output — so the artifact format is unchanged. |
 
 ## Common pitfalls (and where to look)
 
@@ -248,7 +360,7 @@ P1–P6 came out of the 426-organism atcoder post-mortem; P7–P10 came out of t
 - **`failed_creation` with "Unexpected ## END_REGION at line N"** — the LLM closed a region with `## END_REGION: NAME` (decorated end marker). The current implementation prompt forbids this explicitly with a concrete bad-example callout; if it still happens, check whether the prompt was loaded from the right path.
 - **`failed_creation` with "Canonical genetic code at .../genetic_code.md is malformed: ... OPTIONAL_CODE_SKETCH has an unterminated fenced code block"** — the parser failed to recognize a fenced opener. P7 fixed bullet-wrapped openers (`- ```python`); if the cascade reappears, look for an unrecognized opener variant (e.g. fenced block with extra leading whitespace, language tag without backticks, or markdown-emphasis wrappers around the fence).
 - **`failed_creation` with "MACRO_STRATEGY contains non-bullet text"** — gemma emitted the global hypothesis as paragraph prose without `- ` bullets. P9's bad/good example in the seed prompt addresses the seed path; if it recurs in mutation or crossover, those system prompts also state the bullet rule.
-- **Novelty rejection storm in middle generations** — a sign that the population converged. Lower the crossover share or raise mutation weight in `reproduction.operator_weights`; consider raising `gene_removal_probability` to force more sectional variation.
+- **Novelty rejection storm in middle generations** — a sign that the population converged. Lower the crossover share or raise mutation weight in `reproduction.operator_weights`. Note: as of P11, `gene_removal_probability` is dead-config in the production operators (kept only as a parameter for backward compatibility); diversification now relies on the lineage-aware regime-break nudge in the system prompts. If the regime-break nudge stops working, look at the lineage summary placeholder in the user prompts and confirm it actually shows recent children's mechanism history.
 - **An entire island stops producing successful organisms** — inspect that island's seed prompt for over-strict requirements (the prior `staged_routing_repair` had six "must specify" pillars; the rewrite cut it to two paragraphs of design intent).
 - **Hydra-compose changes silently break tests** — many invariants are pinned in `tests/test_section_aware_family_contracts.py`, `tests/test_awtf2025_heuristic.py`, and `tests/test_hydra_compose.py`. When changing prompts or budgets in one family, search those tests for the family name and update both sides together.
 - **Ollama appears to hang** — see `~/.claude/projects/.../memory/project_ollama_gpu.md`: `ollama serve` on the H100 node has reported `total_vram=0B` and silently fallen back to CPU for `qwen3.5:35b`. Check the stderr log before assuming the framework is stuck.

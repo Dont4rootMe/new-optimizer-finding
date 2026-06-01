@@ -75,8 +75,8 @@ def test_hydra_compose_config_and_experiments() -> None:
     assert "organism_dir" not in cfg
     assert cfg.resources.evaluation.gpu_ranks == [0]
     assert cfg.resources.evaluation.cpu_parallel_jobs == 4
-    assert cfg.evolver.islands.dir == "conf/experiments/optimization_survey/prompts/islands"
-    assert cfg.evolver.islands.seed_organisms_per_island == 5
+    assert cfg.evolver.islands.mode == "from_seed"
+    assert cfg.evolver.islands.seeds_per_island == 5
     assert cfg.evolver.islands.max_organisms_per_island == 5
     assert cfg.evolver.reproduction.offspring_per_generation == 10
     assert cfg.evolver.reproduction.operator_selection_strategy == "deterministic"
@@ -88,7 +88,6 @@ def test_hydra_compose_config_and_experiments() -> None:
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
     assert cfg.evolver.creation.max_parallel_organisms == 4
     assert cfg.evolver.llm.selection_strategy == "random"
     assert cfg.evolver.llm.route_weights.mock == 1.0
@@ -106,9 +105,6 @@ def test_hydra_compose_config_and_experiments() -> None:
         == "conf/experiments/optimization_survey/prompts/shared/template.txt"
     )
     assert cfg.evolver.prompts.genome_schema == "conf/experiments/optimization_survey/prompts/shared/genome_schema.txt"
-    assert cfg.evolver.prompts.compatibility_seed_system.endswith("/compatibility/seed/system.txt")
-    assert cfg.evolver.prompts.compatibility_mutation_user.endswith("/compatibility/mutation/user.txt")
-    assert cfg.evolver.prompts.compatibility_crossover_system.endswith("/compatibility/crossover/system.txt")
     assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
     assert cfg.evolver.reproduction.selection_score.normalize_weights is True
     assert cfg.evolver.reproduction.selection_score.weights.simple_score == 1.0
@@ -137,7 +133,6 @@ def test_optimization_survey_canonical_preset_accepts_standalone_validation_over
     assert cfg.evolver.creation.max_attempts_to_create_organism == 3
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
     assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
     assert cfg.evolver.creation.max_parallel_organisms == 4
 
 
@@ -173,14 +168,31 @@ def test_all_shipped_api_platform_route_configs_instantiate() -> None:
             if route_name.startswith("ollama_"):
                 assert route_cfg.max_output_tokens == 12288
                 assert route_cfg.think == "low"
-                assert route_cfg.stage_options["design"]["think"] == "medium"
-                assert route_cfg.stage_options["design"]["max_output_tokens"] == 12288
-                assert route_cfg.stage_options["implementation"]["think"] == "low"
-                assert route_cfg.stage_options["implementation"]["max_output_tokens"] == 12288
-                assert route_cfg.stage_options["repair"]["think"] == "low"
-                assert route_cfg.stage_options["repair"]["max_output_tokens"] == 12288
-                assert route_cfg.stage_options["novelty_check"]["think"] == "low"
-                assert route_cfg.stage_options["novelty_check"]["max_output_tokens"] == 12288
+                # PHASE A speedup (2026-05-21): qwen35_122b has its design
+                # stage tuned down to think=low / 6144 tokens (was medium /
+                # 12288) because design was 51% of wall-time. The yaml uses
+                # design as the &qwen_stage_defaults anchor so repair and
+                # novelty_check inherit max_output_tokens=6144 too — fine,
+                # neither needs more headroom. Other ollama routes keep the
+                # canonical medium-thinking design budget.
+                if route_name == "ollama_qwen35_122b":
+                    assert route_cfg.stage_options["design"]["think"] == "low"
+                    assert route_cfg.stage_options["design"]["max_output_tokens"] == 6144
+                    assert route_cfg.stage_options["implementation"]["think"] is False
+                    assert route_cfg.stage_options["implementation"]["max_output_tokens"] == 8192
+                    assert route_cfg.stage_options["repair"]["think"] == "low"
+                    assert route_cfg.stage_options["repair"]["max_output_tokens"] == 6144
+                    assert route_cfg.stage_options["novelty_check"]["think"] == "low"
+                    assert route_cfg.stage_options["novelty_check"]["max_output_tokens"] == 6144
+                else:
+                    assert route_cfg.stage_options["design"]["think"] == "medium"
+                    assert route_cfg.stage_options["design"]["max_output_tokens"] == 12288
+                    assert route_cfg.stage_options["implementation"]["think"] == "low"
+                    assert route_cfg.stage_options["implementation"]["max_output_tokens"] == 12288
+                    assert route_cfg.stage_options["repair"]["think"] == "low"
+                    assert route_cfg.stage_options["repair"]["max_output_tokens"] == 12288
+                    assert route_cfg.stage_options["novelty_check"]["think"] == "low"
+                    assert route_cfg.stage_options["novelty_check"]["max_output_tokens"] == 12288
 
 
 def test_circle_packing_shinka_config_composes() -> None:
@@ -202,25 +214,30 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 20
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
-    assert cfg.evolver.max_generations is False
-    assert cfg.evolver.max_organism_creations == 150
+    assert cfg.evolver.max_generations == 150
+    assert cfg.evolver.max_organism_creations is False
+    # Optional per-model token-budget stop: present and disabled by default.
+    assert set(cfg.evolver.max_tokens_per_model.keys()) == {
+        "ollama_gemma4_31b",
+        "ollama_qwen35_35b",
+    }
+    assert cfg.evolver.max_tokens_per_model.ollama_gemma4_31b is False
+    assert cfg.evolver.max_tokens_per_model.ollama_qwen35_35b is False
     assert cfg.mode == "evolve"
     assert "organism_dir" not in cfg
+    # PHASE A retry tightening (mirrors awtf2025_heuristic): retries cut
+    # to 1 / 2 / 0 to stop cascading retries from burning wall-time.
     assert cfg.evolver.creation.max_attempts_to_create_organism == 1
-    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 3
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 1
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 1
+    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 0
     assert cfg.evolver.creation.max_parallel_organisms == 20
     assert cfg.evolver.prompts.genome_schema == "conf/experiments/circle_packing_shinka/prompts/shared/genome_schema.txt"
-    assert cfg.evolver.prompts.compatibility_seed_system.endswith("/compatibility/seed/system.txt")
-    assert cfg.evolver.prompts.compatibility_mutation_user.endswith("/compatibility/mutation/user.txt")
-    assert cfg.evolver.prompts.compatibility_crossover_system.endswith("/compatibility/crossover/system.txt")
     assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
     assert cfg.evolver.reproduction.selection_score.normalize_weights is True
     assert cfg.evolver.reproduction.selection_score.weights.simple_score == 1.0
     assert cfg.evolver.reproduction.selection_score.weights.inheritance_fitness == 0.0
-    assert cfg.evolver.islands.seed_organisms_per_island == 5
-    assert cfg.evolver.islands.max_organisms_per_island == 5
+    assert cfg.evolver.islands.seeds_per_island == 5
+    assert cfg.evolver.islands.max_organisms_per_island == 10
     assert cfg.evolver.reproduction.species_sampling.strategy == "weighted_rule"
     assert cfg.evolver.reproduction.species_sampling.weighted_rule_lambda == 1.0
     assert cfg.evolver.reproduction.species_sampling.mutation_softmax_temperature == 1.0
@@ -228,7 +245,7 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.evolver.reproduction.species_sampling.inter_island_crossover_softmax_temperature == 1.0
     assert "top_k_per_island" not in cfg.evolver.phases.simple
     assert cfg.evolver.phases.great_filter.top_h_per_island == 5
-    assert cfg.evolver.reproduction.offspring_per_generation == 5
+    assert cfg.evolver.reproduction.offspring_per_generation == 6
     assert set(cfg.evolver.llm.route_weights.keys()) == {
         "ollama_gemma4_31b",
         "ollama_qwen35_35b",
@@ -267,9 +284,8 @@ def test_circle_packing_canonical_preset_accepts_standalone_validation_overrides
     assert cfg.mode == "run"
     assert cfg.organism_dir == "/tmp/organism"
     assert cfg.evolver.creation.max_attempts_to_create_organism == 1
-    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 3
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 1
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 1
+    assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 0
     assert cfg.evolver.creation.max_parallel_organisms == 20
 
 
@@ -281,9 +297,8 @@ def test_awtf2025_heuristic_config_composes() -> None:
     assert set(cfg.experiments.keys()) == {"group_commands_and_wall_planning"}
     assert "safety" not in cfg
     assert set(cfg.api_platforms.keys()) == {
-        "ollama_nemotron_cascade_2_30b",
-        "ollama_qwen35_35b",
         "ollama_gemma4_31b",
+        "ollama_qwen35_122b",
     }
     assert (
         cfg.experiments.group_commands_and_wall_planning._target_
@@ -297,19 +312,25 @@ def test_awtf2025_heuristic_config_composes() -> None:
     assert cfg.resources.evaluation.cpu_parallel_jobs == 25
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
     assert cfg.evolver.max_generations == 150
+    # Optional per-model token-budget stop: present and disabled by default.
+    assert set(cfg.evolver.max_tokens_per_model.keys()) == {
+        "ollama_gemma4_31b",
+        "ollama_qwen35_122b",
+    }
+    assert cfg.evolver.max_tokens_per_model.ollama_gemma4_31b is False
+    assert cfg.evolver.max_tokens_per_model.ollama_qwen35_122b is False
     assert cfg.mode == "evolve"
     assert "organism_dir" not in cfg
-    assert cfg.evolver.creation.max_attempts_to_create_organism == 3
+    # PHASE A speedup (2026-05-21): retry budgets tightened to (1, 2, 0)
+    # because cascading retries cost wall-time without lifting per-organism
+    # success rate. See plan file users-artemon-downloads-awtf2025-heuris-merry-stonebraker.md
+    assert cfg.evolver.creation.max_attempts_to_create_organism == 1
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 2
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 3
-    assert cfg.evolver.creation.max_parallel_organisms == 15
-    assert cfg.evolver.islands.seed_organisms_per_island == 10
-    assert cfg.evolver.islands.max_organisms_per_island == 30
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 0
+    assert cfg.evolver.creation.max_parallel_organisms == 8
+    assert cfg.evolver.islands.seeds_per_island == 5
+    assert cfg.evolver.islands.max_organisms_per_island == 10
     assert cfg.evolver.prompts.genome_schema == "conf/experiments/awtf2025_heuristic/prompts/shared/genome_schema.txt"
-    assert cfg.evolver.prompts.compatibility_seed_system.endswith("/compatibility/seed/system.txt")
-    assert cfg.evolver.prompts.compatibility_mutation_user.endswith("/compatibility/mutation/user.txt")
-    assert cfg.evolver.prompts.compatibility_crossover_system.endswith("/compatibility/crossover/system.txt")
     assert cfg.evolver.reproduction.species_sampling.strategy == "weighted_rule"
     assert cfg.evolver.reproduction.species_sampling.weighted_rule_lambda == 1.0
     assert cfg.evolver.reproduction.species_sampling.mutation_softmax_temperature == 1.0
@@ -323,72 +344,48 @@ def test_awtf2025_heuristic_config_composes() -> None:
     assert "top_k_per_island" not in cfg.evolver.phases.simple
     assert cfg.evolver.phases.great_filter.eval_mode == "full"
     assert cfg.evolver.phases.great_filter.top_h_per_island == 5
-    assert cfg.evolver.reproduction.offspring_per_generation == 15
-    assert set(cfg.evolver.llm.route_weights.keys()) == {
-        "ollama_nemotron_cascade_2_30b",
-        "ollama_qwen35_35b",
-        "ollama_gemma4_31b",
-    }
-    assert cfg.evolver.llm.route_weights.ollama_nemotron_cascade_2_30b == 1.0
-    assert cfg.evolver.llm.route_weights.ollama_qwen35_35b == 1.0
+    # PHASE A speedup (2026-05-21): offspring 10 → 6 to match the new
+    # max_parallel_organisms=8 broker ceiling so every offspring runs in
+    # parallel instead of queueing.
+    assert cfg.evolver.reproduction.offspring_per_generation == 6
+    # The active route bank for awtf2025_heuristic is qwen 122B (creative
+    # stages) + gemma 31B (validator stages). The legacy nemotron /
+    # qwen35_35b routes were retired when we switched to the two-platform
+    # pipeline bandit; only the gemma route remains in route_weights
+    # because pipelines now drive route selection, not route_weights.
+    assert set(cfg.evolver.llm.route_weights.keys()) == {"ollama_gemma4_31b"}
     assert cfg.evolver.llm.route_weights.ollama_gemma4_31b == 1.0
-    assert cfg.api_platforms.ollama_nemotron_cascade_2_30b.max_concurrency == 3
-    assert cfg.api_platforms.ollama_qwen35_35b.max_concurrency == 3
     assert cfg.api_platforms.ollama_gemma4_31b.max_concurrency == 3
+    assert cfg.api_platforms.ollama_qwen35_122b.max_concurrency == 4
     assert list(cfg.experiments.group_commands_and_wall_planning.validation.smoke_case_ids) == [0, 1, 2, 3, 4]
     assert len(cfg.experiments.group_commands_and_wall_planning.validation.full_case_ids) == 100
     assert cfg.experiments.group_commands_and_wall_planning.validation.aggregate == "mean"
 
-    nemotron_route = instantiate(cfg.api_platforms.ollama_nemotron_cascade_2_30b, _recursive_=False)
-    qwen_route = instantiate(cfg.api_platforms.ollama_qwen35_35b, _recursive_=False)
+    qwen122_route = instantiate(cfg.api_platforms.ollama_qwen35_122b, _recursive_=False)
     gemma_route = instantiate(cfg.api_platforms.ollama_gemma4_31b, _recursive_=False)
-    assert nemotron_route.route_id == "ollama_nemotron_cascade_2_30b"
-    assert nemotron_route.provider_model_id == "nemotron-cascade-2:30b"
-    assert nemotron_route.base_url == "http://127.0.0.1:12439/api"
-    assert nemotron_route.gpu_ranks == [5]
-    assert nemotron_route.max_output_tokens == 12288
-    assert nemotron_route.stage_options["design"]["think"] is False
-    assert nemotron_route.stage_options["design"]["max_output_tokens"] == 6000
-    assert nemotron_route.stage_options["implementation"]["think"] is False
-    assert nemotron_route.stage_options["implementation"]["max_output_tokens"] == 6000
-    assert nemotron_route.stage_options["implementation"]["temperature"] == 0.4
-    assert nemotron_route.stage_options["repair"]["think"] is False
-    assert nemotron_route.stage_options["repair"]["max_output_tokens"] == 6000
-    assert nemotron_route.stage_options["novelty_check"]["think"] is False
-    assert nemotron_route.stage_options["novelty_check"]["max_output_tokens"] == 6000
-    assert nemotron_route.request_options["num_ctx"] == 65536
-    assert qwen_route.route_id == "ollama_qwen35_35b"
-    assert qwen_route.provider_model_id == "qwen3.5:35b"
-    assert qwen_route.base_url == "http://127.0.0.1:12438/api"
-    assert qwen_route.gpu_ranks == [4]
-    assert qwen_route.max_output_tokens == 12288
-    assert qwen_route.stage_options["design"]["think"] is False
-    assert qwen_route.stage_options["design"]["max_output_tokens"] == 6000
-    assert qwen_route.stage_options["implementation"]["max_output_tokens"] == 6000
-    assert qwen_route.stage_options["implementation"]["think"] is False
-    assert qwen_route.stage_options["implementation"]["temperature"] == 0.4
-    assert qwen_route.stage_options["repair"]["think"] is False
-    assert qwen_route.stage_options["repair"]["max_output_tokens"] == 6000
-    assert qwen_route.stage_options["novelty_check"]["think"] is False
-    assert qwen_route.stage_options["novelty_check"]["temperature"] == 0.1
-    assert qwen_route.stage_options["novelty_check"]["max_output_tokens"] == 6000
-    assert qwen_route.request_options["num_ctx"] == 65536
+    assert qwen122_route.route_id == "ollama_qwen35_122b"
+    assert qwen122_route.provider_model_id == "qwen3.5:122b"
+    assert qwen122_route.gpu_ranks == [0, 1, 2, 3, 4, 5]
+    assert qwen122_route.gpu_rank_groups == [[0, 1, 2], [3, 4, 5]]
+    assert qwen122_route.max_output_tokens == 12288
+    # PHASE A: design tuned to think=low / 6144 tokens.
+    assert qwen122_route.stage_options["design"]["think"] == "low"
+    assert qwen122_route.stage_options["design"]["max_output_tokens"] == 6144
+    assert qwen122_route.stage_options["implementation"]["think"] is False
+    assert qwen122_route.stage_options["implementation"]["max_output_tokens"] == 8192
     assert gemma_route.route_id == "ollama_gemma4_31b"
     assert gemma_route.provider_model_id == "gemma4:31b"
-    assert gemma_route.base_url == "http://127.0.0.1:12437/api"
-    assert gemma_route.gpu_ranks == [3]
+    assert gemma_route.gpu_ranks == [6, 7]
+    assert gemma_route.gpu_rank_groups == [[6], [7]]
     assert gemma_route.max_output_tokens == 12288
     assert gemma_route.stage_options["design"]["think"] is False
-    assert gemma_route.stage_options["design"]["max_output_tokens"] == 6000
+    assert gemma_route.stage_options["design"]["max_output_tokens"] == 9000
     assert gemma_route.stage_options["implementation"]["think"] is False
-    assert gemma_route.stage_options["implementation"]["max_output_tokens"] == 6000
-    assert gemma_route.stage_options["implementation"]["temperature"] == 0.4
+    assert gemma_route.stage_options["implementation"]["max_output_tokens"] == 9000
     assert gemma_route.stage_options["repair"]["think"] is False
-    assert gemma_route.stage_options["repair"]["max_output_tokens"] == 6000
+    assert gemma_route.stage_options["repair"]["max_output_tokens"] == 9000
     assert gemma_route.stage_options["novelty_check"]["think"] is False
-    assert gemma_route.stage_options["novelty_check"]["max_output_tokens"] == 6000
-    assert gemma_route.stage_options["repair"]["top_k"] == 64
-    assert gemma_route.stage_options["novelty_check"]["top_k"] == 64
+    assert gemma_route.stage_options["novelty_check"]["max_output_tokens"] == 9000
 
 
 def test_awtf2025_canonical_preset_accepts_standalone_validation_overrides() -> None:
@@ -401,11 +398,13 @@ def test_awtf2025_canonical_preset_accepts_standalone_validation_overrides() -> 
 
     assert cfg.mode == "run"
     assert cfg.organism_dir == "/tmp/organism"
-    # Retry budgets were tightened in the P3 fix from the atcoder-run post-mortem:
-    # the cascading retries multiplied wasted LLM calls without lifting the
-    # per-organism success rate, so they were cut to (2, 2, 1, 1).
-    assert cfg.evolver.creation.max_attempts_to_create_organism == 2
+    # PHASE A speedup (2026-05-21): retry budgets tightened further to (1, 2, 0)
+    # after measuring that the prior (2, 2, 1) still spent 30%+ of wall-time on
+    # retries with no measurable score lift. max_parallel_organisms 15 → 8 to
+    # match the actual broker concurrency ceiling (qwen 122B 2 instances ×
+    # 4 max_concurrency = 8). See plan file
+    # users-artemon-downloads-awtf2025-heuris-merry-stonebraker.md.
+    assert cfg.evolver.creation.max_attempts_to_create_organism == 1
     assert cfg.evolver.creation.max_attempts_to_repair_organism_after_error == 2
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 1
-    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_compatibility_rejection == 1
-    assert cfg.evolver.creation.max_parallel_organisms == 15
+    assert cfg.evolver.creation.max_attempts_to_regenerate_organism_after_novelty_rejection == 0
+    assert cfg.evolver.creation.max_parallel_organisms == 8

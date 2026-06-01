@@ -1,4 +1,10 @@
-"""Prompt-level contract tests for awtf2025_heuristic."""
+"""Prompt-level contract tests for awtf2025_heuristic.
+
+Updated for the `removing-genetic-sampling` branch: random gene-pruning and
+gene-merging steps are gone; the LLM receives the parent's full genome and is
+asked to design the child directly. The test fixtures still exercise the
+prompt builders, but no longer assert child-draft / excluded-ideas framing.
+"""
 
 from __future__ import annotations
 
@@ -82,71 +88,64 @@ def _make_parent(tmp_path: Path, name: str, island_id: str) -> OrganismMeta:
     return organism
 
 
-def test_awtf2025_prompt_bundle_uses_gene_centric_language() -> None:
+def test_awtf2025_prompt_bundle_uses_full_genome_design_language() -> None:
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
 
     assert "primary object is the organism's genetic code" in bundle.project_context
-    assert "do not invent new major ideas at implementation time" in bundle.implementation_system.lower()
-    assert "child genetic code draft" in bundle.mutation_system.lower()
-    assert "child draft" in bundle.crossover_system.lower()
-    assert "keep it essentially intact" in bundle.mutation_system
-    assert "valid source of novelty" in bundle.mutation_novelty_user
-    assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
+    # The new mutation/crossover prompts hand the LLM the parent's full genome
+    # and explicitly tell it the random pre-LLM sampling step is gone.
+    assert "no pre-sampled child draft" in bundle.mutation_system.lower()
+    assert "no pre-sampled child draft" in bundle.crossover_system.lower()
+    assert "verbatim repetition of the entire parent genome is an invalid mutation" in bundle.mutation_system
+    assert "verbatim cloning of the primary parent is an invalid crossover" in bundle.crossover_system
+    # Lineage-aware diversification nudge.
+    assert "regime convergence" in bundle.mutation_user.lower()
 
 
-def test_awtf2025_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> None:
+def test_awtf2025_mutation_prompt_works_from_parent_full_genome(tmp_path: Path) -> None:
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
     parent = _make_parent(tmp_path, "parent_a", "macro_partitioning")
 
     _, user_prompt = _build_mutate_prompt(
-        inherited_genes=[
-            "Child idea about macro partition structure",
-            "Child idea about synchronized group policy",
-            "Child idea about congestion repair logic",
-        ],
-        removed_genes=["Excluded idea about older partitioning"],
+        inherited_genes=[],
+        removed_genes=[],
         parent=parent,
         prompts=bundle,
     )
 
-    assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
-    assert "=== EXCLUDED IDEAS ===" in user_prompt
+    # New framing: parent genome is the only source of truth; no draft / no excluded pool.
+    assert "=== PARENT GENETIC CODE ===" in user_prompt
+    assert "=== PARENT LINEAGE SUMMARY ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
-    assert "REFERENCE ONLY" in user_prompt
-    assert "keep it mostly intact rather than rebuilding the parent" in user_prompt
+    # The dropped placeholders must not appear anywhere in the rendered prompt.
+    assert "CHILD GENETIC CODE DRAFT" not in user_prompt
+    assert "EXCLUDED IDEAS" not in user_prompt
+    assert "{inherited_gene_pool}" not in user_prompt
+    assert "{removed_gene_pool}" not in user_prompt
     assert "IMPLEMENTATION CODE" not in user_prompt
-    assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
-        "=== PARENT GENETIC CODE (REFERENCE ONLY) ==="
-    )
 
 
-def test_awtf2025_crossover_prompt_prioritizes_child_draft(tmp_path: Path) -> None:
+def test_awtf2025_crossover_prompt_works_from_two_parent_full_genomes(tmp_path: Path) -> None:
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
     mother = _make_parent(tmp_path, "mother_a", "macro_partitioning")
     father = _make_parent(tmp_path, "father_b", "staged_routing_repair")
 
     _, user_prompt = _build_crossbreed_prompt(
-        inherited_genes=[
-            "Merged child idea about board structure",
-            "Merged child idea about group scheduling",
-            "Merged child idea about targeted repair",
-        ],
+        inherited_genes=[],
         mother=mother,
         father=father,
         prompts=bundle,
     )
 
-    assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
+    assert "=== PRIMARY PARENT GENETIC CODE ===" in user_prompt
+    assert "=== SECONDARY PARENT GENETIC CODE ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
-    assert "REFERENCE ONLY" in user_prompt
-    assert "keep it mostly intact instead of rebuilding one parent" in user_prompt
+    assert "CHILD GENETIC CODE DRAFT" not in user_prompt
+    assert "{inherited_gene_pool}" not in user_prompt
     assert "IMPLEMENTATION CODE" not in user_prompt
-    assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
-        "=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ==="
-    )
 
 
 def test_awtf2025_mutation_prompt_renders_novelty_feedback(tmp_path: Path) -> None:
@@ -155,12 +154,8 @@ def test_awtf2025_mutation_prompt_renders_novelty_feedback(tmp_path: Path) -> No
     parent = _make_parent(tmp_path, "parent_feedback", "macro_partitioning")
 
     _, user_prompt = _build_mutate_prompt(
-        inherited_genes=[
-            "Child idea about macro partition structure",
-            "Child idea about synchronized group policy",
-            "Child idea about congestion repair logic",
-        ],
-        removed_genes=["Excluded idea about older partitioning"],
+        inherited_genes=[],
+        removed_genes=[],
         parent=parent,
         prompts=bundle,
         novelty_feedback=["The previous child only paraphrased the parent staging idea."],
@@ -169,18 +164,25 @@ def test_awtf2025_mutation_prompt_renders_novelty_feedback(tmp_path: Path) -> No
     assert "- The previous child only paraphrased the parent staging idea." in user_prompt
 
 
+def test_awtf2025_implementation_prompt_includes_mechanic_audit_step() -> None:
+    cfg = _compose_cfg()
+    bundle = load_prompt_bundle(cfg)
+
+    # Task-4 audit hint must appear in the implementation system prompt and must
+    # explicitly ask the LLM to walk CONSTRUCTION_POLICY and LOCAL_REPAIR_POLICY
+    # mechanics and confirm an executable code path for each.
+    impl_system = bundle.implementation_system
+    assert "Mechanic-to-code audit" in impl_system
+    assert "CONSTRUCTION_POLICY" in impl_system
+    assert "LOCAL_REPAIR_POLICY" in impl_system
+
+
 def test_awtf2025_prompts_avoid_solution_leading_lists() -> None:
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
-    root = ROOT / "conf" / "experiments" / "awtf2025_heuristic" / "prompts"
-
-    macro_text = (root / "islands" / "macro_partitioning.txt").read_text(encoding="utf-8")
-    repair_text = (root / "islands" / "staged_routing_repair.txt").read_text(encoding="utf-8")
 
     banned = ("all robots in one group", "fixed spiral script", "single hardcoded output")
     for token in banned:
         assert token not in bundle.seed_system.lower()
         assert token not in bundle.mutation_system.lower()
         assert token not in bundle.crossover_system.lower()
-        assert token not in macro_text.lower()
-        assert token not in repair_text.lower()

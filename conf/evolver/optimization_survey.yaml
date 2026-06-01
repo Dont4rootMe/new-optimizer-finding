@@ -5,16 +5,28 @@ max_generations: 100
 max_organism_creations: false
 max_retries_per_eval: 0
 
+# Optional per-model token-budget stop (additional to the generation/organism
+# caps above, not a replacement). Maps route_id -> token cap. ``false`` (the
+# default for every model) means no cap on that model; an integer caps the
+# cumulative LLM tokens that route may spend. When any capped route reaches its
+# budget, evolution stops at the next generation boundary. Tokens are summed
+# from each organism's persisted ``token_usage`` so the tally is resume-safe.
+max_tokens_per_model:
+  mock: false
+
 creation:
   max_attempts_to_create_organism: 3
   max_attempts_to_repair_organism_after_error: 2
   max_attempts_to_regenerate_organism_after_novelty_rejection: 2
-  max_attempts_to_regenerate_organism_after_compatibility_rejection: 3
   max_parallel_organisms: 4
 
 islands:
-  dir: conf/experiments/optimization_survey/prompts/islands
-  seed_organisms_per_island: 5
+  # ``from_seed`` is the only supported mode. See
+  # conf/evolver/awtf2025_heuristic.yaml for details.
+  mode: from_seed
+  seed_program_path: experiments/optimization_survey/_baselines/initial_program.py
+  island_ids: [gradient_methods, adaptive_methods, quasi_newton, second_order]
+  seeds_per_island: 5
   max_organisms_per_island: 5
 
 prompts:
@@ -23,22 +35,16 @@ prompts:
 
   seed_system: conf/experiments/optimization_survey/prompts/seed/system.txt
   seed_user: conf/experiments/optimization_survey/prompts/seed/user.txt
-  compatibility_seed_system: conf/experiments/optimization_survey/prompts/compatibility/seed/system.txt
-  compatibility_seed_user: conf/experiments/optimization_survey/prompts/compatibility/seed/user.txt
 
   mutation_system: conf/experiments/optimization_survey/prompts/mutation/system.txt
   mutation_user: conf/experiments/optimization_survey/prompts/mutation/user.txt
   mutation_novelty_system: conf/experiments/optimization_survey/prompts/novelty/mutation/system.txt
   mutation_novelty_user: conf/experiments/optimization_survey/prompts/novelty/mutation/user.txt
-  compatibility_mutation_system: conf/experiments/optimization_survey/prompts/compatibility/mutation/system.txt
-  compatibility_mutation_user: conf/experiments/optimization_survey/prompts/compatibility/mutation/user.txt
 
   crossover_system: conf/experiments/optimization_survey/prompts/crossover/system.txt
   crossover_user: conf/experiments/optimization_survey/prompts/crossover/user.txt
   crossover_novelty_system: conf/experiments/optimization_survey/prompts/novelty/crossover/system.txt
   crossover_novelty_user: conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt
-  compatibility_crossover_system: conf/experiments/optimization_survey/prompts/compatibility/crossover/system.txt
-  compatibility_crossover_user: conf/experiments/optimization_survey/prompts/compatibility/crossover/user.txt
 
   implementation_system: conf/experiments/optimization_survey/prompts/implementation/system.txt
   implementation_user: conf/experiments/optimization_survey/prompts/implementation/user.txt
@@ -57,6 +63,26 @@ reproduction:
     within_island_crossover: unified
     inter_island_crossover: unified
     mutation: unified
+  parent_island_sampling:
+    strategy: uniform                  # uniform | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile
+      reward_window: 50
+      survival_weight: 0.3
+  cross_island_partner_sampling:
+    strategy: uniform                  # uniform | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile
+      reward_window: 50
+      survival_weight: 0.3
   species_sampling:
     strategy: weighted_rule
     weighted_rule_lambda: 1.0
@@ -121,3 +147,14 @@ llm:
   route_weights:
     mock: 1.0
   seed: 123
+
+  route_sampling:
+    strategy: weighted_static          # uniform | weighted_static | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile
+      reward_window: 50
+      survival_weight: 0.3

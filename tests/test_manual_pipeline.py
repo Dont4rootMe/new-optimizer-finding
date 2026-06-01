@@ -7,14 +7,11 @@ from pathlib import Path
 import pytest
 
 from src.evolve.manual_pipeline import (
-    build_manual_crossover_compatibility_prompts,
     build_manual_crossover_novelty_prompts,
     build_manual_crossover_prompts,
     build_manual_implementation_prompts,
-    build_manual_mutation_compatibility_prompts,
     build_manual_mutation_novelty_prompts,
     build_manual_mutation_prompts,
-    build_manual_seed_compatibility_prompts,
     build_manual_seed_prompts,
     load_manual_pipeline_context,
     run_manual_simple_evaluation,
@@ -220,24 +217,6 @@ def test_manual_section_aware_prompt_helpers_render_validation_and_patch_context
         father_genetic_code_text=changed_child,
         candidate_design_text=changed_child,
     )
-    seed_compatibility = build_manual_seed_compatibility_prompts(
-        context,
-        candidate_design_text=_SECTIONED_OPTIMIZER_CODE,
-    )
-    mutation_compatibility = build_manual_mutation_compatibility_prompts(
-        context,
-        inherited_genes=["Normalize raw gradients by a running magnitude estimate."],
-        removed_genes=[],
-        parent_genetic_code_text=_SECTIONED_OPTIMIZER_CODE,
-        candidate_design_text=changed_child,
-    )
-    crossover_compatibility = build_manual_crossover_compatibility_prompts(
-        context,
-        inherited_genes=["Normalize raw gradients by a running magnitude estimate."],
-        mother_genetic_code_text=_SECTIONED_OPTIMIZER_CODE,
-        father_genetic_code_text=changed_child,
-        candidate_design_text=changed_child,
-    )
     full_implementation = build_manual_implementation_prompts(
         context,
         organism_genetic_code_text=_SECTIONED_OPTIMIZER_CODE,
@@ -264,10 +243,6 @@ def test_manual_section_aware_prompt_helpers_render_validation_and_patch_context
     assert "=== GENOME SECTION SCHEMA ===" in seed["user_prompt"]
     assert "## NOVELTY_VERDICT" in mutation_novelty["system_prompt"]
     assert "## NOVELTY_VERDICT" in crossover_novelty["system_prompt"]
-    assert "## COMPATIBILITY_VERDICT" in seed_compatibility["system_prompt"]
-    assert "## COMPATIBILITY_VERDICT" in mutation_compatibility["system_prompt"]
-    assert "## COMPATIBILITY_VERDICT" in crossover_compatibility["system_prompt"]
-    assert "## SECTIONS_AT_ISSUE" not in seed_compatibility["system_prompt"]
     assert "=== COMPILATION MODE ===\nFULL" in full_implementation["user_prompt"]
     assert "=== COMPILATION MODE ===\nPATCH" in patch_implementation["user_prompt"]
     assert "=== CHANGED_SECTIONS ===\nGRADIENT_PROCESSING" in patch_implementation["user_prompt"]

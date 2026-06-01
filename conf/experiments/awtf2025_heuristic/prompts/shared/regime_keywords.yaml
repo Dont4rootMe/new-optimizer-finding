@@ -1,0 +1,55 @@
+# Regime convergence keyword map for awtf2025_heuristic.
+#
+# Used by src/organisms/lineage_regime.py to scan each ancestor's
+# change_description (a free-text bullet from lineage.json) and produce
+# the convergence diagnosis that Step 1 of the design pipeline reads.
+#
+# Each top-level key is one regime axis. Each value is a list of
+# lowercase substrings; if ANY substring appears in an ancestor's
+# change_description, that ancestor is counted as using that family
+# along the axis. The most frequent family per axis wins; if a single
+# family dominates >=70% of the recent window the axis is flagged
+# CONVERGED in the hint passed to Step 1.
+
+wall_family:
+  - "no_walls"
+  - "no-walls"
+  - "no walls"
+  - "no added walls"
+  - "central spine"
+  - "central cross"
+  - "corridor"
+  - "boundary frame"
+  - "wall family"
+  - "added walls"
+
+grouping_family:
+  - "single group"
+  - "quadrant grouping"
+  - "quadrant-grouping"
+  - "direction-based grouping"
+  - "target-cluster"
+  - "axis-bucket"
+  - "per-robot group"
+  - "individual group"
+
+routing_family:
+  - "greedy"
+  - "greedy routing"
+  - "pressure-aware"
+  - "hub-staged"
+  - "direction-profile"
+  - "per-round priority"
+  - "phased release"
+  - "manhattan"
+  - "centroid routing"
+
+repair_regime:
+  - "no repair"
+  - "individual-fallback"
+  - "side-step"
+  - "single-step backtrack"
+  - "wait counter"
+  - "stagnation trigger"
+  - "deferred repair"
+  - "bottleneck repair"
