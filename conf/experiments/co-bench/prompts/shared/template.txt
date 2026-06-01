@@ -1,0 +1,21 @@
+# === FIXED: SOLVE_CONTRACT ===
+# CO-Bench calls solve(**instance) and scores the returned dict with the
+# task's eval_func(**instance, **solution). The exact input keys and the
+# required output keys are given in the task project context. Accept
+# arbitrary keyword arguments so unexpected instance keys are tolerated.
+def solve(**kwargs):
+    solution = None
+
+    # EVOLVE-BLOCK-START
+    # SECTION: PARAMETERS
+    # SECTION: CONSTRUCTION
+    # SECTION: FEASIBILITY_MODEL
+    # SECTION: NEIGHBORHOOD
+    # SECTION: REPAIR_POLICY
+    # SECTION: SEARCH_STRATEGY
+    # SECTION: CONTROL_POLICY
+    # SECTION: OPTIONAL_CODE_SKETCH
+    # EVOLVE-BLOCK-END
+
+    return solution
+# === END FIXED ===

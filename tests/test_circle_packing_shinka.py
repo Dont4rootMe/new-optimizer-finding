@@ -81,7 +81,7 @@ def test_circle_packing_config_composes() -> None:
     assert set(cfg.experiments.keys()) == {"unit_square_26"}
     assert "safety" not in cfg
     assert set(cfg.api_platforms.keys()) == {
-        "ollama_qwen35_35b",
+        "ollama_qwen35_122b",
         "ollama_gemma4_31b",
     }
     assert cfg.experiments.unit_square_26.need_cuda is False
@@ -95,7 +95,7 @@ def test_circle_packing_config_composes() -> None:
     # Optional per-model token-budget stop: present and disabled (false) by
     # default for every route.
     token_caps = OmegaConf.to_container(cfg.evolver.max_tokens_per_model, resolve=True)
-    assert token_caps == {"ollama_gemma4_31b": False, "ollama_qwen35_35b": False}
+    assert token_caps == {"ollama_gemma4_31b": False, "ollama_qwen35_122b": False}
     assert cfg.evolver.prompts.project_context == "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt"
 
 

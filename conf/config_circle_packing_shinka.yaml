@@ -1,7 +1,7 @@
 defaults:
   - evolver: circle_packing_shinka
   - api_platforms@api_platforms.ollama_gemma4_31b: ollama_gemma4_31b
-  - api_platforms@api_platforms.ollama_qwen35_35b: ollama_qwen35_35b
+  - api_platforms@api_platforms.ollama_qwen35_122b: ollama_qwen35_122b
   - experiments@experiments.unit_square_26: circle_packing_shinka/unit_square_26
   - _self_
 
@@ -26,41 +26,14 @@ paths:
   api_platform_runtime_root: ${oc.env:API_PLATFORM_RUNTIME_ROOT,./.api_platform_runtime_circle-packing}
   ollama_cache_root: ${oc.env:OLLAMA_MODELS,./ollama_cache}
 
-evolver:
-  llm:
-    route_weights:
-      ollama_gemma4_31b: 1.0
-      ollama_qwen35_35b: 1.0
-
-
+# Model setup mirrors awtf2025_heuristic (atcoder): gemma 4 31B holds GPUs 6-7
+# (two single-GPU instances) and runs the cheap validator stages; qwen 3.5 122B
+# holds GPUs 0-5 (two 3-GPU instances) and runs the creative stages. The
+# pipeline mapping lives in conf/evolver/circle_packing_shinka.yaml.
 api_platforms:
   ollama_gemma4_31b:
     base_url: ${oc.env:OLLAMA_GEMMA4_31B_BASE_URL,http://127.0.0.1:12454/api}
-    gpu_ranks: 
-      - [0]
-      - [1]
-      - [2]
-      - [3]
-    max_concurrency: 3
-    stage_options:
-      design:
-        think: false
-        max_output_tokens: 9000
-      implementation:
-        think: false
-        max_output_tokens: 9000
-      repair:
-        think: false
-        max_output_tokens: 9000
-      novelty_check:
-        think: false
-        max_output_tokens: 9000
-
-  ollama_qwen35_35b:
-    base_url: ${oc.env:OLLAMA_QWEN35_35B_BASE_URL,http://127.0.0.1:12444/api}
-    gpu_ranks: 
-      - [4]
-      - [5]
+    gpu_ranks:
       - [6]
       - [7]
     max_concurrency: 3
@@ -77,6 +50,13 @@ api_platforms:
       novelty_check:
         think: false
         max_output_tokens: 9000
+
+  ollama_qwen35_122b:
+    base_url: ${oc.env:OLLAMA_QWEN35_122B_BASE_URL,http://127.0.0.1:12422/api}
+    gpu_ranks:
+      - [0, 1, 2]
+      - [3, 4, 5]
+    max_concurrency: 4
 
 comet:
   enabled: true

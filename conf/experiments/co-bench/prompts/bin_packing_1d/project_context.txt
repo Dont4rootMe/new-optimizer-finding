@@ -1,0 +1,28 @@
+TASK: One-Dimensional Bin Packing
+
+Problem description:
+The one-dimensional bin packing problem seeks to minimize the number of bins required to pack a given set of items while ensuring that the sum of item sizes within each bin does not exceed the specified bin capacity. Given a test case with an identifier (id), a fixed bin_capacity, and a list of num_items with their respective sizes (items), the objective is to find a packing arrangement that uses the least number of bins. Every item must be placed into exactly one bin, and no bin may be filled beyond its capacity.
+
+solve(**kwargs) contract for this task:
+- INPUT keys (each instance passes these by keyword to solve):
+  - `id` (string): the problem identifier (e.g. "u120_00"). Metadata only; solve does not need to use it.
+  - `bin_capacity` (number): the capacity of every bin. The sum of item sizes in any bin must not exceed this value.
+  - `num_items` (int): the number of items to pack. This equals len(items).
+  - `items` (list): the item sizes, e.g. [s0, s1, ..., s_{num_items-1}]. Item i (1-based index i+1) has size items[i].
+  - `best_known` (int): the best known number of bins for the instance; it is passed to the evaluator for scoring, not something solve must use. Do NOT rely on it when constructing a packing.
+- REQUIRED OUTPUT: return a dict with exactly the keys:
+  - `num_bins` (int): the number of bins used, which must equal len(bins).
+  - `bins` (list of lists): one inner list per bin, each containing the 1-based indices of the items assigned to that bin, e.g. [[1, 4], [2], [3, 5], ...]. Indices are in 1..num_items.
+
+Feasibility (a packing is rejected — scores 0 — unless all hold):
+- len(bins) == num_bins.
+- Every item index 1..num_items appears in exactly one bin (no missing, duplicated, or out-of-range indices).
+- For every bin, the sum of its item sizes is <= bin_capacity.
+
+Objective and scoring:
+- The objective is to minimize num_bins (fewer bins is better).
+- The evaluator normalizes the result against the best known number of bins as best_known / num_bins, so the normalized score is in (0, 1] and HIGHER is better; matching best_known scores 1.0.
+- Respect the per-instance timeout: greedy constructions (e.g. first-fit / best-fit decreasing) finish quickly even for large instances. Returning a feasible but suboptimal packing is far better than timing out or returning an invalid packing.
+
+Reference baseline:
+- Putting one item per bin (num_bins == num_items, bins == [[1], [2], ..., [num_items]]) is a VALID packing and scores > 0, but it is far from optimal — it is only a feasibility floor to improve on.

@@ -1,0 +1,52 @@
+Mutate this organism into a child.
+
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
+
+=== STEP 1 DESIGN RATIONALE ===
+A prior rationalization call produced the design plan below. Materialize WHAT_TO_REMOVE, WHAT_TO_ADD_OR_INVENT and CHILD_DIRECTION in the structured artifact. If the block reads "(rationalization disabled — single-call mode)", proceed without it.
+{rationalization}
+
+=== PARENT GENETIC CODE ===
+This is the only parent. There is no pre-sampled child draft and no externally excluded gene pool.
+You decide which mechanism to evolve, which to keep verbatim, and which to drop.
+{parent_genetic_code}
+
+=== PARENT IMPLEMENTATION (ground truth Python) ===
+Below is the parent's actual `implementation.py` — the code that the host evaluator scored. The genetic code above is the design intent; this block is what actually runs.
+
+```python
+{parent_implementation}
+```
+
+=== PARENT LINEAGE SUMMARY ===
+Past idea changes and their outcomes. Scores in lineage: higher is better.
+Use score trends to identify which mechanisms helped, and to spot regime convergence (e.g. several recent children all keeping the same search family; several recent children all using the same neighborhood).
+If the lineage shows convergence, prefer a mutation that breaks out of that regime instead of tuning inside it.
+{parent_lineage_summary}
+
+=== TOP-K INSPIRATION PROGRAMS (same island, sorted best first) ===
+Highest-scoring survivors on the parent's island, excluding the parent. Reference programs for designing the child's CORE_GENES.
+{inspirations}
+
+=== NOVELTY REJECTION FEEDBACK ===
+If a previous candidate child was rejected for lacking novelty, address those issues explicitly.
+If there was no prior rejection, this section will say so.
+{novelty_rejection_feedback}
+
+=== TASK ===
+The parent organism already works and has been evaluated.
+Your goal: design one coherent score-seeking hypothesis change to the parent that could push the normalized score higher.
+The child remains an organism for the same task and must still return a valid solution dict within the per-instance timeout.
+The result may revise several coupled sections when the mechanism requires it.
+Keep the mutation small in causal scope even when it spans multiple sections.
+Do not solve uncertainty by adding extra support genes everywhere; only add the minimum support needed for the new mechanism to make sense.
+Prefer edits that materially change the operating regime, not merely wording changes or cosmetic parameter nudges.
+A pure coefficient retuning is weak unless it clearly pushes the organism into a different construction family, search regime, neighborhood, or feasibility/repair regime.
+Verbatim repetition of the entire parent genome is invalid — at least one CORE_GENES section must materially change relative to the parent.
+State how the child should differ in expected solving approach or operating regime, and why the change is not merely the same construction with different search tuning.
+Do NOT replace the core algorithmic structure — refine it.
+The result must be a full sectioned genetic code in the canonical format, not a partial diff.
+If novelty rejection feedback is present, resolve it explicitly instead of rephrasing the parent.
+Return the structured design directly. Do not add preface text before `## CORE_GENES`.

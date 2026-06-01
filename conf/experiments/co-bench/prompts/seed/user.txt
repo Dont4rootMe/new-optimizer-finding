@@ -1,0 +1,21 @@
+Design a new combinatorial-optimization organism for this research island.
+
+Island id: {island_id}
+Island name: {island_name}
+
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
+
+Your task is to generate an idea set first.
+Do not optimize the wording toward a ready-made solution.
+Produce a full sectioned genetic code whose content obeys the schema and whose sections all appear in the required order.
+Prefer compact, implementable section content over ambitious but over-specified multi-part designs.
+Do not make the implementation stage choose among several possible constructions; define one compact deterministic construction path.
+Prefer an organism whose sectioned hypothesis creates a plausible high-score solving mechanism, not just a formally complete genome.
+State one intended construction family and one intended search regime.
+If you keep a pure greedy construction with no improvement search, justify why that regime should outperform a construction-plus-local-search alternative for this task.
+Do not let a generic greedy construction plus generic local search stand in for the actual score-bearing hypothesis.
+
+The final organism will later be implemented as code that must return a valid solution dict for the task within the per-instance timeout.
+The exact input keys, required output keys, constraints, and objective for the task are given in the per-task project context attached to this prompt.

@@ -1,0 +1,119 @@
+# ============================================================================
+# CO-Bench preset — ONE top-level config runs ANY task in the CO-Bench family
+# (algorithm search for combinatorial optimization, arXiv:2504.04310,
+#  github.com/sunnweiwei/CO-Bench).
+#
+# >>> PICK THE TASK: set experiments.co_bench.CO_BENCH_TASK below to one of the
+#     UPPER-CASE identifiers. You can also override it on the command line:
+#       python -m src.main --config-name config_co-bench experiments.co_bench.CO_BENCH_TASK=JOB_SHOP mode=smoke
+#       ./scripts/seed_population.sh --config-name config_co-bench experiments.co_bench.CO_BENCH_TASK=TSP
+#       ./scripts/run_evolution.sh  --config-name config_co-bench experiments.co_bench.CO_BENCH_TASK=SET_COVERING
+#
+# VALID CO_BENCH_TASK IDENTIFIERS  ->  CO-Bench dataset task
+#   TSP              ->  Travelling salesman problem
+#   BIN_PACKING_1D   ->  Bin packing - one-dimensional
+#   MULTI_KNAPSACK   ->  Multidimensional knapsack problem
+#   SET_COVERING     ->  Set covering
+#   GRAPH_COLOURING  ->  Graph colouring
+#   JOB_SHOP         ->  Job shop scheduling
+# (the identifier -> dataset-task mapping lives in the co_bench_registry in
+#  conf/experiments/co-bench/co_bench.yaml; add new tasks there.)
+#
+# Requires the CO-Bench checkout + dataset: run scripts/bootstrap_cobench.sh
+# (override the checkout with COBENCH_ROOT, the data root with AIFS_DATA_ROOT).
+# See the README "CO-Bench" section.
+# ============================================================================
+defaults:
+  - evolver: co-bench
+  - api_platforms@api_platforms.ollama_gemma4_31b: ollama_gemma4_31b
+  - api_platforms@api_platforms.ollama_qwen35_122b: ollama_qwen35_122b
+  - experiments@experiments.co_bench: co-bench/co_bench
+  - _self_
+
+experiments:
+  co_bench:
+    # >>> SET THE TASK HERE (one of the UPPER-CASE identifiers listed above) <<<
+    CO_BENCH_TASK: TSP
+
+# Lowercase slug of the selected task; drives the seed/prompt/output paths
+# below. Derived from the selector above — do not edit.
+co_bench_slug: ${experiments.co_bench.name}
+
+seed: 42
+deterministic: false
+mode: evolve
+device: cpu
+precision: fp32
+num_workers: 0
+
+resources:
+  evaluation:
+    gpu_ranks: []
+    cpu_parallel_jobs: 8
+
+paths:
+  data_root: ${oc.env:AIFS_DATA_ROOT,./data}
+  stats_root: ${oc.env:AIFS_STATS_ROOT,./stats}
+  runs_root: ${oc.env:AIFS_RUNS_ROOT,./runs}
+  candidate_results_dirname: results
+  population_root: ${oc.env:POP_ROOT,./populations/co-bench/${co_bench_slug}}
+  api_platform_runtime_root: ${oc.env:API_PLATFORM_RUNTIME_ROOT,./.api_platform_runtime_co-bench}
+  ollama_cache_root: ${oc.env:OLLAMA_MODELS,./ollama_cache}
+
+# The selected task's seed program and project-context prompt, by slug.
+evolver:
+  islands:
+    seed_program_path: experiments/co_bench/_baselines/shinka/${co_bench_slug}/initial_program.py
+  prompts:
+    project_context: conf/experiments/co-bench/prompts/${co_bench_slug}/project_context.txt
+
+# Model setup mirrors awtf2025_heuristic (atcoder): gemma 4 31B holds GPUs 6-7
+# (two single-GPU instances) and runs the cheap validator stages; qwen 3.5 122B
+# holds GPUs 0-5 (two 3-GPU instances) and runs the creative stages. The
+# pipeline mapping lives in conf/evolver/co-bench.yaml.
+api_platforms:
+  ollama_gemma4_31b:
+    base_url: ${oc.env:OLLAMA_GEMMA4_31B_BASE_URL,http://127.0.0.1:12454/api}
+    gpu_ranks:
+      - [6]
+      - [7]
+    max_concurrency: 3
+    stage_options:
+      design:
+        think: false
+        max_output_tokens: 9000
+      implementation:
+        think: false
+        max_output_tokens: 9000
+      repair:
+        think: false
+        max_output_tokens: 9000
+      novelty_check:
+        think: false
+        max_output_tokens: 9000
+
+  ollama_qwen35_122b:
+    base_url: ${oc.env:OLLAMA_QWEN35_122B_BASE_URL,http://127.0.0.1:12422/api}
+    gpu_ranks:
+      - [0, 1, 2]
+      - [3, 4, 5]
+    max_concurrency: 4
+
+comet:
+  enabled: true
+  api_key: RrClhd4FveFQKO4qLo4jBjrKu
+  project_name: ${oc.env:COMET_PROJECT,new-optimizer-search}
+  workspace: ${oc.env:COMET_WORKSPACE,dont4rootme}
+  run_name: ${oc.env:COMET_RUN_NAME,cobench-${co_bench_slug}}
+  experiment_name: null
+  log_combined_overview: true
+  log_individual_panels: true
+  log_plotly: true
+  log_step_per_generation: true
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  output_subdir: hydra
+  job:
+    chdir: false

@@ -67,7 +67,50 @@ FAMILIES = {
             "OPTIONAL_CODE_SKETCH",
         ),
     },
+    "co_bench": {
+        # ONE preset selects the active task via experiments.co_bench.CO_BENCH_TASK;
+        # the default (no override) is TSP. The shared section schema / prompts are
+        # task-agnostic, so any task exercises the same section-aware surface.
+        "config": "config_co-bench",
+        "experiment": "co_bench",
+        # On disk the family lives under conf/experiments/co-bench (hyphen) while
+        # the family/experiment key is co_bench (underscore).
+        "dir": "co-bench",
+        # CORE_GENES order (genome_schema.txt).
+        "sections": (
+            "CONSTRUCTION",
+            "SEARCH_STRATEGY",
+            "NEIGHBORHOOD",
+            "FEASIBILITY_MODEL",
+            "REPAIR_POLICY",
+            "CONTROL_POLICY",
+            "PARAMETERS",
+            "OPTIONAL_CODE_SKETCH",
+        ),
+        # Scaffold execution order (shared/template.txt) differs from CORE_GENES
+        # order (PARAMETERS executes first), like circle_packing_shinka.
+        "implementation_regions": (
+            "PARAMETERS",
+            "CONSTRUCTION",
+            "FEASIBILITY_MODEL",
+            "NEIGHBORHOOD",
+            "REPAIR_POLICY",
+            "SEARCH_STRATEGY",
+            "CONTROL_POLICY",
+            "OPTIONAL_CODE_SKETCH",
+        ),
+    },
 }
+
+
+def _family_dir(family: str, spec: dict) -> str:
+    """On-disk prompt directory for a family (defaults to the family key).
+
+    Most families store prompts under conf/experiments/<family>/; co_bench is
+    the exception (key co_bench, on-disk co-bench), so it sets spec["dir"].
+    """
+
+    return str(spec.get("dir", family))
 
 
 def _compose(config_name: str):
@@ -84,7 +127,8 @@ def test_family_config_exposes_section_aware_surface(family: str) -> None:
     spec = FAMILIES[family]
     cfg = _compose(str(spec["config"]))
 
-    assert cfg.evolver.prompts.genome_schema == f"conf/experiments/{family}/prompts/shared/genome_schema.txt"
+    family_dir = _family_dir(family, spec)
+    assert cfg.evolver.prompts.genome_schema == f"conf/experiments/{family_dir}/prompts/shared/genome_schema.txt"
     assert cfg.evolver.reproduction.selection_score.mode == "weighted_sum"
     assert cfg.evolver.reproduction.selection_score.normalize_weights is True
     assert cfg.evolver.reproduction.selection_score.weights.simple_score == 1.0
@@ -130,7 +174,9 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
         assert "## REJECTION_REASON" in prompt
         assert "## SECTIONS_AT_ISSUE" in prompt
 
-    if family == "circle_packing_shinka":
+    if family in ("circle_packing_shinka", "co_bench"):
+        # co_bench shares the single-rewrite implementation contract: the LLM
+        # returns the full implementation.py, not a region-marked patch.
         assert "Single rewrite contract:" in bundle.implementation_system
         assert "return ONLY the final full `implementation.py`" in bundle.implementation_system
         assert "treat it as the concrete parent program" in bundle.implementation_system
@@ -154,7 +200,8 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
         assert "Every `## REGION SECTION_NAME` block must be closed by `## END_REGION`" in bundle.implementation_system
         assert "do not output a full `implementation.py`" in bundle.implementation_system
         assert "Execution-order discipline" in bundle.implementation_system
-    if family == "circle_packing_shinka":
+    if family in ("circle_packing_shinka", "co_bench"):
+        # Single-rewrite families do not negotiate a FULL/PATCH compilation mode.
         assert "=== COMPILATION MODE ===" not in bundle.implementation_user
     else:
         assert "=== COMPILATION MODE ===" in bundle.implementation_user
@@ -172,7 +219,8 @@ def test_family_schema_prompts_and_templates_are_section_aligned(family: str) ->
     assert "Do NOT add commentary before or after the file" in bundle.repair_system
     assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.repair_user
 
-    legacy_template = ROOT / "conf" / "experiments" / family / "prompts" / "implementation" / "template.txt"
+    family_dir = _family_dir(family, spec)
+    legacy_template = ROOT / "conf" / "experiments" / family_dir / "prompts" / "implementation" / "template.txt"
     if legacy_template.exists():
         legacy_text = legacy_template.read_text(encoding="utf-8")
         assert "EDITABLE:" not in legacy_text

@@ -1,0 +1,23 @@
+TASK: Travelling Salesman Problem (TSP)
+
+Problem description:
+The Traveling Salesman Problem (TSP) is a classic combinatorial optimization problem where, given a set of cities with known pairwise distances, the objective is to find the shortest possible tour that visits each city exactly once and returns to the starting city. More formally, given a complete graph G = (V, E) with vertices V representing cities and edges E with weights representing distances, we seek to find a Hamiltonian cycle (a closed path visiting each vertex exactly once) of minimum total weight. Distances here are Euclidean: the cost of an edge is the straight-line distance between the two cities' (x, y) coordinates.
+
+solve(**kwargs) contract for this task:
+- INPUT keys (each instance passes these by keyword to solve):
+  - `nodes` (list): the cities as (x, y) coordinate pairs, e.g. [(x0, y0), (x1, y1), ..., (x_{n-1}, y_{n-1})]. The number of cities is len(nodes).
+  - `label_tour` (list or None): a reference/optimal tour when available; it is passed to the evaluator, not something solve must use. Do NOT rely on it being present or correct — solve must work from `nodes` alone.
+- REQUIRED OUTPUT: return a dict with exactly the key:
+  - `tour` (list): a permutation of the city indices 0..len(nodes)-1 describing the visiting order, e.g. [0, 3, 1, 2, ...]. The tour is treated as a cycle (it returns from the last city back to the first), so do NOT repeat the starting index at the end.
+
+Feasibility (a tour is rejected — scores 0 — unless all hold):
+- len(tour) == len(nodes)
+- tour contains each index in 0..len(nodes)-1 exactly once (a valid permutation; no duplicates, no out-of-range or missing indices)
+
+Objective and scoring:
+- The tour cost is the sum of Euclidean distances between consecutive cities, including the wrap-around edge from the last city back to the first. Lower cost is better.
+- The evaluator normalizes each instance's cost against a known optimal cost (optimal / predicted), so the normalized score is in (0, 1] and HIGHER is better; an exactly-optimal tour scores 1.0.
+- Instances can be large (hundreds to thousands of cities), so respect the per-instance timeout: construction plus any local search (e.g. nearest-neighbor construction followed by 2-opt / Or-opt improvement) must be bounded to finish in time. Returning a feasible but suboptimal tour is far better than timing out or returning an invalid tour.
+
+Reference baseline:
+- The identity tour `list(range(len(nodes)))` (cities visited in input order) is a VALID permutation and scores > 0, but it is far from optimal — it is only a feasibility floor to improve on.

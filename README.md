@@ -36,9 +36,11 @@ Generic AI-for-science framework with:
 - `experiments/optimization_survey/`: optimization-specific experiments and runtime helpers
 - `experiments/circle_packing_shinka/`: circle-packing task package inspired by ShinkaEvolve
 - `experiments/awtf2025_heuristic/`: AtCoder AWTF 2025 heuristic task package
+- `experiments/co_bench/`: CO-Bench combinatorial-optimization task family (one evaluator, many tasks)
 - `conf/experiments/optimization_survey/`: optimization-specific experiment configs and prompts
 - `conf/experiments/circle_packing_shinka/`: circle-packing configs and prompts
 - `conf/experiments/awtf2025_heuristic/`: awtf2025 configs, prompts, and research islands
+- `conf/experiments/co-bench/`: CO-Bench task registry, shared prompts, and per-task project contexts
 - `tests/`: contract and integration coverage
 
 ## Install
@@ -441,5 +443,59 @@ def solve_case(input_text: str) -> str:
 ```
 
 The evaluator runs that function on a vendored fixed corpus of official `seed=0..99` inputs and maximizes `-mean_absolute_score`, where each per-case absolute score is the official `T + 100 * sum_k Manhattan(final_position_k, target_k)`.
+
+## CO-Bench
+
+The repository also ships [`experiments/co_bench/`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/experiments/co_bench), a task family that evolves combinatorial-optimization algorithms against [CO-Bench](https://github.com/sunnweiwei/CO-Bench) ("Benchmarking Language Model Agents in Algorithm Search for Combinatorial Optimization", [arXiv:2504.04310](https://arxiv.org/abs/2504.04310)). Each organism is a single candidate function scored by CO-Bench's own per-task evaluator (higher normalized score = better).
+
+Its organism contract is:
+
+```python
+def solve(**kwargs) -> dict:
+    ...
+```
+
+CO-Bench invokes the candidate as `solve(**instance)` (every instance field is passed by keyword), then scores the returned dict with the task's `eval_func(**instance, **solution)`. The exact input keys, the required output keys, and the objective are described in each task's `project_context.txt` prompt (e.g. TSP receives `nodes` and returns `{"tour": [...]}`). A `**kwargs` parameter is mandatory so unexpected instance keys are tolerated; required positional-only parameters are rejected by the candidate loader.
+
+### Bootstrap (checkout + dataset, not pip-installable)
+
+CO-Bench ships top-level packages `evaluation`/`agents` and is not a pip package, so it must be checked out and its dataset downloaded:
+
+```bash
+scripts/bootstrap_cobench.sh
+```
+
+That script clones CO-Bench into `third_party/CO-Bench` (skipped if already present), runs `pip install -e ".[co_bench]"` for the solver/dataset deps, and downloads the Hugging Face dataset `CO-Bench/CO-Bench` into `./data/co-bench` via `huggingface_hub.snapshot_download`. Override the checkout location with `COBENCH_ROOT` and the dataset root with `AIFS_DATA_ROOT` (data lands in `<root>/co-bench`). A missing checkout or solver dependency makes `mode=smoke` report `status="skipped"` instead of crashing.
+
+### Usage — ONE preset, task selected by a field
+
+Unlike the other families, CO-Bench uses a **single** top-level preset, `config_co-bench`. There are **no** per-task presets. The active task is chosen by the field `experiments.co_bench.CO_BENCH_TASK`, an UPPER-CASE identifier:
+
+| `CO_BENCH_TASK` | CO-Bench dataset task |
+|---|---|
+| `TSP` | Travelling salesman problem |
+| `BIN_PACKING_1D` | Bin packing - one-dimensional |
+| `MULTI_KNAPSACK` | Multidimensional knapsack problem |
+| `SET_COVERING` | Set covering |
+| `GRAPH_COLOURING` | Graph colouring |
+| `JOB_SHOP` | Job shop scheduling |
+
+Set it in `conf/config_co-bench.yaml` or override it on the command line (it defaults to `TSP`):
+
+```bash
+python -m src.main --config-name config_co-bench experiments.co_bench.CO_BENCH_TASK=JOB_SHOP mode=smoke
+./scripts/seed_population.sh --config-name config_co-bench experiments.co_bench.CO_BENCH_TASK=TSP
+./scripts/run_evolution.sh  --config-name config_co-bench experiments.co_bench.CO_BENCH_TASK=SET_COVERING
+./scripts/run_evolution.sh  --seed --config-name config_co-bench experiments.co_bench.CO_BENCH_TASK=GRAPH_COLOURING
+```
+
+Run a concrete organism, or collect the baseline, the same way:
+
+```bash
+python -m src.main --config-name config_co-bench experiments.co_bench.CO_BENCH_TASK=MULTI_KNAPSACK mode=run +organism_dir=/absolute/path/to/organism
+python -m src.main --config-name baselines/co-bench experiments.co_bench.CO_BENCH_TASK=TSP
+```
+
+The identifier &rarr; dataset-task mapping (plus the lowercase slug that drives the seed/prompt/output paths) lives in the `co_bench_registry` in `conf/experiments/co-bench/co_bench.yaml`; CO-Bench's other tasks are added there. See [`experiments/co_bench/AGENTS.md`](/Users/artemon/Library/Mobile%20Documents/com~apple~CloudDocs/Programming/python_projects/new-optimizer-finding/experiments/co_bench/AGENTS.md) for how to add one.
 
 All user-facing entrypoints now require an explicit Hydra preset via `--config-name`.

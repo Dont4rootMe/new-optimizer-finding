@@ -22,3 +22,9 @@ ollama_cache
 .api_platform_runtime*
 api_platform_runtime*
 .claude
+
+# CO-Bench: external checkout (cloned by scripts/bootstrap_cobench.sh) and the
+# cpu.lock file CO-Bench writes into the CWD during evaluation. The dataset is
+# downloaded under data/ which is already ignored above.
+third_party/
+cpu.lock

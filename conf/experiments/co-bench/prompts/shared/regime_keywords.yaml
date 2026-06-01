@@ -1,0 +1,46 @@
+# Regime convergence keyword map for the co_bench experiment family.
+#
+# Used by src/organisms/lineage_regime.py — same shape as the
+# circle_packing_shinka map. Each axis tracks a different aspect of a
+# combinatorial-optimization organism's design. The loader reads whatever
+# top-level axis keys appear here, so these are task-agnostic CO axes.
+
+construction_family:
+  - "greedy construction"
+  - "randomized greedy"
+  - "grasp"
+  - "nearest neighbor"
+  - "savings"
+  - "insertion heuristic"
+  - "seed solution"
+  - "decomposition"
+
+search_family:
+  - "local search"
+  - "hill climbing"
+  - "simulated annealing"
+  - "tabu search"
+  - "large neighborhood search"
+  - "variable neighborhood"
+  - "evolutionary"
+  - "iterated local search"
+  - "restart"
+
+neighborhood_family:
+  - "swap move"
+  - "insertion move"
+  - "relocate"
+  - "2-opt"
+  - "k-opt"
+  - "segment reversal"
+  - "ruin and recreate"
+  - "flip move"
+  - "block move"
+
+feasibility_family:
+  - "hard feasibility"
+  - "penalty function"
+  - "soft constraints"
+  - "lagrangian penalty"
+  - "repair only feasible"
+  - "constraint-directed"

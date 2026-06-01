@@ -1,0 +1,46 @@
+Repair this organism implementation.
+
+=== REPAIR INTERFACE ===
+The function you must fix:
+
+    def solve(**kwargs) -> dict:
+
+CO-Bench calls `solve(**instance)` for each instance and scores the returned dict with the task's `eval_func(**instance, **solution)`.
+It must return the solution dict carrying the output keys required by the task contract.
+The exact input keys, required output keys, constraints, and objective for this task are given in the per-task project context attached to this prompt; treat that as authoritative.
+Do not add hidden evaluator assumptions or fabricated instance properties beyond that contract and the genes.
+
+=== ORGANISM GENETIC CODE ===
+{organism_genetic_code}
+
+=== ORGANISM NOVELTY SUMMARY ===
+{change_description}
+
+=== CURRENT IMPLEMENTATION.PY ===
+{current_implementation}
+
+=== CANONICAL IMPLEMENTATION SCAFFOLD ===
+Use this as the structural reference if the current file is too broken to preserve.
+Return a full Python file.
+
+{implementation_template}
+
+=== FAILING PHASE ===
+{phase}
+
+=== FAILING EXPERIMENT ===
+{experiment_name}
+
+=== ERROR HISTORY ===
+{error_history}
+
+Fix the error while staying faithful to the genetic code.
+The full-file output format is only the repair interface contract; preserve unaffected scaffold regions and the inherited mechanism whenever possible.
+Repair the smallest affected code span consistent with the error history and preserve the current algorithm outside that span whenever possible.
+If the current implementation already realizes a strong mechanism imperfectly, repair it locally instead of replacing it with a weaker but safer generic algorithm.
+Do not repair the file by silently collapsing a distinct gene-implied phenotype back to a generic construction-plus-local-search baseline when the genes call for a different search, neighborhood, or feasibility regime.
+If the failure is that `solve(**kwargs)` does not return the required dict, fix the return path first: build the solution structure and return the dict with the required output keys.
+If the failure names a violated constraint, fix and re-check that exact feasibility issue; if it reports a timeout, bound the implicated loop with a counter or a wall-clock deadline.
+Keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the file, and preserve code outside that block unless the file is too broken to keep safely.
+Do not replace the whole algorithm with a short generic solver unless no local repair is viable.
+Return ONLY the corrected full `implementation.py` text. No markdown fences, no commentary.

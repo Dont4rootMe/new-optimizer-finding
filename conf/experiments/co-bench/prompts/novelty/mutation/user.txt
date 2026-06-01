@@ -1,0 +1,23 @@
+Evaluate whether this mutation child is meaningfully novel relative to its parent.
+
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
+
+=== PARENT GENETIC CODE ===
+{parent_genetic_code}
+
+=== CANDIDATE CHILD GENETIC CODE ===
+{candidate_genetic_code}
+
+=== CANDIDATE CHILD CHANGE_DESCRIPTION ===
+{candidate_change_description}
+
+=== TASK ===
+Accept a candidate that introduces a coherent and visible mechanism shift relative to the parent — at least one CORE_GENES section must contain a substantive change that affects the effective construction family, search regime, neighborhood, feasibility/penalty model, or repair/control regime.
+Reject a candidate that mainly reconstructs the parent verbatim, only rephrases parent ideas, only reshuffles ideas across sections without substantive change, or is too weak to change the organism's effective behavior.
+Reject children whose claimed mutation is only cosmetic or too weak to change the organism's effective behavior.
+Reject a candidate that keeps the same construction family, the same search regime, the same neighborhood, and the same repair/control regime while only retelling the story or weakly retuning coefficients.
+Reject a retained construction-plus-local-search shape unless the child genes make a genuinely different operating regime explicit.
+Reject children whose apparent novelty comes mainly from elaboration, not from a changed mechanism.
+If `CHANGE_DESCRIPTION` overclaims novelty that the sectioned genes do not support, reject it.

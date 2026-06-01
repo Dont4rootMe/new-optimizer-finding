@@ -1,0 +1,44 @@
+# Generic CO-Bench experiment evaluator — ONE evaluator serves the whole family.
+# The active task is chosen by CO_BENCH_TASK (set/overridden from
+# conf/config_co-bench.yaml). This node is SELF-CONTAINED: co_bench_task and
+# name resolve via NODE-RELATIVE interpolation (${.key}) so they survive the
+# per-experiment config detachment in src/validate/runner.py.
+_target_: experiments.co_bench._runtime.runner.CoBenchExperimentEvaluator
+
+# >>> Selected task identifier (UPPER CASE). Overridden by config_co-bench.yaml. <<<
+CO_BENCH_TASK: TSP
+
+# Identifier -> {CO-Bench dataset task name (verbatim, passed to get_data), slug}.
+# Add another of CO-Bench's 36 tasks by appending a row here + a seed +
+# project_context (see conf/config_co-bench.yaml header).
+co_bench_registry:
+  TSP:             { task: "Travelling salesman problem",       slug: tsp }
+  BIN_PACKING_1D:  { task: "Bin packing - one-dimensional",     slug: bin_packing_1d }
+  MULTI_KNAPSACK:  { task: "Multidimensional knapsack problem", slug: multi_knapsack }
+  SET_COVERING:    { task: "Set covering",                      slug: set_covering }
+  GRAPH_COLOURING: { task: "Graph colouring",                   slug: graph_colouring }
+  JOB_SHOP:        { task: "Job shop scheduling",               slug: job_shop }
+
+# Resolved from the selector above (node-relative; safe under detachment).
+co_bench_task: ${.co_bench_registry.${.CO_BENCH_TASK}.task}
+name: ${.co_bench_registry.${.CO_BENCH_TASK}.slug}
+
+enabled: true
+need_cuda: false
+
+# CO-Bench Evaluator knobs (per-instance solve() timeout sec, parallelism,
+# feedback truncation). See experiments/co_bench/_runtime/runner.py.
+timeout: 10
+cpu_num: null
+feedback_length: 64
+
+data:
+  # Parent dir holding per-task CO-Bench folders (bootstrap_cobench.sh downloads here).
+  cobench_src_dir: ${paths.data_root}/co-bench
+
+compute:
+  device: cpu
+  precision: fp32
+  num_workers: 0
+  smoke_steps: 1
+  max_steps: 1

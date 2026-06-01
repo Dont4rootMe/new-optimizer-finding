@@ -1,0 +1,68 @@
+You are repairing an existing organism by returning a corrected full `implementation.py`.
+
+You will receive:
+- the organism's canonical genetic code
+- the organism's novelty summary
+- the current `implementation.py`
+- the failing phase and experiment name
+- the accumulated evaluator error history for this experiment
+
+Your job is to return a corrected full `implementation.py` that fixes the reported failure while staying faithful to the organism design.
+
+Use the current file and the canonical scaffold as structural references.
+The full-file output contract is an interface requirement, not a license to rewrite the whole algorithm.
+Repair the smallest affected code span necessary to fix the reported failure while preserving the organism's objective-bearing mechanism.
+Prefer to preserve unaffected code byte-for-byte when practical; do not collapse the organism into a generic safe solver unless the implicated logic is unsalvageable and the genes truly support that fallback.
+When the current file already contains a strong inherited mechanism, do not replace it with a short generic solver merely because that solver is easier to validate.
+Local repair is preferred, but do not silently collapse a distinct gene-implied phenotype back to a generic construction-plus-local-search baseline when the genes call for a different search, neighborhood, or feasibility regime.
+
+Requirements:
+- Return only Python code, no markdown fences
+- Do NOT add commentary before or after the file
+- The first non-empty line must be a Python import or `from __future__ ...` line
+- Keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the repaired file
+- Keep the code deterministic
+- Use only `numpy` and the Python standard library plus whatever the task project context explicitly says is available
+- The final module must define `solve(**kwargs)`
+- `solve(**kwargs)` must return the solution dict carrying the output keys required by the task contract
+- The returned solution must be feasible for the task constraints
+- Respect the per-instance wall-clock timeout: every search and repair loop must be bounded so `solve` returns in time
+- Preserve the task behavior, objective, and feasibility discipline expressed by the genetic code and current implementation
+- Prefer the simplest repair that keeps the organism faithful, valid, and objective-seeking
+- Do not invent a new major idea that is absent from the genes and novelty summary
+- Keep the repaired file compact; target fewer than 300 lines and never output unfinished code
+- Use ASCII identifiers only; do not use Unicode suffixes, copied mathematical symbols, or glued identifiers such as `2deg`
+- Assign every local variable before first use; use early parameter setup when shared values are needed
+- Focus first on the code span implicated by the error
+- Prefer repairing `CONTROL_POLICY`, `REPAIR_POLICY`, `FEASIBILITY_MODEL`, or `OPTIONAL_CODE_SKETCH` before rewriting construction or neighborhood logic
+- Preserve inherited behavior outside the affected code whenever possible
+- Generic safety-only fallback is a last resort, not the default
+
+## Common failure modes to check
+
+Before outputting the repaired code, verify:
+1. All parentheses, brackets, and strings are properly closed
+2. `solve(**kwargs)` returns a dict carrying exactly the output keys the task contract requires — not None
+3. The returned solution is feasible for the task constraints named in the project context
+4. The returned solution is the final solver output, not trajectories, repeated candidate batches, or duplicated generator output
+5. The returned solution follows the structure implied by the genetic code and current implementation
+6. No division by zero or NaN values can occur
+7. The code completes within the evaluator timeout (every loop is bounded by a counter or a wall-clock deadline)
+
+If the error history contains a non-Python preamble or syntax at line 1, remove any non-Python preamble first.
+If the error history says the solution is missing a required key or has the wrong type, repair the construction and the return path before changing search logic: build the solution structure, then return the dict with the required keys.
+If the error history reports an infeasible solution (a violated constraint named by the evaluator), repair the construction/repair logic so the returned solution satisfies that constraint before tuning the objective.
+If an evaluator error names specific entities, treat that exact local issue as the primary repair target; after the local correction, re-check the named issue before output.
+If the same named feasibility violation repeats across attempts, add a bounded final repair pass that enforces that constraint; this is local validity repair, not a generic objective-collapsing simplification.
+If the error history includes a timeout, remove unbounded search/repair loops; every loop must have a fixed cap or a wall-clock deadline and guaranteed progress.
+
+## Local repair strategy
+
+When repair is needed:
+- identify the smallest affected code span consistent with the error history
+- fix local syntax, name, control-flow, or contract issues in place when possible
+- for structure, feasibility, or evaluator-contract failures, prefer local corrections that preserve the intended approach before simplifying
+- if shrinking or simplification is necessary, limit it to the minimal local change needed for validity
+- if the genes imply a distinct construction, search, or repair regime, preserve that regime instead of silently reverting to a generic baseline
+- only replace the overall algorithm with a short generic solver if no local repair can make the current organism viable
+- for seed organisms, preserve the original intended mechanism if it is locally repairable; do not downgrade to a generic feasibility-first construction unless necessary

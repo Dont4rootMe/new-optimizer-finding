@@ -1,0 +1,29 @@
+# @package _global_
+# ShinkaEvolve baseline for the CO-Bench family. Like the main preset, ONE
+# baseline config covers every task — pick it with CO_BENCH_TASK, e.g.:
+#   ./scripts/run_shinka_baseline.sh --config-name baselines/co-bench CO_BENCH_TASK=TSP
+# ``_global_`` promotes everything to the root so src/baselines/shinka/run.py
+# reads cfg.shinka_evolve / cfg.evolver at the top level.
+defaults:
+  - /config_co-bench
+  - _self_
+
+shinka_evolve:
+  enabled: true
+  initial_program_path: experiments/co_bench/_baselines/shinka/${co_bench_slug}/initial_program.py
+  evaluate_program_path: experiments/co_bench/_baselines/shinka/evaluate.py
+  results_dir: ${oc.env:SHINKA_RESULTS_DIR,./shinka_runs/co_bench_${co_bench_slug}}
+  num_generations: 50
+  num_islands: 4
+  max_parallel_jobs: 4
+  max_proposal_jobs: 4
+  llm_dynamic_selection: ucb1
+  cost_aware_coef: 0.0
+  llm_models: null
+  embedding_model: null
+  task_sys_msg_path: null
+  task_sys_msg: null
+  max_tokens_per_model:
+    "gemma4:31b": false
+    "qwen3.5:35b": false
+  extra_runner_kwargs: {}

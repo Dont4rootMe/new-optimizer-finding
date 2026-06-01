@@ -1,0 +1,53 @@
+You are in the implementation stage.
+
+You will receive:
+- the function contract
+- the sectioned organism genetic code
+- the organism novelty summary
+- the canonical implementation scaffold
+- the ordered list of changed genome sections
+- when present, the maternal base implementation and maternal base genetic code
+
+Your job is to realize the supplied genes faithfully in deterministic code.
+
+Core rules:
+- do not invent new major ideas at implementation time
+- if the design is ambiguous, choose the strongest deterministic interpretation that remains faithful to the genes and valid at return time
+- every returned solution must be a dict carrying the required output keys named in the task project context, and must be feasible for the task's constraints
+- preserve the objective and feasibility discipline encoded in the supplied genetic code
+- prefer the leanest implementation that preserves the real mechanism
+- do not collapse an ambitious but feasible design into a trivial safe solution
+- do not use `CONTROL_POLICY` or `OPTIONAL_CODE_SKETCH` as a hidden global override
+- respect the per-instance wall-clock timeout: bound every search and repair loop so `solve` always returns in time
+
+Scaffold discipline:
+- the scaffold order is `PARAMETERS`, `CONSTRUCTION`, `FEASIBILITY_MODEL`, `NEIGHBORHOOD`, `REPAIR_POLICY`, `SEARCH_STRATEGY`, `CONTROL_POLICY`, `OPTIONAL_CODE_SKETCH`
+- `PARAMETERS` executes early; assign shared values before first use
+- `OPTIONAL_CODE_SKETCH` must stay local and must not override the whole algorithm
+
+Maternal inheritance rules:
+- when maternal base code is supplied, treat it as the concrete parent program
+- preserve inherited behavior outside the changed sections unless the child genes require a coordinated adjustment or a distinct solving regime
+- when the changed sections still imply the same phenotype family, preserve strong inherited maternal behavior; if the child genes require a distinct solving regime or phenotype shift, rewrite enough of the maternal behavior to realize that shift faithfully
+- do not silently keep the maternal construction, neighborhood, or repair regime when the child genes call for a new search family, a different neighborhood, a penalty-based feasibility model, or another distinct score-bearing mechanism
+- do not compensate for unchanged genes by rewriting unrelated behavior
+
+Single rewrite contract:
+- return ONLY the final full `implementation.py`
+- with maternal base code, rewrite the complete child file from that parent program with the minimum faithful edits
+- without maternal base code, use the scaffold as the starting skeleton
+- return valid Python source code, not changed snippets, patch artifacts, or prose
+- the first non-empty line must be a Python import line (e.g. `import numpy as np`) or a `from __future__ ...` line; it must never be a markdown fence or commentary
+- write executable code, not a comment-only reasoning trace; brief comments are allowed only when paired with working code
+- if the exact mechanism is underspecified, implement the simplest faithful deterministic version rather than leaving placeholders, repeated planning comments, or unfinished branches
+- return only the final solver, not trajectories, repeated candidate batches, candidate histories, or duplicated full constructions
+- keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the code
+- preserve code outside the EVOLVE block unless the file is too broken to keep safely
+
+Minimal syntax discipline:
+- do not use markdown code fences
+- do not emit commentary, analysis, or prose
+- use ASCII identifiers only
+- define `solve(**kwargs)` exactly once and make it return the required solution dict
+- the returned dict must carry exactly the output keys the task contract requires
+- use bounded search and repair loops; do not use unbounded `while True` unless the body has a hard counter or a wall-clock deadline check and guaranteed progress

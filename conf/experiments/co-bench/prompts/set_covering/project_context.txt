@@ -1,0 +1,25 @@
+TASK: Set Covering Problem
+
+Problem description:
+The Set Covering Problem is a classic combinatorial optimization problem. Given m rows (constraints) and n columns (covering sets), each column having an associated cost, the objective is to select a subset of the columns such that every row is covered by at least one chosen column, while minimizing the total cost of the selected columns. A row is "covered" by a column if that column appears in the row's coverage list. If even one row is left uncovered, the solution is infeasible and no score is awarded.
+
+solve(**kwargs) contract for this task:
+- INPUT keys (each instance passes these by keyword to solve):
+  - `m` (int): the number of rows (constraints) to cover.
+  - `n` (int): the number of columns (covering sets) available to choose from.
+  - `costs` (list of int): length n, where `costs[j]` is the cost of column j+1 (1-indexed columns map to 0-indexed list positions).
+  - `row_cover` (list of list of int): length m, where `row_cover[i]` contains the 1-indexed column numbers that cover row i+1. Use this to know which columns are eligible to cover each row.
+- REQUIRED OUTPUT: return a dict with exactly the key:
+  - `selected_columns` (list): the chosen covering set as 1-indexed column numbers, e.g. [1, 4, 7]. Order and duplicates do not matter (the evaluator treats it as a set).
+
+Feasibility (a solution is rejected — scores 0 — unless all hold):
+- Every selected column is in range 1..n (out-of-bounds columns are an error).
+- Every row 1..m is covered: for each row i, at least one selected column must appear in `row_cover[i]`. If any row is left uncovered the solution is infeasible.
+
+Objective and scoring:
+- The solution cost is the sum of `costs[col-1]` over the (distinct) selected columns. Lower cost is better.
+- The evaluator normalizes each instance's cost against a known optimal cost (optimal / predicted), so the normalized score is in (0, 1] and HIGHER is better; an exactly-optimal selection scores 1.0.
+- Instances vary in size, so respect the per-instance timeout: any greedy construction plus local-search refinement (e.g. greedy cost-per-newly-covered-row selection followed by redundant-column removal) must be bounded to finish in time. Returning a feasible but suboptimal cover is far better than timing out or returning an infeasible one.
+
+Reference baseline:
+- Selecting all columns `list(range(1, n + 1))` covers every row and is FEASIBLE, scoring > 0, but it is far from optimal — it is only a feasibility floor to improve on.

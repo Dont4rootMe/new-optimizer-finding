@@ -1,0 +1,26 @@
+TASK: Multidimensional Knapsack Problem (MKP)
+
+Problem description:
+This problem is a multidimensional knapsack optimization where the objective is to maximize the total profit by selecting decision variables, each associated with a profit and resource consumption across multiple constraints. The decision variables must be chosen such that the sum of resource usage for each constraint does not exceed its corresponding capacity. Importantly, if any constraint is violated — that is, if the resource consumption for any constraint exceeds its allowed capacity — the solution is deemed infeasible and earns no score. The challenge lies in identifying the optimal combination of items that yields the highest total profit while strictly satisfying all resource constraints.
+
+solve(**kwargs) contract for this task:
+- INPUT keys (each instance passes these by keyword to solve):
+  - `n` (int): the number of decision variables (items).
+  - `m` (int): the number of constraints (resource dimensions).
+  - `p` (list): the profit coefficients, a list of floats of length n. Item j contributes profit p[j] when selected.
+  - `r` (list): the resource consumption matrix, a list of m lists each of length n. r[i][j] is how much of constraint i's resource item j consumes.
+  - `b` (list): the right-hand-side capacities, a list of floats of length m. Constraint i allows at most b[i] total resource use.
+- REQUIRED OUTPUT: return a dict with exactly the key:
+  - `x` (list): a list of n binary decisions (each 0 or 1). x[j] == 1 selects item j, x[j] == 0 leaves it out.
+
+Feasibility (a solution is rejected — scores 0 — unless all hold):
+- For every constraint i in 0..m-1: sum(r[i][j] * x[j] for j in range(n)) <= b[i]. If ANY constraint's total resource consumption exceeds its capacity b[i], the solution is infeasible and earns no score.
+
+Objective and scoring:
+- The objective value is the total profit: sum(p[j] * x[j] for j in range(n)). Higher profit is better.
+- When (and only when) every resource constraint is satisfied, the score equals that objective value; otherwise the instance scores 0.
+- The evaluator normalizes each instance's score against a known optimal profit (predicted / optimal), so the normalized score is in [0, 1] and HIGHER is better; an exactly-optimal selection scores 1.0.
+- Selecting more items raises profit but consumes more of every constrained resource, so the core trade-off is packing high-profit items without violating any of the m capacities.
+
+Reference baseline:
+- A greedy profit-density heuristic — sort items by p[j] / (1 + sum_i r[i][j]) and add each item only if it still fits ALL constraints — is always feasible and scores > 0, but it is far from optimal; it is only a feasibility floor to improve on.

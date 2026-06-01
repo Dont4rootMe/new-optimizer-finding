@@ -34,6 +34,19 @@ evolve = [
   "comet_ml>=3.40.0",
 ]
 shinka_baseline = ["shinka-evolve>=0.0.4"]
+# Optional extra for the co_bench experiment family. CO-Bench itself is NOT a
+# pip package — clone it (see scripts/bootstrap_cobench.sh) and put it on
+# COBENCH_ROOT / third_party/CO-Bench. These are the dataset-download +
+# solver dependencies the six targeted tasks need (TSP, bin packing,
+# multidimensional knapsack, set covering, graph colouring, job shop).
+co_bench = [
+  "huggingface_hub>=0.23.0",
+  "numpy>=1.24",
+  "ortools>=9.7",
+  "networkx>=3.1",
+  "pulp>=2.7",
+  "scipy>=1.10",
+]
 
 [tool.setuptools]
 include-package-data = true

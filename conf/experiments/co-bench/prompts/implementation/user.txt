@@ -1,0 +1,57 @@
+Compile this organism into code.
+
+=== IMPLEMENTATION INTERFACE ===
+You must implement exactly this function:
+
+    def solve(**kwargs) -> dict:
+
+CO-Bench calls `solve(**instance)` for each instance and scores the returned dict with the task's `eval_func(**instance, **solution)`.
+Accept arbitrary keyword arguments so unexpected instance keys are tolerated.
+The exact input keys, the required output keys, the constraints, and the objective for this task are given in the per-task project context attached to this prompt; treat that as authoritative.
+Do not add task facts, evaluator assumptions, or fabricated instance properties beyond that contract and the supplied genes.
+
+Validity preservation note:
+  - The returned solution must satisfy the feasibility discipline implied by the genes and the task constraints
+  - If local correction is needed, preserve the intended solving approach and strong inherited structure whenever possible
+  - Do not perform a generic end-stage reset to a trivial feasible solution unless the genes themselves call for that behavior
+
+=== CHANGED_SECTIONS ===
+{changed_sections}
+
+=== ORGANISM GENETIC CODE ===
+{organism_genetic_code}
+
+=== ORGANISM CHANGE_DESCRIPTION ===
+{change_description}
+
+=== MATERNAL BASE GENETIC CODE ===
+{base_parent_genetic_code}
+
+=== MATERNAL BASE IMPLEMENTATION ===
+{base_parent_implementation}
+
+=== CANONICAL IMPLEMENTATION SCAFFOLD ===
+{implementation_template}
+
+=== TASK ===
+Realize the supplied genes faithfully and preserve the objective-seeking behavior they describe.
+
+Return the final full Python file only.
+- if MATERNAL BASE IMPLEMENTATION is not NONE, use it as the concrete parent program and rewrite the complete child file with the minimum faithful edits
+- if MATERNAL BASE IMPLEMENTATION is NONE, use the canonical scaffold as the file skeleton
+- use CHANGED_SECTIONS as the main list of causal modules that must differ from the maternal implementation
+- preserve unaffected strong inherited behavior unless the child genes require a distinct solving regime or phenotype shift
+- if the child genes imply a distinct construction, neighborhood, or repair regime, rewrite enough of the maternal implementation to realize that regime instead of preserving the old one silently
+- do not return changed snippets only
+- do not return a patch artifact
+- the first non-empty line must be a Python import line or a `from __future__ ...` line, not a markdown fence or commentary
+- the file must contain a complete executable `def solve(**kwargs):` that returns the required solution dict
+- the returned dict must carry exactly the output keys the task contract requires
+- bound every search and repair loop so `solve` returns within the per-instance timeout
+- return only the final solver, not repeated generated batches, candidate histories, or search trajectories
+- keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the file
+- preserve code outside the EVOLVE block unless the current file is too broken to keep safely
+- do not write long exploratory comments in place of implementation; choose the simplest faithful deterministic realization and finish the file
+
+Be faithful to the supplied sectioned genes and the change description.
+Do not output markdown fences or commentary.

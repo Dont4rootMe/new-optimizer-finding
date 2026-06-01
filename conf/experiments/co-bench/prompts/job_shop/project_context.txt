@@ -1,0 +1,28 @@
+TASK: Job Shop Scheduling
+
+Problem description:
+The job shop scheduling problem requires assigning non-negative integer start times to a set of operations, structured into multiple jobs, each composed of sequential operations. Each operation is processed on a specific machine for a given processing time. The optimization goal is to minimize the makespan, defined as the maximum completion time across all jobs. Constraints include (i) sequential processing of operations within each job, meaning each operation cannot start before its preceding operation finishes, and (ii) non-overlapping scheduling of operations on the same machine. If these constraints are violated, the solution receives no score.
+
+solve(**kwargs) contract for this task:
+- INPUT keys (each instance passes these by keyword to solve):
+  - `n_jobs` (int): the number of jobs.
+  - `n_machines` (int): the number of machines, which also equals the number of operations per job.
+  - `times` (list of list of int): a 2D list of processing times for each operation, with dimensions n_jobs x n_machines. times[i][j] is the processing time of the j-th operation of job i.
+  - `machines` (list of list of int): a 2D list specifying the machine assignment for each operation, with dimensions n_jobs x n_machines. machines[i][j] is the machine id used by the j-th operation of job i. NOTE machine ids are 1-indexed.
+  - Instances may also pass `time_seed`, `machine_seed`, `upper_bound` and `lower_bound`; these are handled by the evaluator and solve does not need them.
+- REQUIRED OUTPUT: return a dict with exactly the key:
+  - `start_times` (list of list of int): a 2D list of start times for each operation, with dimensions n_jobs x n_machines. start_times[i][j] is the start time of the j-th operation of job i. Every start time must be a non-negative integer.
+
+Feasibility (the schedule is rejected — scores 0 — unless all hold):
+- start_times has exactly n_jobs rows and each row has exactly n_machines entries.
+- Every start time is a non-negative integer.
+- Sequential processing (within each job): for each job i, operation j cannot start before operation j-1 finishes, i.e. start_times[i][j] >= start_times[i][j-1] + times[i][j-1].
+- Machine exclusivity (per machine): for any two operations assigned to the same machine, their processing intervals [start, start + processing_time) must not overlap.
+
+Objective and scoring:
+- The makespan is the maximum completion time across all jobs (the largest start_times[i][j] + times[i][j]). Lower makespan is better.
+- The evaluator normalizes each instance against a known lower bound as lower_bound / makespan, so the normalized score is in (0, 1] and HIGHER is better; a makespan equal to the lower bound scores 1.0. Any constraint violation makes solve raise, which yields no score for that instance.
+- Respect the per-instance timeout: a feasible but suboptimal schedule is far better than timing out or returning an infeasible schedule.
+
+Reference baseline:
+- A fully serial schedule (every operation placed back-to-back on a single global timeline so no two operations ever overlap) is FEASIBLE and scores > 0, but it is far from optimal — it is only a feasibility floor to improve on.
