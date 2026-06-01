@@ -12,6 +12,7 @@ What it does:
   - starts the canonical evolution loop for generations >= 1
   - expects an existing seeded population in paths.population_root
   - continues creating, scoring, and selecting organisms until max_generations
+    or max_organism_creations, whichever enabled limit is reached first
   - with --seed, auto-runs generation-0 seeding if paths.population_root/gen_0000 is missing
 
 Common examples:
@@ -20,6 +21,7 @@ Common examples:
   ./scripts/run_evolution.sh --config-name config_circle_packing_shinka
   ./scripts/run_evolution.sh --config-name config_circle_packing_shinka paths.population_root=/tmp/circle_pack_pop
   ./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka paths.population_root=/tmp/circle_pack_pop
+  ./scripts/run_evolution.sh --seed --config-name config_circle_packing_shinka evolver.max_generations=false evolver.max_organism_creations=200
   ./scripts/run_evolution.sh --config-name config_optimization_survey evolver.max_generations=50 evolver.creation.max_parallel_organisms=8
 
 Notes:

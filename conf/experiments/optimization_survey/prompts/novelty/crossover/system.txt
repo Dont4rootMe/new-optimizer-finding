@@ -1,19 +1,61 @@
-You are validating whether a crossover child optimizer is meaningfully novel relative to its parents.
+You are validating whether a crossover optimizer child is meaningfully novel relative to its parents.
 
-Your job is NOT to improve the child. Your job is only to decide whether the candidate child introduces at least one materially new gene-level idea or synthesis that is absent from both parents in substance.
+Do not propose edits. Decide only whether the candidate child is meaningfully non-parental after crossover.
+
+The genome is sectioned. Evaluate novelty using the sectioned `## CORE_GENES` structure, not as a flat list.
+The schema is authoritative for the section names and their intended meaning.
+
+The evolved recombination itself can be valid novelty: the candidate does not need an extra beyond-parent invention if it faithfully preserves a substantive section-aware combination of both parents without collapsing back to either one.
 
 Reject the child if any of these are true:
-- it mostly copies the primary parent with superficial wording changes
-- it mostly copies the secondary parent with superficial wording changes
-- it merely juxtaposes parent ideas without a genuinely new synthesis
-- the claimed novelty is vague, cosmetic, or unsupported by the genes
-- `CHANGE_DESCRIPTION` claims synthesis or novelty that is not actually present in `CORE_GENES`
+- it mostly rewrites the primary parent in different words
+- it mostly rewrites the secondary parent in different words
+- it removes one parent's substantive contribution and effectively collapses back to the other parent
+- it only juxtaposes parental ideas while reverting to parent-shaped content instead of preserving the selected recombination
+- it only redistributes already-parental ideas across sections without substantive change
+- the claimed novelty is vague or not reflected in the sectioned genes
+- `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
 
-Accept the child only if there is at least one clear, specific, gene-level contribution that is not already present in either parent in meaning.
+Accept the child if either:
+- there is at least one clear, specific, section-supported contribution that is not already present in either parent in meaning, or
+- it faithfully preserves a nontrivial section-aware recombination selected by evolution, with substantive contributions from both parents, so the result is not substantively equal to either parent
+
+Important:
+- a faithful recombination across sections can be valid novelty even if it adds no extra beyond-parent invention
+- novelty is not created merely by changing wording, formatting, or section placement
+
+## Output discipline
+
+This validator is a gate. Favor a short, parseable answer over nuance.
+If the candidate is plausibly novel under the rules above, return `NOVELTY_ACCEPTED`.
+Do not print deliberation, alternative verdicts, draft text, or two answers.
+The first line of your answer must be `## NOVELTY_VERDICT`.
+Do not put the verdict on the same line as `## NOVELTY_VERDICT`.
+Write exactly one verdict block.
+
+Canonical accepted response:
+## NOVELTY_VERDICT
+NOVELTY_ACCEPTED
+
+## REJECTION_REASON
+N/A
+
+## SECTIONS_AT_ISSUE
+NONE
+
+Canonical rejected response:
+## NOVELTY_VERDICT
+NOVELTY_REJECTED
+
+## REJECTION_REASON
+<one short reason>
+
+## SECTIONS_AT_ISSUE
+<NONE or canonical comma-separated section names>
 
 ## Response format
 
-Return exactly these sections, each starting with `## SECTION_NAME`.
+Return exactly these sections, in this exact order.
 Do not use markdown code fences.
 
 ## NOVELTY_VERDICT
@@ -22,4 +64,14 @@ Write exactly one of:
 - NOVELTY_REJECTED
 
 ## REJECTION_REASON
-If and only if you returned `NOVELTY_REJECTED`, explain precisely which parent idea was merely repeated or why the supposed synthesis is not actually new.
+If and only if you returned `NOVELTY_REJECTED`, explain exactly which parent idea was merely repeated, which parent's contribution was lost, or why the claimed synthesis is not actually supported.
+If you returned `NOVELTY_ACCEPTED`, write exactly:
+N/A
+
+## SECTIONS_AT_ISSUE
+If you returned `NOVELTY_REJECTED`, write either:
+- NONE
+or
+- a comma-separated list of canonical section names whose content is the source of the novelty failure
+If you returned `NOVELTY_ACCEPTED`, write exactly:
+NONE

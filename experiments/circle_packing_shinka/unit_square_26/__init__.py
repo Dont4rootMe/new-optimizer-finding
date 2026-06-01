@@ -12,6 +12,7 @@ from experiments.circle_packing_shinka._runtime.validation import (
     coerce_run_output,
     format_centers_string,
     save_extra_artifact,
+    validate_circle_count,
     validate_circle_packing,
 )
 
@@ -35,12 +36,19 @@ class UnitSquare26CirclePackingExperiment:
         implementation_path = str(organism_path / "implementation.py")
         run_packing, module_path = load_run_packing(implementation_path)
         centers, radii, reported_sum = coerce_run_output(run_packing())
+        expected_num_circles = int(cfg.validation.num_circles)
+
+        validate_circle_count(
+            centers=centers,
+            radii=radii,
+            num_circles=expected_num_circles,
+        )
 
         validate_circle_packing(
             centers=centers,
             radii=radii,
             reported_sum=reported_sum,
-            num_circles=int(cfg.validation.num_circles),
+            num_circles=expected_num_circles,
             square_size=float(cfg.validation.square_size),
             atol=float(cfg.validation.validation_atol),
         )

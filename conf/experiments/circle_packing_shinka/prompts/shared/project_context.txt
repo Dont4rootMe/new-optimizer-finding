@@ -1,8 +1,10 @@
 You are participating in an automated evolutionary search for better circle-packing organisms.
 
-Task:
-- Place 26 circles in the unit square [0, 1] x [0, 1]
-- Maximize the sum of radii
+Task context:
+- evolve better organisms for this experiment's geometric packing task
+- explicit task contract: every valid organism must return exactly 26 total circles in the unit square
+- maximize the score implied by the supplied task prompt and organism genes
+- do not introduce hidden evaluator constants, additional target counts, exact shapes, or closed-form answers beyond this explicit 26-circle unit-square contract unless they appear in the operator prompt or the supplied genes
 
 ## Primary research artifact
 
@@ -35,27 +37,17 @@ In mutation and crossover, evolutionary sampling already proposes a child-side g
 That draft is the main object you must work on.
 Parent code and parent lineage are reference context only.
 
-## Runtime contract
+## Implementation interface discipline
 
-The final program must define:
+The concrete implementation interface is supplied by the implementation and repair prompts.
+Do not copy hidden task facts into implementation reasoning.
+If a target count, shape, feasibility rule, or exact formula is required, it must come from the supplied genes or operator prompt, not from shared prompt doctrine.
 
-`run_packing() -> (centers, radii, reported_sum)`
-
-Required output:
-- `centers.shape == (26, 2)`
-- `radii.shape == (26,)`
-- `reported_sum == sum(radii)`
-
-Evaluator rules:
-- all values finite
-- all radii non-negative
-- every circle fully inside the square
-- no overlaps
-- `reported_sum` matches `sum(radii)` within `1e-6`
-
-Score:
-- raw sum of radii
-- higher is better
+Optimization principle:
+- maximize score subject to validity
+- validity is a hard constraint, not the optimization target by itself
+- do not prefer a safe low-score construction over a feasible high-score construction merely because it is simpler
+- implementations and repairs should preserve strong feasible structure whenever possible
 
 ## Hard constraints
 
@@ -63,44 +55,61 @@ Score:
 - No file I/O, subprocesses, network calls, or external solvers
 - Keep the program deterministic
 - Return only the required tuple from `run_packing()`
-- In implementation stage, return only final Python code
+- In implementation stage, return only the implementation artifact required by that prompt
 
 ## Genetic code rule
 
 Think in genes first, implementation second.
 
-Each gene must express one concrete idea.
+For `circle_packing_shinka`, `## CORE_GENES` is sectioned.
+The section names and their order are defined by the genome section schema artifact supplied to the generation prompts.
+
+Each gene must live in the correct genome section.
 Do not replace the idea set with a hand-crafted answer.
 Do not treat parent code as the truth.
 Do not skip idea formation and jump straight to coordinates.
 
-Genes and CHANGE_DESCRIPTION are idea-level artifacts. They must NEVER contain:
-- Python code, code snippets, or inline code
-- Specific variable names, function calls, or numpy operations
-- Hardcoded numeric constants (e.g., "learning_rate = 0.15", "grid_dim = 6")
-- Concrete implementation recipes disguised as ideas
+The section schema is authoritative about what kind of content belongs in each section.
+If a section allows only plain language, mathematical descriptions, or pseudocode-like descriptions, obey that restriction.
+If a section allows localized procedural detail, numeric parameterization, or a narrow local code-like sketch, keep that content local to the section and local to the mechanism it describes.
 
-They MAY contain:
-- High-level algorithmic ideas and principles
-- Mathematical formulas and geometric reasoning
-- Brief pseudocode using plain language (e.g., "for each pair of overlapping circles, push them apart proportionally to overlap")
-- Qualitative parameter descriptions (e.g., "use a small damping factor")
+One coherent hypothesis may require coordinated edits across multiple sections.
+Section boundaries organize the genome; they do not force every good change to stay one-section-local.
+If a score-bearing mechanism couples multiple sections, keep those sections coordinated.
+
+Each organism should define a plausible causal path from its sectioned ideas to a higher packing score.
+Decorative section changes that do not alter the effective search or packing behavior are not enough.
+Textual novelty is not the same as phenotype novelty.
+Score-bearing novelty should plausibly change the expected packing family, radius regime, conflict dynamics, or another behavior-level operating regime.
+A new coefficient inside the same one-radius layout and repair regime is not a strong novelty claim by default.
+Uniform-radii organisms are allowed only when the genes explain why one shared radius should outperform a role-based or non-uniform regime for that packing family.
+Noise-like ingredients are supporting detail, not a valid main novelty by themselves.
+
+Lean-genome principle:
+- a stronger organism is not the one with the most section content
+- prefer the smallest set of genes that defines a real score-bearing mechanism
+- avoid decorative elaboration, redundant restatements, and explanatory padding
+
+Implementation realism:
+- a good design should not only be coherent on paper, but should plausibly admit a compact faithful deterministic implementation
+- avoid designs whose success depends on too many loosely specified interacting mechanisms
+
+`CHANGE_DESCRIPTION` remains a plain-language idea-level artifact:
+- it must summarize the single main novelty of the new organism
+- it is later written into lineage
+- it should describe the unified idea of the child, not a changelog of tiny edits
+- it must not contain Python code, code-like snippets, or a full implementation recipe
+
+No genome section may contain a full end-to-end implementation or a full `implementation.py`.
+Local procedural detail is allowed only when it fits the section description and remains narrowly scoped.
 
 ## Gene atomicity
 
-Each gene must express exactly one independent, testable idea.
+Each bullet within a genome section must express exactly one independent, testable idea.
 
 Atomicity test:
 - If removing gene A makes gene B meaningless, they belong in ONE gene.
 - If gene A and gene B could independently be true or false, they MUST be separate genes.
-- If a gene contains "and" or "with" joining two distinct mechanisms, split it.
-
-Bad: "Use hexagonal grid with iterative overlap repair"
-  (two independent ideas bundled — layout choice and repair strategy)
-Good: "Use hexagonal grid as initial circle layout" + "Apply iterative pairwise overlap repair after placement"
-
-Bad: "Sort circles by radius and use greedy placement"
-  (sorting strategy and placement strategy are independent)
-Good: "Sort circles by decreasing radius before placement" + "Place each circle greedily at the position maximizing remaining space"
+- If a gene contains two distinct mechanisms joined by "and" or "with", split it unless they are inseparable parts of one local idea.
 
 Why this matters: evolution operates on genes. If one gene contains two ideas, removing it loses both. Crossover inheriting it brings both. Coarse genes break the evolutionary mechanism.

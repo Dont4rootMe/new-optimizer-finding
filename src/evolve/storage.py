@@ -9,13 +9,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.organisms.genetic_code_format import (
+    ParsedGeneticCode,
+    parse_genetic_code_text as parse_structured_genetic_code_text,
+)
 from src.evolve.types import ManifestEntry, OrganismMeta
 
 _GENERATION_RE = re.compile(r"^gen_(\d+)$")
-_SECTION_RE = re.compile(
-    r"^##\s+(CORE_GENES|INTERACTION_NOTES|COMPUTE_NOTES)\s*$",
-    re.MULTILINE,
-)
 
 
 def utc_now_iso() -> str:
@@ -185,6 +185,7 @@ def write_population_state(
     best_simple_score: float | None = None,
     inflight_seed: dict[str, Any] | None = None,
     inflight_generation: dict[str, Any] | None = None,
+    bandit_state: dict[str, Any] | None = None,
 ) -> Path:
     payload = {
         "current_generation": int(generation),
@@ -195,6 +196,7 @@ def write_population_state(
         "relationship_history": _build_relationship_history(population_root),
         "inflight_seed": inflight_seed,
         "inflight_generation": inflight_generation,
+        "bandit_state": bandit_state if isinstance(bandit_state, dict) else None,
     }
     return write_json(population_state_path(population_root), payload)
 
@@ -288,35 +290,108 @@ def read_population_state(population_root: str | Path) -> dict[str, Any] | None:
     }
 
 
+def _render_gene_entry(text: object) -> str:
+    lines = str(text).strip().splitlines()
+    if not lines:
+        return ""
+    rendered = [f"- {lines[0].strip()}"]
+    rendered.extend(f"  {line.rstrip()}" for line in lines[1:])
+    return "\n".join(rendered)
+
+
+def _section_entry_texts(section: object) -> list[str]:
+    if isinstance(section, dict):
+        entries = section.get("entries", [])
+    else:
+        entries = getattr(section, "entries", [])
+    if not isinstance(entries, (list, tuple)):
+        return []
+    texts: list[str] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            value = entry.get("text", "")
+        else:
+            value = getattr(entry, "text", entry)
+        cleaned = str(value).strip()
+        if cleaned:
+            texts.append(cleaned)
+    return texts
+
+
+def _section_name(section: object) -> str:
+    if isinstance(section, dict):
+        return str(section.get("name", "")).strip()
+    return str(getattr(section, "name", "")).strip()
+
+
+def _render_sectioned_core_genes(sections_payload: object) -> str | None:
+    if not isinstance(sections_payload, (list, tuple)):
+        return None
+    lines = ["## CORE_GENES"]
+    rendered_any = False
+    for section in sections_payload:
+        name = _section_name(section)
+        if not name:
+            continue
+        rendered_any = True
+        lines.append(f"### {name}")
+        for entry_text in _section_entry_texts(section):
+            rendered = _render_gene_entry(entry_text)
+            if rendered:
+                lines.append(rendered)
+        lines.append("")
+    if not rendered_any:
+        return None
+    return "\n".join(lines).rstrip()
+
+
 def _render_genetic_code(genetic_code: dict[str, Any]) -> str:
+    sectioned_core = _render_sectioned_core_genes(genetic_code.get("core_gene_sections"))
     core_genes = genetic_code.get("core_genes", [])
     if not isinstance(core_genes, list):
         core_genes = []
     interaction_notes = str(genetic_code.get("interaction_notes", "")).strip()
     compute_notes = str(genetic_code.get("compute_notes", "")).strip()
-    gene_lines = "\n".join(f"- {str(gene).strip()}" for gene in core_genes if str(gene).strip())
+    change_description = str(genetic_code.get("change_description", "")).strip()
+    gene_lines = "\n".join(_render_gene_entry(gene) for gene in core_genes if str(gene).strip())
+    core_block = sectioned_core if sectioned_core is not None else f"## CORE_GENES\n{gene_lines}"
     return (
-        "## CORE_GENES\n"
-        f"{gene_lines}\n\n"
+        f"{core_block}\n\n"
         "## INTERACTION_NOTES\n"
         f"{interaction_notes}\n\n"
         "## COMPUTE_NOTES\n"
-        f"{compute_notes}\n"
+        f"{compute_notes}\n\n"
+        "## CHANGE_DESCRIPTION\n"
+        f"{change_description}\n"
     )
 
 
-def _parse_genetic_code_sections(text: str) -> dict[str, str]:
-    matches = list(_SECTION_RE.finditer(text))
-    if not matches:
-        return {}
-
-    sections: dict[str, str] = {}
-    for idx, match in enumerate(matches):
-        key = match.group(1)
-        start = match.end()
-        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
-        sections[key] = text[start:end].strip()
-    return sections
+def _genetic_code_payload(parsed: ParsedGeneticCode) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "format_kind": parsed.format_kind,
+        "interaction_notes": parsed.interaction_notes,
+        "compute_notes": parsed.compute_notes,
+        "change_description": parsed.change_description,
+    }
+    if parsed.format_kind == "sectioned":
+        core_gene_sections = [
+            {
+                "name": section.name,
+                "entries": [entry.text for entry in section.entries],
+            }
+            for section in parsed.core_gene_sections or ()
+        ]
+        flattened_core_genes = [
+            entry
+            for index, section in enumerate(core_gene_sections)
+            for entry in section["entries"]
+            if not (index == len(core_gene_sections) - 1 and entry == "None.")
+        ]
+        payload["core_gene_sections"] = core_gene_sections
+        payload["core_genes"] = flattened_core_genes
+    else:
+        payload["core_genes"] = list(parsed.legacy_core_genes or ())
+    return payload
 
 
 def write_genetic_code(path: str | Path, genetic_code: dict[str, Any]) -> Path:
@@ -326,34 +401,26 @@ def write_genetic_code(path: str | Path, genetic_code: dict[str, Any]) -> Path:
     return out
 
 
+def parse_genetic_code_text(
+    text: str,
+    *,
+    expected_section_names: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    """Parse canonical `genetic_code.md` text into the shared dict payload."""
+
+    parsed = parse_structured_genetic_code_text(str(text), expected_section_names=expected_section_names)
+    return _genetic_code_payload(parsed)
+
+
 def read_genetic_code(path: str | Path) -> dict[str, Any]:
     target = Path(path)
     if not target.exists():
         raise FileNotFoundError(f"Canonical genetic code is missing at {target}")
 
-    sections = _parse_genetic_code_sections(target.read_text(encoding="utf-8"))
-    required_sections = ("CORE_GENES", "INTERACTION_NOTES", "COMPUTE_NOTES")
-    missing_sections = [section for section in required_sections if section not in sections]
-    if missing_sections:
-        missing = ", ".join(missing_sections)
-        raise ValueError(f"Canonical genetic code at {target} is malformed; missing required sections: {missing}")
-
-    core_genes_raw = sections.get("CORE_GENES", "")
-    core_genes: list[str] = []
-    for line in core_genes_raw.splitlines():
-        cleaned = line.strip()
-        if cleaned.startswith("- "):
-            cleaned = cleaned[2:].strip()
-        if cleaned:
-            core_genes.append(cleaned)
-    if not core_genes:
-        raise ValueError(f"Canonical genetic code at {target} must contain at least one CORE_GENES bullet.")
-
-    return {
-        "core_genes": core_genes,
-        "interaction_notes": sections.get("INTERACTION_NOTES", ""),
-        "compute_notes": sections.get("COMPUTE_NOTES", ""),
-    }
+    try:
+        return parse_genetic_code_text(target.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise ValueError(f"Canonical genetic code at {target} is malformed: {exc}") from exc
 
 
 def write_lineage(path: str | Path, lineage: list[dict[str, Any]]) -> Path:
@@ -410,6 +477,30 @@ def _optional_str_field(payload: dict[str, Any], field_name: str) -> str | None:
     return text or None
 
 
+def _coerce_token_usage_payload(raw: Any) -> dict[str, dict[str, int]]:
+    """Coerce a persisted ``token_usage`` blob into ``{route: {metric: int}}``.
+
+    Missing or malformed payloads (legacy organism.json predating token
+    accounting) coerce to an empty dict so resume stays non-breaking.
+    """
+
+    if not isinstance(raw, dict):
+        return {}
+    coerced: dict[str, dict[str, int]] = {}
+    for route, counts in raw.items():
+        if not isinstance(counts, dict):
+            continue
+        route_bucket: dict[str, int] = {}
+        for metric, value in counts.items():
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                route_bucket[str(metric)] = int(value)
+        if route_bucket:
+            coerced[str(route)] = route_bucket
+    return coerced
+
+
 def _coerce_organism_meta_payload(
     payload: dict[str, Any],
     *,
@@ -447,11 +538,13 @@ def _coerce_organism_meta_payload(
         "llm_provider": str(payload.get("llm_provider", payload.get("provider", ""))),
         "provider_model_id": str(payload.get("provider_model_id", payload.get("model_name", ""))),
         "model_name": str(payload.get("model_name", payload.get("provider_model_id", ""))),
+        "llm_pipeline_id": str(payload.get("llm_pipeline_id", "")),
         "prompt_hash": str(payload.get("prompt_hash", "")),
         "seed": int(payload.get("seed", 0)),
         "pipeline_state": str(payload.get("pipeline_state", "")),
         "error_msg": _optional_str_field(payload, "error_msg"),
         "planned_phase_evaluations": dict(payload.get("planned_phase_evaluations", {})),
+        "token_usage": _coerce_token_usage_payload(payload.get("token_usage", {})),
     }
 
 
@@ -502,11 +595,13 @@ def read_organism_meta(path: str | Path) -> OrganismMeta:
         llm_provider=canonical["llm_provider"],
         provider_model_id=canonical["provider_model_id"],
         model_name=canonical["model_name"],
+        llm_pipeline_id=canonical["llm_pipeline_id"],
         prompt_hash=canonical["prompt_hash"],
         seed=canonical["seed"],
         pipeline_state=canonical["pipeline_state"],
         error_msg=canonical["error_msg"],
         planned_phase_evaluations=canonical["planned_phase_evaluations"],
+        token_usage=canonical["token_usage"],
     )
 
 

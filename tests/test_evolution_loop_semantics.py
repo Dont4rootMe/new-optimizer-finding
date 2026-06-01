@@ -3,23 +3,26 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 import time
 from pathlib import Path
 
+import pytest
 from omegaconf import OmegaConf
 
 from src.evolve.evolution_loop import EvolutionLoop
 from src.evolve.orchestrator import DEFAULT_EVAL_ENTRYPOINT_MODULE, EvolverOrchestrator
-from src.evolve.types import OrganismMeta
+from src.evolve.types import OrganismMeta, PlannedOrganismCreation
 from src.organisms.organism import save_organism_artifacts
 
 
 def _cfg(tmp_path: Path, **overrides) -> object:
-    islands_dir = tmp_path / "islands"
-    islands_dir.mkdir(parents=True, exist_ok=True)
-    (islands_dir / "gradient_methods.txt").write_text("First-order ideas", encoding="utf-8")
-    (islands_dir / "second_order.txt").write_text("Curvature-aware ideas", encoding="utf-8")
+    seed_program_path = tmp_path / "_baseline.py"
+    seed_program_path.write_text(
+        "import numpy as np\n\ndef run_optimizer(*args, **kwargs):\n    return {}\n",
+        encoding="utf-8",
+    )
 
     payload = {
         "seed": 123,
@@ -50,6 +53,7 @@ def _cfg(tmp_path: Path, **overrides) -> object:
         "evolver": {
             "resume": False,
             "max_generations": 1,
+            "max_organism_creations": False,
             "_eval_entrypoint_module": "tests.fixtures.fake_eval",
             "creation": {
                 "max_attempts_to_create_organism": 1,
@@ -58,12 +62,15 @@ def _cfg(tmp_path: Path, **overrides) -> object:
                 "max_parallel_organisms": 1,
             },
             "islands": {
-                "dir": str(islands_dir),
-                "seed_organisms_per_island": 3,
+                "mode": "from_seed",
+                "seed_program_path": str(seed_program_path),
+                "island_ids": ["gradient_methods", "second_order"],
+                "seeds_per_island": 3,
                 "max_organisms_per_island": 3,
             },
             "prompts": {
                 "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
+                "genome_schema": "conf/experiments/optimization_survey/prompts/shared/genome_schema.txt",
                 "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
                 "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
                 "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
@@ -76,7 +83,7 @@ def _cfg(tmp_path: Path, **overrides) -> object:
                 "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
                 "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                 "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
-                "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                "implementation_template": "conf/experiments/optimization_survey/prompts/shared/template.txt",
                 "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
                 "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
             },
@@ -232,6 +239,25 @@ def test_orchestrator_defaults_to_run_one_and_reads_queue_sizes(tmp_path: Path) 
         assert orchestrator.cpu_parallel_jobs == 3
     finally:
         orchestrator.close()
+
+
+def test_orchestrator_rejects_grouped_route_gpu_overlap_with_evaluation_pool(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        resources={"evaluation": {"gpu_ranks": [4], "cpu_parallel_jobs": 3}},
+        api_platforms={
+            "ollama_qwen35_122b": {
+                "_target_": "api_platforms.ollama_qwen35_122b.platform.build_platform",
+                "base_url": "http://127.0.0.1:12434/api",
+                "gpu_ranks": [[0, 1, 2], [3, 4, 5]],
+                "max_concurrency": 3,
+            }
+        },
+        evolver={"llm": {"route_weights": {"ollama_qwen35_122b": 1.0}, "seed": 123}},
+    )
+
+    with pytest.raises(ValueError, match=r"overlapping ranks: \[4\]"):
+        EvolverOrchestrator(cfg)
 
 
 def test_deterministic_operator_selection_allocates_exact_counts(tmp_path: Path) -> None:
@@ -390,6 +416,68 @@ def test_weighted_rule_parent_counts_accumulate_within_generation(tmp_path: Path
     assert snapshots == [{}, {"a": 1}, {"a": 2}]
 
 
+def test_seed_planning_caps_total_organism_creations(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        evolver={
+            "max_organism_creations": 3,
+            "islands": {
+                "seeds_per_island": 2,
+            },
+        },
+    )
+    loop = EvolutionLoop(cfg)
+
+    planned = loop._plan_seed_population()
+
+    assert len(planned) == 3
+    assert loop._organism_creation_attempt_count() == 3
+
+
+def test_evolution_loop_requires_at_least_one_stop_limit(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        evolver={
+            "max_generations": False,
+            "max_organism_creations": False,
+        },
+    )
+
+    with pytest.raises(ValueError, match="max_generations or evolver.max_organism_creations"):
+        EvolutionLoop(cfg)
+
+
+def test_offspring_planning_uses_remaining_total_organism_creation_budget(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        evolver={
+            "max_organism_creations": 5,
+            "islands": {
+                "seeds_per_island": 2,
+            },
+            "reproduction": {
+                "offspring_per_generation": 5,
+                "operator_weights": {
+                    "within_island_crossover": 0.0,
+                    "inter_island_crossover": 0.0,
+                    "mutation": 1.0,
+                },
+            },
+        },
+    )
+    loop = EvolutionLoop(cfg)
+    seed_plans = loop._plan_seed_population()
+    parent = _make_organism(tmp_path, "parent", "gradient_methods")
+    active = {"gradient_methods": [parent], "second_order": []}
+    loop.generation = 1
+
+    planned = loop._plan_offspring_generation(active)
+
+    assert len(seed_plans) == 4
+    assert len(planned) == 1
+    assert loop._organism_creation_attempt_count() == 5
+
+
 def test_softmax_species_sampling_uses_route_specific_temperatures(tmp_path: Path, monkeypatch) -> None:
     cfg = _cfg(tmp_path)
     cfg.evolver.reproduction.offspring_per_generation = 3
@@ -501,7 +589,7 @@ def test_max_parallel_organisms_bounds_seed_parallelism(tmp_path: Path, monkeypa
                 "max_parallel_organisms": 2,
             },
             "islands": {
-                "seed_organisms_per_island": 4,
+                "seeds_per_island": 4,
             },
         },
     )
@@ -510,8 +598,8 @@ def test_max_parallel_organisms_bounds_seed_parallelism(tmp_path: Path, monkeypa
     max_active = 0
     lock = threading.Lock()
 
-    def fake_generate_seed_organism(*, island, organism_id, generation, organism_dir):
-        del island, organism_id, generation, organism_dir
+    def fake_materialize_seed_from_file(*, island, organism_id, generation, organism_dir, source_path, pipeline_state_callback=None):
+        del island, organism_id, generation, organism_dir, source_path, pipeline_state_callback
         nonlocal active, max_active
         with lock:
             active += 1
@@ -521,8 +609,137 @@ def test_max_parallel_organisms_bounds_seed_parallelism(tmp_path: Path, monkeypa
             active -= 1
         return _make_organism(tmp_path, f"seed_{time.time_ns()}", "gradient_methods")
 
-    monkeypatch.setattr(loop.generator, "generate_seed_organism", fake_generate_seed_organism)
+    monkeypatch.setattr(loop.generator, "materialize_seed_from_file", fake_materialize_seed_from_file)
 
     asyncio.run(loop._seed_initial_population())
 
     assert max_active <= 2
+
+
+def _write_token_organism(
+    population_root: Path,
+    *,
+    generation: int,
+    island_id: str,
+    organism_id: str,
+    tokens_by_route: dict[str, int],
+) -> None:
+    """Write a minimal organism.json carrying ``token_usage`` under the glob layout.
+
+    ``_tokens_spent_per_route`` only reads the ``token_usage`` field, so a
+    minimal payload is enough to exercise the per-model token-budget stop.
+    """
+
+    org_dir = population_root / f"gen_{generation:04d}" / f"island_{island_id}" / f"org_{organism_id}"
+    org_dir.mkdir(parents=True, exist_ok=True)
+    usage = {
+        route: {
+            "prompt_tokens": 0,
+            "completion_tokens": int(total),
+            "total_tokens": int(total),
+            "calls": 1,
+        }
+        for route, total in tokens_by_route.items()
+    }
+    (org_dir / "organism.json").write_text(
+        json.dumps({"organism_id": organism_id, "token_usage": usage}),
+        encoding="utf-8",
+    )
+
+
+def test_max_tokens_per_model_parses_false_and_int(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        evolver={
+            "max_tokens_per_model": {
+                "ollama_gemma4_31b": False,
+                "ollama_qwen35_122b": 500000,
+                "disabled_minus_one": -1,
+            }
+        },
+    )
+    loop = EvolutionLoop(cfg)
+    # false / -1 drop out; only the real integer cap survives.
+    assert loop.max_tokens_per_model == {"ollama_qwen35_122b": 500000}
+
+
+def test_max_tokens_per_model_rejects_true(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path, evolver={"max_tokens_per_model": {"ollama_gemma4_31b": True}})
+    with pytest.raises(ValueError, match="max_tokens_per_model"):
+        EvolutionLoop(cfg)
+
+
+def test_token_budget_absent_is_inert(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path, evolver={"max_tokens_per_model": {"ollama_gemma4_31b": False}})
+    loop = EvolutionLoop(cfg)
+    _write_token_organism(
+        loop.population_root,
+        generation=1,
+        island_id="gradient_methods",
+        organism_id="a",
+        tokens_by_route={"ollama_gemma4_31b": 10**9},
+    )
+    # All-false config => no cap installed, never stops on tokens.
+    assert loop.max_tokens_per_model == {}
+    assert loop._token_budget_stop_reason() is None
+    assert loop._stop_reason_before_generation(loop.generation + 1) is None
+
+
+def test_token_budget_stops_when_route_exceeds(tmp_path: Path) -> None:
+    cfg = _cfg(
+        tmp_path,
+        evolver={
+            "max_generations": 100,
+            "max_tokens_per_model": {
+                "ollama_gemma4_31b": 1000,
+                "ollama_qwen35_122b": False,
+            },
+        },
+    )
+    loop = EvolutionLoop(cfg)
+    # Nothing spent yet -> no stop.
+    assert loop._token_budget_stop_reason() is None
+
+    _write_token_organism(
+        loop.population_root,
+        generation=1,
+        island_id="gradient_methods",
+        organism_id="a",
+        tokens_by_route={"ollama_gemma4_31b": 600, "ollama_qwen35_122b": 9_999_999},
+    )
+    _write_token_organism(
+        loop.population_root,
+        generation=1,
+        island_id="gradient_methods",
+        organism_id="b",
+        tokens_by_route={"ollama_gemma4_31b": 500},
+    )
+
+    # gemma total = 1100 >= 1000 -> stop; qwen is uncapped (false) so ignored.
+    reason = loop._token_budget_stop_reason()
+    assert reason is not None
+    assert "ollama_gemma4_31b" in reason
+    assert "ollama_qwen35_122b" not in reason
+    # The generation-boundary stop check surfaces the same reason.
+    assert loop._stop_reason_before_generation(loop.generation + 1) == reason
+
+
+def test_tokens_spent_per_route_sums_across_organisms(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path, evolver={"max_tokens_per_model": {"ollama_gemma4_31b": 10**9}})
+    loop = EvolutionLoop(cfg)
+    _write_token_organism(
+        loop.population_root,
+        generation=1,
+        island_id="gradient_methods",
+        organism_id="a",
+        tokens_by_route={"ollama_gemma4_31b": 100, "ollama_qwen35_122b": 200},
+    )
+    _write_token_organism(
+        loop.population_root,
+        generation=2,
+        island_id="second_order",
+        organism_id="c",
+        tokens_by_route={"ollama_gemma4_31b": 50},
+    )
+    spent = loop._tokens_spent_per_route()
+    assert spent == {"ollama_gemma4_31b": 150, "ollama_qwen35_122b": 200}

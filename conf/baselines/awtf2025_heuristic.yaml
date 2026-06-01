@@ -1,0 +1,75 @@
+# @package _global_
+# ``_global_`` promotes everything in this file (and its `defaults:`
+# inheritance) to the root of the composed config. Without this directive
+# Hydra nests the contents under ``baselines.*`` because the file lives in
+# ``conf/baselines/``, which breaks ``src/baselines/shinka/run.py`` —
+# it reads ``cfg.shinka_evolve`` / ``cfg.evolver.llm.route_weights`` at the
+# top level.
+defaults:
+  - /config_awtf2025_heuristic
+  - _self_
+
+# Route-weight override for the baseline run only. The shipped main config
+# keeps both ``ollama_gemma4_31b`` and ``ollama_qwen35_122b`` enabled so
+# the evolutionary loop's pipeline bandit can compare them. For this
+# baseline we want the entire ShinkaEvolve stack on qwen 122B only — set
+# gemma's weight to 0 so :func:`build_shinka_model_urls` filters it out
+# and ShinkaEvolve sees only qwen URLs (one per launched ollama
+# instance).
+#
+# Note: the ollama runtime starter (``lib_runtime.sh``) iterates every
+# route in ``api_platforms`` regardless of weight, so the two gemma
+# instances on GPUs 6 and 7 will still start; they just won't receive
+# any traffic. To reclaim those GPUs for qwen, also override
+# ``api_platforms.ollama_qwen35_122b.gpu_ranks`` (e.g. ``[[0,1,2,3],
+# [4,5,6,7]]``) and remove gemma from the defaults list.
+evolver:
+  llm:
+    route_weights:
+      ollama_gemma4_31b: 0.0
+      ollama_qwen35_122b: 1.0
+
+shinka_evolve:
+  enabled: true
+  initial_program_path: experiments/awtf2025_heuristic/_baselines/shinka/initial_program.py
+  evaluate_program_path: experiments/awtf2025_heuristic/_baselines/shinka/evaluate.py
+  results_dir: ${oc.env:SHINKA_RESULTS_DIR,./shinka_runs/awtf2025_heuristic}
+  num_generations: 75
+  num_islands: 4
+  # 2 qwen instances × 2 per-instance concurrency = 4 parallel evaluators.
+  # Routed to ``ShinkaEvolveRunner.max_evaluation_jobs`` in shinka 0.0.6+
+  # (and to ``LocalJobConfig.max_parallel_jobs`` on legacy releases).
+  max_parallel_jobs: 4
+  # LLM-proposal concurrency knob added in shinka 0.0.6; capped here to
+  # match the number of available evaluator slots so we don't pile up
+  # half-finished proposals against the 4 ollama request slots. The
+  # upstream default is 6. Ignored on legacy shinka.
+  max_proposal_jobs: 4
+  llm_dynamic_selection: ucb1
+  cost_aware_coef: 0.0
+  llm_models: null
+  embedding_model: null
+  # Path (resolved against the project root) to the system prompt the
+  # ShinkaEvolve LLM sees on every patch attempt. The upstream default
+  # is a generic "improve the program" message which leaves the model
+  # to reverse-engineer the task from a failing program; the first
+  # run of this baseline produced 0/78 correct programs because of
+  # exactly that. The file lives under the isolated ``_baselines/``
+  # tree so the main evolutionary loop is unaffected.
+  task_sys_msg_path: experiments/awtf2025_heuristic/_baselines/shinka/task_sys_msg.txt
+  # Alternative: paste a multi-line string directly. When set the
+  # inline value wins over ``task_sys_msg_path``.
+  task_sys_msg: null
+  # Optional per-model token-budget stop. Keyed by the model id ShinkaEvolve
+  # reports (the bare provider_model_id, NOT our route_id). ``false`` (the
+  # default for every model) disables the cap; an integer caps cumulative
+  # input+output tokens for that model, stopping the run as soon as it is hit.
+  # Best-effort: ShinkaEvolve exposes no native per-model budget, so we wrap its
+  # LLM client to count tokens; on a version mismatch the run logs a warning and
+  # proceeds without the cap. See src/baselines/shinka/run.py. Note this awtf
+  # baseline zeroes gemma's route weight, so only qwen is actually queried; the
+  # gemma entry is listed for completeness.
+  max_tokens_per_model:
+    "qwen3.5:122b": false
+    "gemma4:31b": false
+  extra_runner_kwargs: {}

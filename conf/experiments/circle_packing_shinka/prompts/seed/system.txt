@@ -1,40 +1,86 @@
-Design a brand-new circle-packing organism from scratch.
+You are designing one brand-new circle-packing organism from scratch.
 
 Priority order:
-1. invent a coherent idea set
-2. express that idea set as genes
+1. invent a coherent sectioned genetic code with a plausible high-score mechanism
+2. ensure each idea is placed in the correct genome section
 3. summarize the single defining novelty
 
-Do:
-- think in terms of ideas, assumptions, and constructive principles
-- make the genes precise enough that they can later be implemented faithfully
-- produce one organism with one coherent research direction
+Think in genes first, implementation second.
 
-Do not:
-- jump directly to a finished placement recipe
-- write genes that are just vague labels
-- rely on parent-like assumptions, because this is a new seed
-- treat a hand-tuned arrangement as a substitute for a real idea
-- include Python code, variable names, or hardcoded constants in genes or summaries
+The genome is sectioned. Every gene must live in the correct section of `## CORE_GENES`.
+The section schema is authoritative. Use each section only for the kind of content its description allows.
+
+Important:
+- the organism must target exactly 26 total circles in the unit square
+- the goal is still to design an organism at the level of ideas, assumptions, constructive principles, and local procedures
+- the organism must define a plausible causal route from initial geometry through radius, growth, repair, and control to a high valid score
+- prefer a lean organism with one strong mechanism over a rich organism with many loosely coupled refinements
+- avoid introducing more than one main control idea, one main repair idea, and one main growth idea unless tighter coupling is essential
+- avoid designs that make implementation solve a construction puzzle; any row counts, reflection rules, symmetry generators, or role multiplicities must arithmetically and unambiguously produce exactly 26 circles
+- before finalizing any explicit count list, trimming rule, reflection rule, or role multiplicity, self-check the arithmetic in the gene text; if the sum or multiplicity is not exactly 26, choose a simpler generator
+- do not include scratch arithmetic, abandoned alternatives, or self-corrections in the final genes; if a count check fails, replace the generator before answering
+- never use "5 by 5 grid plus center" as a 26-center construction because the center point is already present in the grid
+- for a structural/symmetric island seed, a count-safe fallback is an indexed 6 by 5 slot box with four named corner slots removed; state the arithmetic as "30 minus 4 equals 26" if you use that fallback
+- a count-safe fallback is still a fallback baseline, not a self-justifying structural hypothesis; if you keep a one-radius indexed-slot regime, explain why that regime should beat a role-based or non-uniform alternative
+- do not claim the initial state has no overlaps unless the generator, radius policy, and parameters make that true without duplicate centers or impossible spacing
+- if `OPTIONAL_CODE_SKETCH` describes the generator, it must implement the same generator named in `INIT_GEOMETRY`; otherwise use `- None.`
+- specify one directly executable deterministic path, not a list of alternatives, fallback branches, or exploratory "try this then maybe that" choices
+- state one intended packing family and one intended radius regime; if the organism keeps uniform radii, justify why that regime should win instead of a role-based or non-uniform one
+- do not rely on generic one-radius layout plus generic repair as an implicit safe default; the genes should explain what makes this organism's regime score-bearing
+- each required section should contribute to that route
+- section completeness alone is not enough; each required section should contribute to the effective packing behavior
+- avoid organisms whose sections are formally coherent but behaviorally weak, generic, or decorative
+- do not fill sections with generic filler text; every non-optional section should change the effective packing behavior
+- do not jump directly to a finished placement recipe
+- do not replace the genetic code with a hand-tuned solved arrangement
+- do not treat the schema as decoration; it defines the structure of the genome
+- keep genes atomic within each section: one independent, testable idea per bullet
+- if a section allows local procedural detail or a local code-like sketch, keep it narrow and local to that section only
+- no section may contain a full end-to-end implementation
+- `CHANGE_DESCRIPTION` must remain plain-language only and must not contain code
 
 ## Response format
 
-Return the following sections, each starting with `## SECTION_NAME`.
-Do NOT use markdown code fences.
+Return the structured artifact directly.
+The first line of your answer must be `## CORE_GENES`.
+Do not add analysis, commentary, or prefatory text before the required sections.
+Do not use markdown code fences anywhere in the response.
+The response is invalid if it stops after `## CORE_GENES`; always continue with `## INTERACTION_NOTES`, `## COMPUTE_NOTES`, and `## CHANGE_DESCRIPTION`.
+
+Return exactly these top-level sections, in this exact order:
 
 ## CORE_GENES
-At least 3 bullets, at most 7.
-Each bullet is one atomic idea (one independent, testable concept per bullet).
-If a bullet contains two independent mechanisms joined by "and" or "with", split it into two bullets.
-Write ideas in plain language or math. No Python code, no variable names, no hardcoded constants.
+Inside `## CORE_GENES`, return exactly these subsection headings, in this exact order:
+
+### INIT_GEOMETRY
+### RADIUS_POLICY
+### EXPANSION_POLICY
+### CONFLICT_MODEL
+### REPAIR_POLICY
+### CONTROL_POLICY
+### PARAMETERS
+### OPTIONAL_CODE_SKETCH
+
+Rules for subsection bodies:
+- `INIT_GEOMETRY` through `PARAMETERS` must each contain at least one `- ` bullet
+- `OPTIONAL_CODE_SKETCH` must contain either one or more `- ` bullets, or exactly one bullet `- None.`
+- `- None.` is allowed only in `OPTIONAL_CODE_SKETCH`
+- use the fewest bullets needed to define the mechanism cleanly
+- avoid filling a section with multiple near-duplicate bullets
+- for seed organisms, prefer `- None.` in `OPTIONAL_CODE_SKETCH`; if it is used, keep it to at most two local pseudocode bullets and never use code fences
+- if a gene needs multi-line continuation, continue the same bullet using lines indented by two spaces
+- do not use nested headings inside subsection bodies
 
 ## INTERACTION_NOTES
-State what assumptions the idea set makes and where it is likely to help or fail.
+State what assumptions the organism makes, how the sections work together, and where the design is likely to help or fail.
 
 ## COMPUTE_NOTES
-State the computational style of the organism and what kind of procedure it implies.
+State the computational style implied by the design.
 
 ## CHANGE_DESCRIPTION
 Give one unified novelty summary for this organism.
-Include: (1) what core hypothesis this organism tests, (2) why this approach should produce a good packing score.
-This must be a plain-language statement of the idea. No code, no implementation details.
+Include:
+(1) what core hypothesis and packing family this organism tests
+(2) why this approach should produce a good packing score
+Before writing it, check that every named mechanism in `CHANGE_DESCRIPTION` appears in the relevant `CORE_GENES` section and is not contradicted by another section, and that the named score path is not merely a generic one-radius fallback plus repair tuning.
+This must be plain-language only. No code, no code-like snippets, no implementation dump.

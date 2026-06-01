@@ -1,51 +1,52 @@
 You are in the implementation stage.
 
 You will receive:
-- the function contract (signature, return types, constraints)
-- the organism genetic code
-- the novelty summary
-- the fixed implementation template
+- the function contract
+- the sectioned organism genetic code
+- the organism novelty summary
+- the canonical implementation scaffold
+- the ordered list of changed genome sections
+- when present, the maternal base implementation and maternal base genetic code
 
-Write the final full `implementation.py` for a circle-packing organism.
+Your job is to realize the supplied genes faithfully in deterministic code.
 
-Priority:
-1. produce syntactically correct, runnable Python that satisfies the function contract
-2. be faithful to the genes
-3. be faithful to the novelty summary
-4. realize those ideas within the fixed scaffold
+Core rules:
+- do not invent new major ideas at implementation time
+- if the design is ambiguous, choose the strongest deterministic interpretation that remains faithful to the genes and valid at return time
+- every returned packing must contain exactly 26 total circles in the unit square
+- preserve the objective and validity discipline encoded in the supplied genetic code
+- prefer the leanest implementation that preserves the real mechanism
+- do not collapse an ambitious but feasible design into a trivial safe layout
+- do not use `CONTROL_POLICY` or `OPTIONAL_CODE_SKETCH` as a hidden global override
 
-Do not invent new major ideas at implementation time.
-If the design is ambiguous, choose the most conservative implementation that still matches the supplied genes.
+Scaffold discipline:
+- the scaffold order is `PARAMETERS`, `INIT_GEOMETRY`, `RADIUS_POLICY`, `CONFLICT_MODEL`, `REPAIR_POLICY`, `EXPANSION_POLICY`, `CONTROL_POLICY`, `OPTIONAL_CODE_SKETCH`
+- `PARAMETERS` executes early; assign shared values before first use
+- `OPTIONAL_CODE_SKETCH` must stay local and must not override the whole algorithm
 
-## Output format
+Maternal inheritance rules:
+- when maternal base code is supplied, treat it as the concrete parent program
+- preserve inherited behavior outside the changed sections unless the child genes require a coordinated adjustment or a distinct packing regime
+- when the changed sections still imply the same phenotype family, preserve strong inherited maternal behavior; if the child genes require a distinct packing regime or phenotype shift, rewrite enough of the maternal behavior to realize that shift faithfully
+- do not silently keep the maternal radius, layout, or repair regime when the child genes call for role-based radii, a new center family, a structural defect, or another distinct score-bearing mechanism
+- do not compensate for unchanged genes by rewriting unrelated behavior
 
-Return ONLY valid Python source code.
-Do NOT wrap the code in markdown fences (no ``` or ```python).
-Do NOT add any text before or after the code.
-The very first line of your response must be a Python comment or import statement.
+Single rewrite contract:
+- return ONLY the final full `implementation.py`
+- with maternal base code, rewrite the complete child file from that parent program with the minimum faithful edits
+- without maternal base code, use the scaffold as the starting skeleton
+- return valid Python source code, not changed snippets, patch artifacts, or prose
+- the first non-empty line must be a Python import line, usually `import numpy as np`; it must never be a markdown fence or commentary
+- write executable code, not a comment-only reasoning trace; brief comments are allowed only when paired with working code
+- if the exact mechanism is underspecified, implement the simplest faithful deterministic version rather than leaving placeholders, repeated planning comments, or unfinished branches
+- return only the final organism output state, not trajectories, repeated candidate batches, candidate histories, or duplicated full constructions
+- keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the code
+- preserve code outside the EVOLVE block unless the file is too broken to keep safely
 
-## Hard constraints
-
-- Preserve the fixed scaffold and only fill the editable regions
-- Use only `numpy` and Python standard library
-- The final module must define `run_packing()`
-- `run_packing()` takes no arguments
-- `run_packing()` must return exactly `(centers, radii, reported_sum)` — a 3-tuple
-- `centers` must be a numpy array with shape `(26, 2)`
-- `radii` must be a numpy array with shape `(26,)`
-- `reported_sum` must equal `np.sum(radii)`
-- All radii must be positive
-- All circles must fit inside the unit square [0, 1] x [0, 1]
-- No two circles may overlap
-- Keep the code deterministic
-- Code must complete within 120 seconds
-
-## Pre-flight checklist
-
-Before outputting, mentally verify:
-1. The code is syntactically valid Python (all parentheses closed, all strings terminated, correct indentation)
-2. Every code path in `run_packing()` ends with `return centers, radii, reported_sum`
-3. `centers` has shape `(26, 2)` — not `(25, 2)`, not `(27, 2)`, not `(26,)`
-4. `radii` has shape `(26,)` — not `(26, 1)`, not a list
-5. No circles are placed outside [0, 1] x [0, 1] after accounting for radius
-6. The code does not contain markdown fences or non-Python text
+Minimal syntax discipline:
+- do not use markdown code fences
+- do not emit commentary, analysis, or prose
+- use ASCII identifiers only
+- define `run_packing()` exactly once and make it return exactly `centers, radii, reported_sum`
+- the final `centers` and `radii` arrays must describe exactly 26 circles
+- use bounded repair and growth loops; do not use unbounded `while True` unless the body has a hard counter and guaranteed progress

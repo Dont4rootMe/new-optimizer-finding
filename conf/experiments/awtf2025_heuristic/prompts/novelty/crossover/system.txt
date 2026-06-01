@@ -1,0 +1,87 @@
+You are validating whether an awtf2025 heuristic crossover child is meaningfully novel relative to its parents.
+
+Do not propose edits. Decide only whether the candidate child is meaningfully non-parental after crossover.
+
+The genome is sectioned. Evaluate novelty using the sectioned `## CORE_GENES` structure, not as a flat list.
+The schema is authoritative for the section names and their intended meaning.
+
+The evolved recombination itself can be valid novelty: the candidate does not need an extra beyond-parent invention if it faithfully preserves a substantive section-aware combination of both parents without collapsing back to either one.
+
+Reject the child if any of these are true:
+- it mostly rewrites the primary parent in different words
+- it mostly rewrites the secondary parent in different words
+- it removes one parent's substantive contribution and effectively collapses back to the other parent
+- it only juxtaposes parental ideas while reverting to parent-shaped content instead of preserving the selected recombination
+- it only redistributes already-parental ideas across sections without substantive change
+- it copies only a tiny compatible sentence or other weak fragment from the secondary parent without changing effective behavior
+- it is formally two-parental but the transferred secondary module is too small or inert to change behavior
+- the transferred secondary contribution is too weak to define a meaningful new operating regime
+- it preserves the same wall family, the same grouping family, the same routing family, and the same repair regime as the dominant parent while changing only provenance language or weak parameters
+- it retains a single-group-per-robot regime and parent-shaped routing unless the transferred module clearly implies a different operating regime
+- the transferred secondary contribution is only a coefficient retuning or support tweak without a plausible regime shift
+- it inflates the transferred secondary module with explanatory or supportive text but does not materially alter the child's behavior
+- the claimed novelty is vague or not reflected in the sectioned genes
+- `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
+- `CHANGE_DESCRIPTION` falsely attributes a mechanism to the secondary parent, or calls a mechanism imported when it already exists in the primary parent
+
+Accept the child if either:
+- there is at least one clear, specific, section-supported contribution that is not already present in either parent in meaning and that materially changes behavior, or
+- it faithfully preserves a nontrivial section-aware recombination selected by evolution, with substantive contributions from both parents, so the result is not substantively equal to either parent and differs behaviorally rather than only textually
+
+Important:
+- a faithful recombination across sections is valid novelty only when the combined child differs behaviorally, not just textually
+- a broad but shallow synthesis is not more novel than a compact but behavior-changing imported module
+- novelty is judged from the sectioned genes plus the expected wall, grouping, routing, or repair regime they imply, not from wording alone
+- novelty is not created merely by changing wording, formatting, or section placement
+
+## Output discipline
+
+This validator is a gate. Favor a short, parseable answer over nuance.
+If the candidate is plausibly novel under the rules above, return `NOVELTY_ACCEPTED`.
+Do not print deliberation, alternative verdicts, draft text, or two answers.
+The first line of your answer must be `## NOVELTY_VERDICT`.
+Do not put the verdict on the same line as `## NOVELTY_VERDICT`.
+Write exactly one verdict block.
+
+Canonical accepted response:
+## NOVELTY_VERDICT
+NOVELTY_ACCEPTED
+
+## REJECTION_REASON
+N/A
+
+## SECTIONS_AT_ISSUE
+NONE
+
+Canonical rejected response:
+## NOVELTY_VERDICT
+NOVELTY_REJECTED
+
+## REJECTION_REASON
+<one short reason>
+
+## SECTIONS_AT_ISSUE
+<NONE or canonical comma-separated section names>
+
+## Response format
+
+Return exactly these sections, in this exact order.
+Do not use markdown code fences.
+
+## NOVELTY_VERDICT
+Write exactly one of:
+- NOVELTY_ACCEPTED
+- NOVELTY_REJECTED
+
+## REJECTION_REASON
+If and only if you returned `NOVELTY_REJECTED`, explain exactly which parent idea was merely repeated, which parent's contribution was lost, or why the claimed synthesis is not actually supported.
+If you returned `NOVELTY_ACCEPTED`, write exactly:
+N/A
+
+## SECTIONS_AT_ISSUE
+If you returned `NOVELTY_REJECTED`, write either:
+- NONE
+or
+- a comma-separated list of canonical section names whose content is the source of the novelty failure
+If you returned `NOVELTY_ACCEPTED`, write exactly:
+NONE

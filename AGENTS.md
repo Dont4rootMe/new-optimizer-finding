@@ -2,6 +2,8 @@
 
 This file applies to the whole repository unless a deeper `AGENTS.md` overrides it.
 
+For a deep walkthrough of the evolutionary pipeline (organism lifecycle, validators, operators, islands, retry/repair logic, recent fixes from the 426- and 1516-organism atcoder post-mortems), read `FRAMEWORK.md` at the repo root. Use it as the canonical reference whenever the question is "how does the framework actually behave."
+
 ## What This Repo Contains
 
 - `src/`: task-blind runtime, validation worker, and organism-first evolution engine
@@ -23,8 +25,10 @@ This file applies to the whole repository unless a deeper `AGENTS.md` overrides 
   - `summary.json`
   - `llm_request.json`
   - `llm_response.json`
-- Population resume state is stored in `population_state.json`.
+- Population resume state is stored in `population_state.json`. Bandit posteriors (per `src/evolve/bandit.py`) live inside that file under `bandit_state`; do not move them to a sibling file without updating both `read_population_state` and `EvolutionLoop._restore_bandit_state` together.
 - Optimization-specific contracts such as `build_optimizer(model, max_steps)` belong only under `experiments/optimization_survey/`.
+- Adaptive sampling (LLM route, parent island, cross-island partner) is configurable per family under `evolver.{llm.route_sampling, reproduction.parent_island_sampling, reproduction.cross_island_partner_sampling}`. All three default to `uniform` / `weighted_static` (legacy behaviour); `strategy: bandit` swaps in discounted Thompson sampling. See FRAMEWORK.md "Adaptive sampling (bandits)" for details.
+- The design stage runs as a two-step pipeline (Step 1 rationalization → Step 2 formalization) for families that ship `prompts/rationalization/{mutation,crossover}/{system,user}.txt`. Step 1's output is stored in `org_dir/llm_rationalization.json` (separate from the canonical `llm_request.json`); it is cached across validator retries. See FRAMEWORK.md "Two-step design pipeline" for details.
 
 ## Editing Rules
 

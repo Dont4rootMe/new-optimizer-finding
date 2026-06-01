@@ -16,7 +16,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from api_platforms import ApiPlatformRegistry
 from src.evolve.generator import CandidateGenerator
-from src.evolve.islands import load_islands
+from src.evolve.islands import synthesize_islands_from_ids
 from src.evolve.orchestrator import EvolverOrchestrator
 from src.evolve.selection import (
     select_top_h_per_island,
@@ -49,7 +49,13 @@ from src.evolve.types import (
     PlannedOrganismCreation,
     PlannedPhaseEvaluation,
 )
-from src.evolve.visualization import render_evolution_overview
+from src.evolve.bandit import (
+    AdaptiveSampler,
+    ConditionalAdaptiveSampler,
+    cfg_from_omega,
+)
+from src.evolve.comet import CometRunLogger
+from src.evolve.visualization import render_evolution_snapshot
 from src.organisms.crossbreeding import CrossbreedingOperator
 from src.organisms.mutation import MutationOperator
 from src.organisms.organism import update_latest_lineage_entry
@@ -74,6 +80,57 @@ def _announce(message: str) -> None:
         print(f"[evolve] {message}", file=sys.stderr, flush=True)
     except Exception:  # noqa: BLE001
         pass
+
+
+def _resolve_comet_run_label(cfg: DictConfig) -> str | None:
+    """Best-effort detection of an experiment-family label for Comet naming.
+
+    Resolution order (first non-empty wins):
+
+    1. ``cfg.evolver.family_id`` — explicit override if the user wires one
+       in. Currently unused by any shipped config but cheap to honour.
+    2. ``conf/experiments/<family>/`` prefix lifted from one of the
+       configured prompt paths (mutation, seed, genome schema). The
+       canonical Hydra-composed configs always point at this layout, so the
+       family id can be recovered from the prompt path even when the user
+       hasn't set anything else.
+    3. The single key under ``cfg.experiments`` when there's exactly one
+       (e.g. ``"group_commands_and_wall_planning"``).
+
+    Returns ``None`` when nothing resolves; the caller substitutes a
+    generic fallback like ``"evolution"``.
+    """
+
+    explicit = OmegaConf.select(cfg, "evolver.family_id", default=None)
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+
+    prompt_keys = (
+        "evolver.prompts.mutation_system",
+        "evolver.prompts.seed_system",
+        "evolver.prompts.genome_schema",
+    )
+    for key in prompt_keys:
+        candidate = OmegaConf.select(cfg, key, default=None)
+        if not isinstance(candidate, str):
+            continue
+        marker = "experiments/"
+        if marker not in candidate:
+            continue
+        tail = candidate.split(marker, 1)[1]
+        family = tail.split("/", 1)[0]
+        if family:
+            return family
+
+    experiments_block = OmegaConf.select(cfg, "experiments", default=None)
+    if experiments_block is not None:
+        try:
+            keys = list(experiments_block.keys())
+        except Exception:  # noqa: BLE001
+            keys = []
+        if len(keys) == 1:
+            return str(keys[0])
+    return None
 
 
 _MISSING = object()
@@ -103,6 +160,9 @@ class EvolutionLoop:
         self.orchestrator = EvolverOrchestrator(cfg, repair_callback=self._repair_organism_after_eval_error)
         self.rng = random.Random(int(cfg.seed))
         self.max_parallel_organisms = self._max_parallel_organisms()
+        self.max_generation_limit = self._max_generation_limit()
+        self.max_organism_creations = self._max_organism_creations()
+        self.max_tokens_per_model = self._max_tokens_per_model()
 
         self.islands = self._load_islands()
         self.islands_by_id = {island.island_id: island for island in self.islands}
@@ -122,7 +182,57 @@ class EvolutionLoop:
         self.crossover_primary_parent_gene_inheritance_probability = (
             self._crossover_primary_parent_gene_inheritance_probability()
         )
+        self._validate_stop_limits()
         self._validate_phase_selection_bounds()
+
+        # Adaptive samplers — see src/evolve/bandit.py. Both default to
+        # uniform; opt-in via `evolver.reproduction.parent_island_sampling`
+        # and `evolver.reproduction.cross_island_partner_sampling`. The
+        # parent-island sampler picks the home island for any route; the
+        # partner sampler is conditional on the origin island and only
+        # fires for inter-island crossover.
+        parent_island_cfg = cfg_from_omega(
+            OmegaConf.select(cfg, "evolver.reproduction.parent_island_sampling", default=None)
+        )
+        self.parent_island_sampler = AdaptiveSampler(parent_island_cfg)
+        cross_partner_cfg = cfg_from_omega(
+            OmegaConf.select(cfg, "evolver.reproduction.cross_island_partner_sampling", default=None)
+        )
+        self.cross_island_partner_sampler = ConditionalAdaptiveSampler(cross_partner_cfg)
+        # Track which arms each in-flight organism pulled, so we can attribute
+        # the reward back to the right bandit when the simple eval finishes.
+        # Keyed by organism_id. Routes (LLM model) are owned by the generator
+        # and resolved lazily via summary.json, so they are not tracked here.
+        self._bandit_arm_attribution: dict[str, dict[str, Any]] = {}
+
+        # population_root is passed so seed and evolve processes share one
+        # Comet experiment via the persisted experiment_key file in the
+        # population directory.
+        #
+        # run_label is the fallback used in the auto-derived experiment name
+        # when neither `comet.run_name` nor `comet.experiment_name` is set.
+        # We use the experiment family id (e.g. "awtf2025_heuristic") rather
+        # than stringifying the whole `cfg.experiments` mapping — the latter
+        # produced names like "{group_commands_and_wall_planning: {…}}" which
+        # is what prompted the explicit run_name knob.
+        run_label = _resolve_comet_run_label(cfg) or "evolution"
+        self.comet_logger = CometRunLogger.from_cfg(
+            cfg,
+            run_label=run_label,
+            population_root=self.population_root,
+        )
+        if self.comet_logger.enabled:
+            try:
+                self.comet_logger.log_parameters(
+                    {
+                        "seed": int(cfg.seed),
+                        "population_root": str(self.population_root),
+                        "max_generation_limit": self.max_generation_limit,
+                        "offspring_per_generation": self.offspring_per_generation,
+                    }
+                )
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Failed to log initial parameters to Comet (continuing)")
 
     def _require_cfg_value(self, path: str) -> Any:
         value = OmegaConf.select(self.cfg, path)
@@ -130,14 +240,186 @@ class EvolutionLoop:
             raise ValueError(f"Canonical evolve config must define {path}")
         return value
 
+    def _optional_stop_limit(self, path: str) -> int | None:
+        value = OmegaConf.select(self.cfg, path, default=None)
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            if value is False:
+                return None
+            raise ValueError(
+                f"Invalid evolve config: {path} must be a non-negative integer, -1, or false."
+            )
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if text in {"", "false", "none", "null"}:
+                return None
+            value = text
+        try:
+            limit = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid evolve config: {path} must be a non-negative integer, -1, or false."
+            ) from exc
+        if limit == -1:
+            return None
+        if limit < -1:
+            raise ValueError(
+                f"Invalid evolve config: {path} must be a non-negative integer, -1, or false."
+            )
+        return limit
+
+    def _max_generation_limit(self) -> int | None:
+        return self._optional_stop_limit("evolver.max_generations")
+
+    def _max_organism_creations(self) -> int | None:
+        return self._optional_stop_limit("evolver.max_organism_creations")
+
+    @staticmethod
+    def _coerce_token_limit(value: Any, *, route_id: str) -> int | None:
+        """Coerce one ``max_tokens_per_model`` entry to an int cap or ``None``.
+
+        ``false`` / ``null`` / ``""`` / ``-1`` all mean "no cap for this
+        route". A literal ``true`` is rejected (a token cap must be a count).
+        """
+
+        if value is None or value is False:
+            return None
+        if isinstance(value, bool):  # only ``True`` reaches here
+            raise ValueError(
+                f"Invalid evolve config: evolver.max_tokens_per_model[{route_id}] "
+                "must be a non-negative integer or false, got true."
+            )
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if text in {"", "false", "none", "null"}:
+                return None
+            value = text
+        try:
+            limit = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid evolve config: evolver.max_tokens_per_model[{route_id}] "
+                "must be a non-negative integer or false."
+            ) from exc
+        if limit == -1:
+            return None
+        if limit < 0:
+            raise ValueError(
+                f"Invalid evolve config: evolver.max_tokens_per_model[{route_id}] "
+                "must be a non-negative integer or false."
+            )
+        return limit
+
+    def _max_tokens_per_model(self) -> dict[str, int]:
+        """Parse the optional per-route token-budget stop criterion.
+
+        ``evolver.max_tokens_per_model`` is a mapping of ``route_id -> limit``
+        where ``limit`` is a non-negative integer token cap, or ``false`` /
+        ``null`` / ``-1`` to disable the cap for that route. Absent or
+        all-``false`` (the shipped default for every experiment) means no
+        token stop is active. Returns only the routes carrying an active cap.
+        """
+
+        raw = OmegaConf.select(self.cfg, "evolver.max_tokens_per_model", default=None)
+        if raw is None:
+            return {}
+        container = OmegaConf.to_container(raw, resolve=True)
+        if not isinstance(container, dict):
+            raise ValueError(
+                "Invalid evolve config: evolver.max_tokens_per_model must be a mapping "
+                "of route_id -> int|false."
+            )
+        limits: dict[str, int] = {}
+        for route_id, value in container.items():
+            limit = self._coerce_token_limit(value, route_id=str(route_id))
+            if limit is not None:
+                limits[str(route_id)] = limit
+        return limits
+
+    def _validate_stop_limits(self) -> None:
+        if self.max_generation_limit is None and self.max_organism_creations is None:
+            raise ValueError(
+                "Invalid evolve config: set evolver.max_generations or evolver.max_organism_creations. "
+                "Use -1 or false only for the criterion you want to disable."
+            )
+
+    def _organism_creation_attempt_count(self) -> int:
+        return sum(1 for _ in self.population_root.glob("gen_*/island_*/org_*/organism.json"))
+
+    def _remaining_organism_creation_budget(self) -> int | None:
+        if self.max_organism_creations is None:
+            return None
+        return max(0, self.max_organism_creations - self._organism_creation_attempt_count())
+
+    def _tokens_spent_per_route(self) -> dict[str, int]:
+        """Sum ``total_tokens`` per route across every persisted organism.
+
+        Reads from the on-disk ``organism.json`` files (same glob as
+        :meth:`_organism_creation_attempt_count`) so the tally is resume-safe:
+        after a restart the in-memory generator accumulator is empty, but each
+        organism's persisted ``token_usage`` survives on disk.
+        """
+
+        totals: dict[str, int] = {}
+        for meta_path in self.population_root.glob("gen_*/island_*/org_*/organism.json"):
+            try:
+                payload = read_json(meta_path)
+            except Exception:  # noqa: BLE001
+                continue
+            if not isinstance(payload, dict):
+                continue
+            usage = payload.get("token_usage")
+            if not isinstance(usage, dict):
+                continue
+            for route_id, counts in usage.items():
+                if not isinstance(counts, dict):
+                    continue
+                total = counts.get("total_tokens")
+                if isinstance(total, bool) or not isinstance(total, (int, float)):
+                    continue
+                totals[str(route_id)] = totals.get(str(route_id), 0) + int(total)
+        return totals
+
+    def _token_budget_stop_reason(self) -> str | None:
+        """Return a stop reason when any capped route has hit its token budget.
+
+        No-op (returns ``None``) when ``evolver.max_tokens_per_model`` is empty
+        or all-``false`` — the shipped default for every experiment.
+        """
+
+        if not self.max_tokens_per_model:
+            return None
+        spent = self._tokens_spent_per_route()
+        for route_id, limit in self.max_tokens_per_model.items():
+            used = spent.get(route_id, 0)
+            if used >= limit:
+                return f"max_tokens_per_model[{route_id}]={limit} (spent={used})"
+        return None
+
+    def _stop_reason_before_generation(self, generation: int) -> str | None:
+        if self.max_generation_limit is not None and generation > self.max_generation_limit:
+            return f"max_generations={self.max_generation_limit}"
+        remaining_budget = self._remaining_organism_creation_budget()
+        if remaining_budget is not None and remaining_budget <= 0:
+            return f"max_organism_creations={self.max_organism_creations}"
+        token_reason = self._token_budget_stop_reason()
+        if token_reason is not None:
+            return token_reason
+        return None
+
     def _load_islands(self) -> list[Island]:
-        islands_dir = str(self._require_cfg_value("evolver.islands.dir")).strip()
-        if not islands_dir:
-            raise ValueError("Canonical evolve config must define evolver.islands.dir")
-        return load_islands(islands_dir)
+        # ``from_seed`` mode synthesises ``Island`` records from a flat
+        # list of ids and copies a single baseline program into K×N
+        # organisms (no per-island LLM authoring). This is the only
+        # supported mode.
+        from src.evolve.islands import synthesize_islands_from_ids
+        island_ids_cfg = self._require_cfg_value("evolver.islands.island_ids")
+        island_ids = [str(item) for item in island_ids_cfg]
+        return synthesize_islands_from_ids(island_ids)
 
     def _seed_organisms_per_island(self) -> int:
-        return int(self._require_cfg_value("evolver.islands.seed_organisms_per_island"))
+        return int(self._require_cfg_value("evolver.islands.seeds_per_island"))
 
     def _max_organisms_per_island(self) -> int:
         return int(self._require_cfg_value("evolver.islands.max_organisms_per_island"))
@@ -326,20 +608,141 @@ class EvolutionLoop:
             best_simple_score=best.simple_score if best is not None else None,
             inflight_seed=inflight_seed,
             inflight_generation=inflight_generation,
+            bandit_state=self._bandit_state_dict(),
         )
+
+    def _bandit_state_dict(self) -> dict[str, Any]:
+        """Snapshot every adaptive sampler so resume can restore them."""
+
+        pipeline_sampler = getattr(self.generator, "pipeline_sampler", None)
+        return {
+            "parent_island": self.parent_island_sampler.state_dict(),
+            "cross_island_partner": self.cross_island_partner_sampler.state_dict(),
+            "route": getattr(self.generator, "route_sampler", None).state_dict()
+            if getattr(self.generator, "route_sampler", None) is not None
+            else None,
+            "pipeline": pipeline_sampler.state_dict()
+            if pipeline_sampler is not None
+            else None,
+            "observed": dict(self._bandit_arm_attribution),
+        }
+
+    def _record_bandit_outcome(
+        self,
+        plan: PlannedOrganismCreation,
+        organism: OrganismMeta | None,
+        *,
+        simple_score: float | None,
+    ) -> None:
+        """Feed the outcome of a creation+eval cycle back into the bandits.
+
+        Called once per organism — either when simple eval finishes (success
+        or eval failure) or when creation itself fails. The attribution
+        bookkeeping in ``self._bandit_arm_attribution`` makes the call
+        idempotent: once a plan's outcome has been recorded, subsequent calls
+        for the same plan are silently ignored.
+        """
+
+        if plan.organism_id in self._bandit_arm_attribution:
+            return
+
+        observed: dict[str, Any] = {
+            "parent_island": plan.island_id,
+            "partner_island": plan.father_island_id,
+            "route": None,
+        }
+        try:
+            self.parent_island_sampler.observe(plan.island_id, simple_score=simple_score)
+        except Exception:  # noqa: BLE001
+            LOGGER.exception("Failed to update parent_island bandit for plan %s", plan.organism_id)
+
+        if plan.father_island_id and plan.route == _ROUTE_INTER_ISLAND_CROSSOVER:
+            try:
+                self.cross_island_partner_sampler.observe(
+                    plan.island_id,
+                    plan.father_island_id,
+                    simple_score=simple_score,
+                )
+            except Exception:  # noqa: BLE001
+                LOGGER.exception(
+                    "Failed to update cross_island_partner bandit for plan %s", plan.organism_id
+                )
+
+        route_id = getattr(organism, "llm_route_id", None) if organism is not None else None
+        if route_id and hasattr(self.generator, "observe_route_reward"):
+            try:
+                self.generator.observe_route_reward(str(route_id), simple_score=simple_score)
+                observed["route"] = str(route_id)
+            except Exception:  # noqa: BLE001
+                LOGGER.exception(
+                    "Failed to update route bandit for plan %s (route=%s)",
+                    plan.organism_id,
+                    route_id,
+                )
+
+        # Pipeline bandit feedback is parallel to the route bandit: when
+        # ``evolver.llm.pipelines`` is configured the organism carries the
+        # pipeline id that produced it, and reward flows to that arm here.
+        # When pipelines are disabled the generator's pipeline_sampler is
+        # None and ``observe_pipeline_reward`` short-circuits, so this call
+        # is safe to make unconditionally.
+        pipeline_id = (
+            getattr(organism, "llm_pipeline_id", None) if organism is not None else None
+        )
+        if pipeline_id and hasattr(self.generator, "observe_pipeline_reward"):
+            try:
+                self.generator.observe_pipeline_reward(
+                    str(pipeline_id), simple_score=simple_score
+                )
+                observed["pipeline"] = str(pipeline_id)
+            except Exception:  # noqa: BLE001
+                LOGGER.exception(
+                    "Failed to update pipeline bandit for plan %s (pipeline=%s)",
+                    plan.organism_id,
+                    pipeline_id,
+                )
+
+        self._bandit_arm_attribution[plan.organism_id] = observed
+
+    def _restore_bandit_state(self, payload: dict[str, Any] | None) -> None:
+        if not isinstance(payload, dict):
+            return
+        if isinstance(payload.get("parent_island"), dict):
+            self.parent_island_sampler.load_state(payload["parent_island"])
+        if isinstance(payload.get("cross_island_partner"), dict):
+            self.cross_island_partner_sampler.load_state(payload["cross_island_partner"])
+        if isinstance(payload.get("route"), dict):
+            route_sampler = getattr(self.generator, "route_sampler", None)
+            if route_sampler is not None:
+                route_sampler.load_state(payload["route"])
+        if isinstance(payload.get("pipeline"), dict):
+            pipeline_sampler = getattr(self.generator, "pipeline_sampler", None)
+            if pipeline_sampler is not None:
+                pipeline_sampler.load_state(payload["pipeline"])
+        observed = payload.get("observed")
+        if isinstance(observed, dict):
+            self._bandit_arm_attribution = {str(key): dict(value) for key, value in observed.items() if isinstance(value, dict)}
 
     def _render_progress_snapshot(self) -> None:
         try:
-            out_path = render_evolution_overview(self.population_root)
+            snapshot = render_evolution_snapshot(self.population_root)
         except Exception:  # noqa: BLE001
             LOGGER.exception("Failed to render evolution overview for %s", self.population_root)
             return
-        if out_path is not None:
-            LOGGER.info("Updated evolution overview at %s", out_path)
+        if snapshot is None:
+            return
+        if snapshot.composite_overview_path is not None:
+            LOGGER.info("Updated evolution overview at %s", snapshot.composite_overview_path)
+        if self.comet_logger.enabled:
+            try:
+                self.comet_logger.log_snapshot(snapshot)
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Failed to push snapshot to Comet (continuing)")
 
     def _load_state(self) -> dict[str, Any] | None:
         payload = read_population_state(self.population_root)
         if isinstance(payload, dict):
+            self._restore_bandit_state(payload.get("bandit_state"))
             return payload
         return None
 
@@ -428,7 +831,13 @@ class EvolutionLoop:
     def _planned_reproduction_routes(
         self,
         active_by_island: dict[str, list[OrganismMeta]],
+        *,
+        offspring_count: int | None = None,
     ) -> list[str]:
+        target_count = self.offspring_per_generation if offspring_count is None else int(offspring_count)
+        if target_count <= 0:
+            return []
+
         available_routes = [
             route
             for route in self._available_reproduction_routes(active_by_island)
@@ -440,25 +849,34 @@ class EvolutionLoop:
             )
 
         if self.operator_selection_strategy == "random":
-            return [self._sample_reproduction_route(available_routes) for _ in range(self.offspring_per_generation)]
+            return [self._sample_reproduction_route(available_routes) for _ in range(target_count)]
         if self.operator_selection_strategy == "deterministic":
-            return self._deterministic_reproduction_plan(available_routes)
+            return self._deterministic_reproduction_plan(available_routes, offspring_count=target_count)
         raise ValueError(
             f"Unsupported operator selection strategy '{self.operator_selection_strategy}'."
         )
 
-    def _deterministic_reproduction_plan(self, available_routes: list[str]) -> list[str]:
+    def _deterministic_reproduction_plan(
+        self,
+        available_routes: list[str],
+        *,
+        offspring_count: int | None = None,
+    ) -> list[str]:
+        target_count = self.offspring_per_generation if offspring_count is None else int(offspring_count)
+        if target_count <= 0:
+            return []
+
         total_weight = sum(self.reproduction_operator_weights[route] for route in available_routes)
         if total_weight <= 0:
             raise ValueError("Deterministic reproduction planning requires positive total route weight.")
 
         exact_counts = {
-            route: self.offspring_per_generation * (self.reproduction_operator_weights[route] / total_weight)
+            route: target_count * (self.reproduction_operator_weights[route] / total_weight)
             for route in available_routes
         }
         base_counts = {route: int(exact_counts[route]) for route in available_routes}
         assigned = sum(base_counts.values())
-        remaining = self.offspring_per_generation - assigned
+        remaining = target_count - assigned
 
         ranked_routes = sorted(
             available_routes,
@@ -484,20 +902,47 @@ class EvolutionLoop:
         count: int,
         distinct: bool,
     ) -> list[str]:
-        strategy = self.reproduction_island_sampling[route]
-        if strategy == "unified":
-            if not candidate_island_ids or count <= 0:
-                return []
-            if distinct:
-                if len(candidate_island_ids) < count:
-                    raise ValueError(
-                        f"Route '{route}' requires {count} distinct islands, got {len(candidate_island_ids)}."
-                    )
-                return list(self.rng.sample(candidate_island_ids, k=count))
-            return [self.rng.choice(candidate_island_ids) for _ in range(count)]
-        raise ValueError(
-            f"Unsupported island sampling strategy '{strategy}' for reproduction route '{route}'."
-        )
+        if not candidate_island_ids or count <= 0:
+            return []
+
+        legacy_strategy = self.reproduction_island_sampling[route]
+        if legacy_strategy not in ("unified", "uniform"):
+            raise ValueError(
+                f"Unsupported legacy island sampling strategy '{legacy_strategy}' for reproduction route '{route}'."
+            )
+
+        if distinct and len(candidate_island_ids) < count:
+            raise ValueError(
+                f"Route '{route}' requires {count} distinct islands, got {len(candidate_island_ids)}."
+            )
+
+        # First slot: use the adaptive parent-island sampler.
+        first = self.parent_island_sampler.select(candidate_island_ids, rng=self.rng)
+        if count == 1:
+            return [first]
+
+        if not distinct:
+            return [first] + [
+                self.parent_island_sampler.select(candidate_island_ids, rng=self.rng)
+                for _ in range(count - 1)
+            ]
+
+        # Distinct second slot — for inter-island crossover, defer to the
+        # conditional partner sampler so it can learn good (origin → partner)
+        # pairings. For longer distinct sequences (none today, but keep the
+        # contract consistent), fall back to uniform among the remaining
+        # candidates so we never duplicate.
+        remaining = [island_id for island_id in candidate_island_ids if island_id != first]
+        if route == _ROUTE_INTER_ISLAND_CROSSOVER and count == 2:
+            second = self.cross_island_partner_sampler.select(first, remaining, rng=self.rng)
+            return [first, second]
+
+        result = [first]
+        for _ in range(count - 1):
+            pick = self.rng.choice(remaining)
+            result.append(pick)
+            remaining = [island_id for island_id in remaining if island_id != pick]
+        return result
 
     def _select_parent_organisms(
         self,
@@ -561,6 +1006,52 @@ class EvolutionLoop:
         organism_id = uuid.uuid4().hex
         return organism_id, organism_dir(gen_dir, organism_id, island_id=island_id)
 
+    def _pick_inspirations(
+        self,
+        *,
+        parent: OrganismMeta,
+        exclude_ids: list[str] | None = None,
+    ) -> list[OrganismMeta]:
+        """Top-K archive sample from the parent's island for prompt injection.
+
+        Mirrors the Shinka/FunSearch "show the LLM the best programs"
+        pattern. We pick the highest-scoring organisms on the parent's
+        island (``simple_score`` is negated mean_absolute_score, so
+        ``reverse=True`` puts the best — least negative — first), skip
+        the parent itself and any ids in ``exclude_ids`` (used in
+        crossover to also skip the second parent), and clip to the
+        configured budget.
+
+        Budget is controlled by ``evolver.prompts.num_inspirations``,
+        default 2 — keeps the prompt size reasonable on local 32k-
+        context models while still giving the LLM more than one
+        reference program to contrast against. Set to 0 to disable
+        entirely (the prompt placeholder renders as ``(no inspirations)``
+        and the LLM falls back to single-parent reasoning).
+
+        The early generations (when survivor pool is empty or only
+        contains the parent) just produce an empty list — the formatter
+        handles that gracefully.
+        """
+
+        budget = int(
+            getattr(getattr(self.cfg.evolver, "prompts", object()), "num_inspirations", 2)
+        )
+        if budget <= 0:
+            return []
+        exclude = {parent.organism_id, *(exclude_ids or [])}
+        pool = [
+            organism
+            for organism in self.population
+            if organism.island_id == parent.island_id
+            and organism.organism_id not in exclude
+            and getattr(organism, "simple_score", None) is not None
+        ]
+        if not pool:
+            return []
+        pool.sort(key=lambda organism: float(organism.simple_score), reverse=True)
+        return pool[:budget]
+
     def _create_mutation_offspring(
         self,
         *,
@@ -568,6 +1059,7 @@ class EvolutionLoop:
         organism_id: str,
         org_dir: Path,
         operator_seed: int,
+        pipeline_state_callback: Any | None = None,
     ) -> OrganismMeta:
         mutation_operator = MutationOperator(
             q=self.mutation_gene_removal_probability,
@@ -579,6 +1071,8 @@ class EvolutionLoop:
             generation=self.generation,
             org_dir=org_dir,
             generator=self.generator,
+            pipeline_state_callback=pipeline_state_callback,
+            inspirations=self._pick_inspirations(parent=parent),
         )
 
     def _create_within_island_crossover_offspring(
@@ -589,6 +1083,7 @@ class EvolutionLoop:
         organism_id: str,
         org_dir: Path,
         operator_seed: int,
+        pipeline_state_callback: Any | None = None,
     ) -> OrganismMeta:
         crossover_operator = CrossbreedingOperator(
             p=self.crossover_primary_parent_gene_inheritance_probability,
@@ -601,6 +1096,8 @@ class EvolutionLoop:
             generation=self.generation,
             org_dir=org_dir,
             generator=self.generator,
+            pipeline_state_callback=pipeline_state_callback,
+            inspirations=self._pick_inspirations(parent=mother, exclude_ids=[father.organism_id]),
         )
 
     def _create_inter_island_crossover_offspring(
@@ -611,6 +1108,7 @@ class EvolutionLoop:
         organism_id: str,
         org_dir: Path,
         operator_seed: int,
+        pipeline_state_callback: Any | None = None,
     ) -> OrganismMeta:
         crossover_operator = CrossbreedingOperator(
             p=self.crossover_primary_parent_gene_inheritance_probability,
@@ -623,6 +1121,8 @@ class EvolutionLoop:
             generation=self.generation,
             org_dir=org_dir,
             generator=self.generator,
+            pipeline_state_callback=pipeline_state_callback,
+            inspirations=self._pick_inspirations(parent=mother, exclude_ids=[father.organism_id]),
         )
 
     def _simple_evaluation_request(
@@ -725,7 +1225,11 @@ class EvolutionLoop:
             planned_key: [plan.to_dict() for plan in planned_organisms],
             "creation_queue": {
                 "pending": [plan.organism_id for plan in planned_organisms if plan.pipeline_state == "planned_creation"],
-                "active": [plan.organism_id for plan in planned_organisms if plan.pipeline_state == "creating"],
+                "active": [
+                    plan.organism_id
+                    for plan in planned_organisms
+                    if plan.pipeline_state in {"creating"}
+                ],
                 "completed": [
                     plan.organism_id
                     for plan in planned_organisms
@@ -875,11 +1379,37 @@ class EvolutionLoop:
     def _plan_seed_population(self) -> list[PlannedOrganismCreation]:
         if self.seed_organisms_per_island <= 0:
             return []
+        target_by_island = {
+            island.island_id: self.seed_organisms_per_island for island in self.islands
+        }
+        return self._plan_seed_attempts(target_by_island)
+
+    def _plan_seed_attempts(
+        self,
+        target_by_island: dict[str, int],
+    ) -> list[PlannedOrganismCreation]:
+        """Plan a batch of seed attempts with a per-island target count.
+
+        Used both by the initial seed pass (each island gets ``seed_organisms_per_island``)
+        and by the top-up rounds in ``seed_population`` (each island gets only its current
+        deficit). Each planned attempt writes an ``organism.json`` stub, which means it is
+        counted by ``_organism_creation_attempt_count`` and consumes one slot of the
+        ``max_organism_creations`` budget regardless of whether the LLM creation later
+        succeeds or fails.
+        """
+        if not target_by_island or all(target <= 0 for target in target_by_island.values()):
+            return []
+        remaining_budget = self._remaining_organism_creation_budget()
+        if remaining_budget is not None and remaining_budget <= 0:
+            return []
 
         gen_dir = generation_dir(self.population_root, 0)
         planned_organisms: list[PlannedOrganismCreation] = []
         for island in self.islands:
-            for _ in range(self.seed_organisms_per_island):
+            target = max(0, int(target_by_island.get(island.island_id, 0)))
+            for _ in range(target):
+                if remaining_budget is not None and len(planned_organisms) >= remaining_budget:
+                    return planned_organisms
                 organism_id, org_dir = self._newborn_org_dir(gen_dir=gen_dir, island_id=island.island_id)
                 operator_seed = self.rng.randint(0, 2**31 - 1)
                 timestamp = utc_now_iso()
@@ -890,13 +1420,19 @@ class EvolutionLoop:
                         created_at=timestamp,
                     )
                 )
+                # All seed organisms are file-copies from the baseline
+                # program (``materialize_seed_from_file``). The route label
+                # ``seed_copy`` makes ``_materialize_planned_organism``
+                # skip any LLM-generated seed path.
+                route = "seed_copy"
+                operator = "seed_copy"
                 plan = PlannedOrganismCreation(
                     organism_id=organism_id,
                     organism_dir=str(org_dir),
                     island_id=island.island_id,
                     generation=0,
-                    route="seed",
-                    operator="seed",
+                    route=route,
+                    operator=operator,
                     mother_id=None,
                     mother_organism_dir=None,
                     father_id=None,
@@ -916,11 +1452,19 @@ class EvolutionLoop:
     ) -> list[PlannedOrganismCreation]:
         if self.offspring_per_generation <= 0:
             return []
+        remaining_budget = self._remaining_organism_creation_budget()
+        if remaining_budget is not None and remaining_budget <= 0:
+            return []
+        target_offspring = self.offspring_per_generation
+        if remaining_budget is not None:
+            target_offspring = min(target_offspring, remaining_budget)
+        if target_offspring <= 0:
+            return []
 
         gen_dir = generation_dir(self.population_root, self.generation)
         planned_offspring: list[PlannedOrganismCreation] = []
         parent_offspring_counts: dict[str, int] = {}
-        for route in self._planned_reproduction_routes(active_by_island):
+        for route in self._planned_reproduction_routes(active_by_island, offspring_count=target_offspring):
             if route == _ROUTE_MUTATION:
                 candidate_islands = self._eligible_island_ids_for_route(_ROUTE_MUTATION, active_by_island)
                 island_id = self._sample_island_ids(
@@ -1113,6 +1657,7 @@ class EvolutionLoop:
         self,
         plan: PlannedOrganismCreation,
         active_by_id: dict[str, OrganismMeta],
+        pipeline_state_callback: Any | None = None,
     ) -> OrganismMeta:
         mother = self._resolve_parent_meta(
             parent_id=plan.mother_id,
@@ -1126,15 +1671,34 @@ class EvolutionLoop:
         )
         org_dir = Path(plan.organism_dir)
 
-        if plan.route == "seed":
+        if plan.route == "seed_copy":
+            # File-copy seed (Shinka / FunSearch / AlphaEvolve pattern):
+            # no LLM call. Copies a single baseline ``implementation.py``
+            # into the new organism's directory and synthesises a
+            # placeholder ``genetic_code.md`` from the family schema.
+            # All ``K × N`` seed organisms share the same baseline; they
+            # diverge later through mutation / crossover.
             island = self.islands_by_id.get(plan.island_id)
             if island is None:
-                raise ValueError(f"Seed plan for organism {plan.organism_id} references unknown island '{plan.island_id}'.")
-            organism = self.generator.generate_seed_organism(
+                raise ValueError(
+                    f"Seed_copy plan for organism {plan.organism_id} references unknown island '{plan.island_id}'."
+                )
+            source_path = Path(
+                str(self._require_cfg_value("evolver.islands.seed_program_path"))
+            ).expanduser()
+            if not source_path.is_absolute():
+                # Relative paths are resolved against the project root,
+                # which is the cwd at the time the entrypoint script
+                # (scripts/run_evolution.sh, scripts/seed_population.sh)
+                # launched python.
+                source_path = (Path.cwd() / source_path).resolve()
+            organism = self.generator.materialize_seed_from_file(
                 island=island,
                 organism_id=plan.organism_id,
                 generation=plan.generation,
                 organism_dir=org_dir,
+                source_path=source_path,
+                pipeline_state_callback=pipeline_state_callback,
             )
         elif plan.route == _ROUTE_MUTATION:
             if mother is None:
@@ -1144,6 +1708,7 @@ class EvolutionLoop:
                 organism_id=plan.organism_id,
                 org_dir=org_dir,
                 operator_seed=plan.operator_seed,
+                pipeline_state_callback=pipeline_state_callback,
             )
         elif plan.route == _ROUTE_WITHIN_ISLAND_CROSSOVER:
             if mother is None or father is None:
@@ -1154,6 +1719,7 @@ class EvolutionLoop:
                 organism_id=plan.organism_id,
                 org_dir=org_dir,
                 operator_seed=plan.operator_seed,
+                pipeline_state_callback=pipeline_state_callback,
             )
         elif plan.route == _ROUTE_INTER_ISLAND_CROSSOVER:
             if mother is None or father is None:
@@ -1164,6 +1730,7 @@ class EvolutionLoop:
                 organism_id=plan.organism_id,
                 org_dir=org_dir,
                 operator_seed=plan.operator_seed,
+                pipeline_state_callback=pipeline_state_callback,
             )
         else:
             raise ValueError(f"Unsupported reproduction route '{plan.route}'")
@@ -1352,6 +1919,9 @@ class EvolutionLoop:
         write_organism_meta(organism)
         self._write_phase_summary(organism, summary)
 
+        if summary.phase == "simple":
+            self._record_bandit_outcome(plan, organism, simple_score=organism.simple_score)
+
     async def _execute_planned_creations(
         self,
         planned_organisms: list[PlannedOrganismCreation],
@@ -1393,9 +1963,12 @@ class EvolutionLoop:
 
         async def _run_creation(plan: PlannedOrganismCreation) -> tuple[str, OrganismMeta | None]:
             async with semaphore:
-                plan.pipeline_state = "creating"
-                self._write_planned_organism_stub(plan)
-                persist_state(planned_organisms)
+                def set_creation_pipeline_state(state: str) -> None:
+                    plan.pipeline_state = state
+                    self._write_planned_organism_stub(plan)
+                    persist_state(planned_organisms)
+
+                set_creation_pipeline_state("creating")
                 self._record_creation_event(
                     plan,
                     event="started",
@@ -1409,7 +1982,12 @@ class EvolutionLoop:
                     f"(route={plan.route}, island={plan.island_id}, generation={plan.generation})"
                 )
                 try:
-                    organism = await asyncio.to_thread(self._materialize_planned_organism, plan, active_by_id)
+                    organism = await asyncio.to_thread(
+                        self._materialize_planned_organism,
+                        plan,
+                        active_by_id,
+                        set_creation_pipeline_state,
+                    )
                 except Exception as exc:  # noqa: BLE001
                     LOGGER.exception(
                         "Organism creation failed for %s (generation=%d, island=%s, route=%s)",
@@ -1433,6 +2011,7 @@ class EvolutionLoop:
                     plan.error_msg = str(exc)
                     self._write_planned_organism_stub(plan)
                     persist_state(planned_organisms)
+                    self._record_bandit_outcome(plan, organism=None, simple_score=None)
                     return plan.organism_id, None
                 self._record_creation_event(
                     plan,
@@ -1716,6 +2295,9 @@ class EvolutionLoop:
                 f"max_parallel_organisms={self.max_parallel_organisms})"
             )
             state = self._load_state()
+            all_planned: list[PlannedOrganismCreation] = []
+            all_newborns: list[OrganismMeta] = []
+
             if state is not None:
                 if isinstance(state.get("inflight_generation"), dict):
                     raise RuntimeError(
@@ -1723,26 +2305,110 @@ class EvolutionLoop:
                     )
                 inflight_seed = state.get("inflight_seed")
                 if isinstance(inflight_seed, dict):
-                    planned_organisms = self._restore_inflight_seed(inflight_seed)
+                    inflight_planned = self._restore_inflight_seed(inflight_seed)
+                    all_planned.extend(inflight_planned)
+                    inflight_newborns = await self._execute_planned_creations(
+                        inflight_planned, state_kind="seed"
+                    )
+                    all_newborns.extend(inflight_newborns)
                 else:
                     raise RuntimeError(
                         "Population is already initialized. Refusing to reseed an existing population root."
                     )
-            else:
-                planned_organisms = self._plan_seed_population()
 
-            newborns = await self._execute_planned_creations(planned_organisms, state_kind="seed")
+            target_per_island = self.seed_organisms_per_island
+            stop_reason: str | None = None
+            round_index = 0
+            while True:
+                round_index += 1
+
+                successful_by_island: dict[str, int] = {
+                    island.island_id: 0 for island in self.islands
+                }
+                for organism in all_newborns:
+                    if organism.island_id in successful_by_island:
+                        successful_by_island[organism.island_id] += 1
+
+                deficit_by_island = {
+                    island.island_id: max(
+                        0, target_per_island - successful_by_island.get(island.island_id, 0)
+                    )
+                    for island in self.islands
+                }
+                total_deficit = sum(deficit_by_island.values())
+                if total_deficit == 0:
+                    stop_reason = "target_reached"
+                    break
+
+                remaining_budget = self._remaining_organism_creation_budget()
+                if remaining_budget is not None and remaining_budget <= 0:
+                    stop_reason = f"max_organism_creations={self.max_organism_creations}"
+                    _announce(
+                        f"seed top-up: stopping before round {round_index} "
+                        f"because organism-creation budget is exhausted "
+                        f"(remaining_deficit={total_deficit}, deficit_by_island={deficit_by_island})"
+                    )
+                    break
+
+                _announce(
+                    f"seed round {round_index}: planning {total_deficit} attempt(s) "
+                    f"(target_per_island={target_per_island}, "
+                    f"successful_by_island={successful_by_island}, "
+                    f"deficit_by_island={deficit_by_island}, "
+                    f"remaining_budget={remaining_budget if remaining_budget is not None else 'unlimited'})"
+                )
+                planned_batch = self._plan_seed_attempts(deficit_by_island)
+                if not planned_batch:
+                    stop_reason = f"max_organism_creations={self.max_organism_creations}"
+                    _announce(
+                        f"seed top-up: cannot plan more attempts in round {round_index} "
+                        f"(budget cap reached, remaining_deficit={total_deficit})"
+                    )
+                    break
+                all_planned.extend(planned_batch)
+
+                pre_round_success = len(all_newborns)
+                batch_newborns = await self._execute_planned_creations(
+                    planned_batch, state_kind="seed"
+                )
+                all_newborns.extend(batch_newborns)
+                round_successes = len(all_newborns) - pre_round_success
+                _announce(
+                    f"seed round {round_index} done: planned={len(planned_batch)}, "
+                    f"succeeded={round_successes}, "
+                    f"cumulative_successes={len(all_newborns)}"
+                )
+                if round_successes == 0:
+                    stop_reason = "no_progress"
+                    _announce(
+                        f"seed top-up: stopping after round {round_index} because no organism "
+                        f"succeeded this round (remaining_deficit={total_deficit - 0}); "
+                        f"the LLM pipeline appears unable to produce a valid seed organism"
+                    )
+                    break
+
+            if stop_reason and stop_reason != "target_reached":
+                _announce(
+                    f"seed top-up finished with stop_reason={stop_reason}, "
+                    f"total_planned={len(all_planned)}, total_succeeded={len(all_newborns)}"
+                )
+            else:
+                _announce(
+                    f"seed top-up finished: every island reached target_per_island={target_per_island} "
+                    f"(total_planned={len(all_planned)}, total_succeeded={len(all_newborns)})"
+                )
+
             self.population = select_top_k_per_island(
-                newborns,
+                all_newborns,
                 self.max_organisms_per_island,
                 score_field="simple_score",
             )
-            if planned_organisms and not self.population:
-                failure_message = self._seed_failure_message(planned_organisms, newborns)
+            if all_planned and not self.population:
+                failure_message = self._seed_failure_message(all_planned, all_newborns)
                 _announce(failure_message)
-                self._persist_inflight_seed(planned_organisms)
+                self._persist_inflight_seed(all_planned)
                 raise RuntimeError(failure_message)
-            self._mark_eliminated(newborns, self.population)
+            self._mark_eliminated(all_newborns, self.population)
             for organism in self.population:
                 organism.current_generation_active = 0
                 write_organism_meta(organism)
@@ -1752,6 +2418,7 @@ class EvolutionLoop:
             best = self._best_active_organism()
             return {
                 "total_generations": 0,
+                "total_organism_creation_attempts": self._organism_creation_attempt_count(),
                 "active_population_size": len(self.population),
                 "best_organism_id": best.organism_id if best is not None else None,
                 "best_simple_score": best.simple_score if best is not None else None,
@@ -1761,9 +2428,12 @@ class EvolutionLoop:
             self.orchestrator.close()
             if self._owns_llm_registry:
                 self.llm_registry.stop()
+            try:
+                self.comet_logger.end()
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Failed to end Comet experiment cleanly (continuing)")
 
     async def run(self) -> dict[str, Any]:
-        max_generations = int(self._require_cfg_value("evolver.max_generations"))
         if self._owns_llm_registry:
             self.llm_registry.start()
 
@@ -1797,12 +2467,29 @@ class EvolutionLoop:
                 planned_offspring = self._restore_inflight_generation(inflight_generation)
                 await self._run_generation(target_generation, planned_offspring=planned_offspring)
 
-            for generation in range(self.generation + 1, max_generations + 1):
-                await self._run_generation(generation)
+            while True:
+                next_generation = self.generation + 1
+                stop_reason = self._stop_reason_before_generation(next_generation)
+                if stop_reason is not None:
+                    _announce(f"stopping evolution before generation {next_generation}: {stop_reason}")
+                    break
+                attempts_before_generation = self._organism_creation_attempt_count()
+                await self._run_generation(next_generation)
+                if (
+                    self.max_generation_limit is None
+                    and self.max_organism_creations is not None
+                    and self._organism_creation_attempt_count() <= attempts_before_generation
+                ):
+                    _announce(
+                        "stopping evolution because the last generation did not plan new organisms "
+                        "and no max_generations limit is active"
+                    )
+                    break
 
             best = self._best_active_organism()
             return {
                 "total_generations": self.generation,
+                "total_organism_creation_attempts": self._organism_creation_attempt_count(),
                 "active_population_size": len(self.population),
                 "best_organism_id": best.organism_id if best is not None else None,
                 "best_simple_score": best.simple_score if best is not None else None,
@@ -1812,3 +2499,7 @@ class EvolutionLoop:
             self.orchestrator.close()
             if self._owns_llm_registry:
                 self.llm_registry.stop()
+            try:
+                self.comet_logger.end()
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Failed to end Comet experiment cleanly (continuing)")

@@ -5,7 +5,7 @@ This file applies to `conf/experiments/optimization_survey/prompts/crossover/`.
 ## Purpose
 
 - `system.txt`: defines the canonical design-stage response contract for crossbreeding.
-- `user.txt`: injects maternal and paternal genes, lineage, and raw implementation code.
+- `user.txt`: injects maternal and paternal genes and lineage summaries around the child draft.
 
 ## Placeholder Contract
 
@@ -15,10 +15,8 @@ This file applies to `conf/experiments/optimization_survey/prompts/crossover/`.
 - `novelty_rejection_feedback`
 - `mother_genetic_code`
 - `mother_lineage_summary`
-- `mother_implementation_code`
 - `father_genetic_code`
 - `father_lineage_summary`
-- `father_implementation_code`
 
 Keep these names synchronized with `src/organisms/crossbreeding.py`.
 

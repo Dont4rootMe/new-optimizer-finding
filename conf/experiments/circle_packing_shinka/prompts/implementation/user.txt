@@ -1,35 +1,57 @@
-Convert this circle-packing design into the final `implementation.py`.
+Compile this organism into code.
 
-=== FUNCTION CONTRACT ===
+=== IMPLEMENTATION INTERFACE ===
 You must implement exactly this function:
 
     def run_packing() -> tuple[np.ndarray, np.ndarray, float]:
 
 Arguments: none.
-Returns a 3-tuple:
-  1. centers: np.ndarray of shape (26, 2) — each row is (x, y) center of a circle
-  2. radii: np.ndarray of shape (26,) — radius of each circle
-  3. reported_sum: float — must equal np.sum(radii)
+Return the tuple interface used by the scaffold: `(centers, radii, reported_sum)`.
+The explicit experiment contract is a unit-square packing with exactly 26 total circles.
+The supplied genetic code defines the intended geometry, feasibility discipline, and objective within that count contract.
+Do not add task facts, evaluator assumptions, additional target counts, or exact formulas beyond this explicit 26-circle unit-square contract when they are absent from the genes.
 
-Constraints enforced by the evaluator:
-  - All values must be finite (no NaN, no inf)
-  - All radii must be > 0
-  - Every circle fully inside [0, 1] x [0, 1]: center[i] - radii[i] >= 0 and center[i] + radii[i] <= 1, for both x and y
-  - No overlaps: for every pair i != j, distance(centers[i], centers[j]) >= radii[i] + radii[j]
-  - reported_sum must match np.sum(radii) within 1e-6
+Validity preservation note:
+  - The final returned organism state must satisfy the validity discipline implied by the genes
+  - If local correction is needed, preserve the intended geometry and strong inherited structure whenever possible
+  - Do not perform a generic end-stage global shrink pass unless the genes themselves call for that behavior
 
-Score = sum of radii. Higher is better.
+=== CHANGED_SECTIONS ===
+{changed_sections}
 
 === ORGANISM GENETIC CODE ===
 {organism_genetic_code}
 
-=== ORGANISM NOVELTY SUMMARY ===
+=== ORGANISM CHANGE_DESCRIPTION ===
 {change_description}
 
-=== FIXED IMPLEMENTATION TEMPLATE ===
+=== MATERNAL BASE GENETIC CODE ===
+{base_parent_genetic_code}
+
+=== MATERNAL BASE IMPLEMENTATION ===
+{base_parent_implementation}
+
+=== CANONICAL IMPLEMENTATION SCAFFOLD ===
 {implementation_template}
 
-Implement the supplied ideas faithfully.
-Do not add a new major idea that is absent from the genes and novelty summary.
+=== TASK ===
+Realize the supplied genes faithfully and preserve the objective-seeking behavior they describe.
 
-Return ONLY the final Python code. No markdown fences, no commentary before or after.
+Return the final full Python file only.
+- if MATERNAL BASE IMPLEMENTATION is not NONE, use it as the concrete parent program and rewrite the complete child file with the minimum faithful edits
+- if MATERNAL BASE IMPLEMENTATION is NONE, use the canonical scaffold as the file skeleton
+- use CHANGED_SECTIONS as the main list of causal modules that must differ from the maternal implementation
+- preserve unaffected strong inherited behavior unless the child genes require a distinct packing regime or phenotype shift
+- if the child genes imply a distinct center, radius, or repair regime, rewrite enough of the maternal implementation to realize that regime instead of preserving the old one silently
+- do not return changed snippets only
+- do not return a patch artifact
+- the first non-empty line must be `import numpy as np` or another Python import, not a markdown fence or commentary
+- the file must contain a complete executable `def run_packing():` that returns exactly `(centers, radii, reported_sum)`
+- the final returned arrays must contain exactly 26 centers and 26 radii
+- return only the final organism output state, not repeated generated batches, candidate histories, or repair trajectories
+- keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the file
+- preserve code outside the EVOLVE block unless the current file is too broken to keep safely
+- do not write long exploratory comments in place of implementation; choose the simplest faithful deterministic realization and finish the file
+
+Be faithful to the supplied sectioned genes and the change description.
+Do not output markdown fences or commentary.

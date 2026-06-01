@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from omegaconf import DictConfig, OmegaConf
 
+from api_platforms._core.discovery import load_route_configs
 from src.evolve.allocation import build_allocation_snapshot
 from src.evolve.gpu_pool import GpuJobPool
 from src.evolve.scoring import mean_score
@@ -45,6 +46,7 @@ class EvolverOrchestrator:
         self.population_root = Path(str(cfg.paths.population_root)).expanduser().resolve()
         self.eval_config_dir = self._persist_eval_config_snapshot()
         self.experiment_requirements = self._resolve_experiment_requirements()
+        self.api_route_configs = load_route_configs(cfg)
         self.gpu_ranks, self.cpu_parallel_jobs = self._resolve_evaluation_resources()
         self.eval_entrypoint_module = self._resolve_eval_entrypoint_module()
         self.max_repair_attempts_per_organism = self._resolve_max_repair_attempts_per_organism()
@@ -119,10 +121,8 @@ class EvolverOrchestrator:
 
     def _collect_api_platform_gpu_ranks(self) -> list[int]:
         route_gpu_ranks: list[int] = []
-        for route_cfg in dict(self.cfg.get("api_platforms", {})).values():
-            if not hasattr(route_cfg, "get"):
-                continue
-            route_gpu_ranks.extend(self._normalize_gpu_ranks(route_cfg.get("gpu_ranks")))
+        for route_cfg in self.api_route_configs.values():
+            route_gpu_ranks.extend(route_cfg.gpu_ranks)
         return route_gpu_ranks
 
     def _validate_gpu_disjointness(self) -> None:
@@ -330,6 +330,18 @@ class EvolverOrchestrator:
         state["active_experiment"] = exp_name
         task = self._build_organism_task(request, exp_name)
         self.pool.submit(task)
+        LOGGER.info(
+            "Queued eval organism=%s phase=%s experiment=%s resource=%s result=%s stdout=%s stderr=%s timeout_sec=%s retries=%s",
+            request.organism_id,
+            request.phase,
+            exp_name,
+            task.resource_class,
+            task.output_json_path,
+            task.stdout_path,
+            task.stderr_path,
+            task.timeout_sec,
+            task.max_retries,
+        )
 
     def _final_payload_for_task(self, payload: dict[str, Any], task_state: dict[str, Any]) -> dict[str, Any]:
         final_payload = dict(payload)
@@ -372,15 +384,25 @@ class EvolverOrchestrator:
         repair_attempted: bool,
     ) -> list[dict[str, Any]]:
         errors = self._coerce_error_history(task_state)
-        errors.append(
-            {
-                "attempt": len(errors) + 1,
-                "status": status,
-                "error_msg": error_msg,
-                "timestamp": utc_now_iso(),
-                "repair_attempted": repair_attempted,
-            }
-        )
+        # Propagate the per-task evaluator log paths into the error entry
+        # itself so the repair callback can read the raw stdout/stderr from
+        # disk (``format_error_history`` previously only had access to the
+        # one-line ``error_msg`` summary, which loses the traceback and
+        # debugging context the Python interpreter wrote to stderr).
+        entry: dict[str, Any] = {
+            "attempt": len(errors) + 1,
+            "status": status,
+            "error_msg": error_msg,
+            "timestamp": utc_now_iso(),
+            "repair_attempted": repair_attempted,
+        }
+        stdout_path = task_state.get("stdout_path")
+        stderr_path = task_state.get("stderr_path")
+        if stdout_path:
+            entry["stdout_path"] = str(stdout_path)
+        if stderr_path:
+            entry["stderr_path"] = str(stderr_path)
+        errors.append(entry)
         task_state["errors"] = errors
         return errors
 
@@ -476,6 +498,28 @@ class EvolverOrchestrator:
         task_state["attempts"] = result.attempts
         task_state["status"] = payload_status
         task_state["error_msg"] = error_msg or None
+        log_message = (
+            "Eval result organism=%s phase=%s experiment=%s status=%s attempts=%s "
+            "duration_sec=%.2f device=%s rank=%s result=%s stdout=%s stderr=%s error=%s"
+        )
+        log_args = (
+            result.organism_id,
+            result.phase,
+            exp_name,
+            payload_status,
+            result.attempts,
+            float(result.duration_sec),
+            result.assigned_device,
+            result.assigned_rank,
+            result.result_json_path,
+            task_state.get("stdout_path"),
+            task_state.get("stderr_path"),
+            error_msg or "<none>",
+        )
+        if payload_status == "ok":
+            LOGGER.info(log_message, *log_args)
+        else:
+            LOGGER.warning(log_message, *log_args)
 
         summary = None
         eligible_error_status = {"failed", "timeout", "interrupted"}
@@ -493,6 +537,17 @@ class EvolverOrchestrator:
                 error_msg=error_msg,
                 repair_attempted=True,
             )
+            LOGGER.warning(
+                "Scheduling repair organism=%s phase=%s experiment=%s repair_attempt=%d/%d status=%s error=%s stderr=%s",
+                result.organism_id,
+                result.phase,
+                exp_name,
+                int(state["repair_attempts_used"]) + 1,
+                self.max_repair_attempts_per_organism,
+                payload_status,
+                error_msg,
+                task_state.get("stderr_path"),
+            )
             try:
                 await asyncio.to_thread(
                     self.repair_callback,
@@ -509,10 +564,25 @@ class EvolverOrchestrator:
                 payload["error_msg"] = combined_error
                 task_state["error_msg"] = combined_error
                 state["repair_attempts_used"] = int(state["repair_attempts_used"]) + 1
+                LOGGER.exception(
+                    "Repair failed organism=%s phase=%s experiment=%s repair_attempt=%d/%d",
+                    result.organism_id,
+                    result.phase,
+                    exp_name,
+                    int(state["repair_attempts_used"]),
+                    self.max_repair_attempts_per_organism,
+                )
                 summary = self._advance_request_after_final_result(request_key, exp_name, payload)
             else:
                 state["repair_attempts_used"] = int(state["repair_attempts_used"]) + 1
                 task_state["status"] = "queued"
+                LOGGER.info(
+                    "Repair completed; rescheduling eval organism=%s phase=%s experiment=%s next_attempt=%d",
+                    result.organism_id,
+                    result.phase,
+                    exp_name,
+                    int(result.attempts) + 1,
+                )
                 self._schedule_experiment(request_key, exp_name)
             return result, payload, summary
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 import hydra
 from omegaconf import DictConfig
@@ -19,6 +20,9 @@ def run_seed_population(cfg: DictConfig) -> dict:
 
     ensure_root_runtime_config(cfg, context="src.evolve.seed_run")
 
+    population_root = Path(str(cfg.paths.population_root)).expanduser().resolve()
+    _ensure_file_logging(population_root, "seed_run.log")
+
     from src.evolve.evolution_loop import EvolutionLoop
 
     registry = ApiPlatformRegistry(cfg)
@@ -32,6 +36,28 @@ def run_seed_population(cfg: DictConfig) -> dict:
         return result
     finally:
         registry.stop()
+
+
+def _ensure_file_logging(population_root: Path, log_name: str) -> None:
+    """Attach a FileHandler writing to `population_root/<log_name>`.
+
+    Idempotent — a second call with the same path is a no-op.
+    """
+
+    population_root.mkdir(parents=True, exist_ok=True)
+    log_path = population_root / log_name
+    marker = f"_evolve_file_handler_{log_path}"
+    root = logging.getLogger()
+    if any(getattr(h, "_evolve_file_marker", None) == marker for h in root.handlers):
+        return
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    )
+    handler._evolve_file_marker = marker  # type: ignore[attr-defined]
+    root.addHandler(handler)
+    root.setLevel(min(root.level or logging.DEBUG, logging.DEBUG))
 
 
 def _ensure_console_logging() -> None:

@@ -36,7 +36,12 @@ def _write_fake_python(
     for route in ollama_routes or []:
         route_id, base_url, model = route[:3]
         gpu_ranks_csv = route[3] if len(route) > 3 else ""
-        ollama_lines.append(f"printf '%s\\n' 'OLLAMA_ROUTE={route_id}|{base_url}|{model}|{gpu_ranks_csv}'")
+        fields = [route_id, base_url, model, gpu_ranks_csv]
+        if len(route) > 4:
+            fields.append(route[4])
+        if len(route) > 5:
+            fields.append(route[5])
+        ollama_lines.append(f"printf '%s\\n' 'OLLAMA_ROUTE={'|'.join(fields)}'")
 
     script = textwrap.dedent(
         f"""\
@@ -123,6 +128,9 @@ PY
                 printf '{"status":"verifying sha256 digest"}\\n'
                 printf '{"status":"success"}\\n'
                 ;;
+              */api/chat)
+                printf '%s' "${OLLAMA_CHAT_STATUS:-200}"
+                ;;
               *)
                 echo "unexpected curl url: $url" >&2
                 exit 1
@@ -143,10 +151,10 @@ PY
             host="${OLLAMA_HOST:-}"
             state_dir="${OLLAMA_STATE_DIR:?}/${host//[:\\/]/_}"
             mkdir -p "$state_dir"
-            printf 'host=%s gpu=%s | %s\\n' "$host" "${CUDA_VISIBLE_DEVICES:-}" "$*" >> "${OLLAMA_CALLS_FILE:?}"
+            printf 'host=%s gpu=%s | %s (parallel=%s ctx=%s)\\n' "$host" "${CUDA_VISIBLE_DEVICES:-}" "$*" "${OLLAMA_NUM_PARALLEL:-}" "${OLLAMA_CONTEXT_LENGTH:-}" >> "${OLLAMA_CALLS_FILE:?}"
             if [[ "${1:-}" == "serve" ]]; then
               touch "${state_dir}/server_ready"
-              trap 'printf "host=%s gpu=%s | stopped\\n" "$host" "${CUDA_VISIBLE_DEVICES:-}" >> "${OLLAMA_CALLS_FILE:?}"; rm -f "${state_dir}/server_ready"; exit 0' TERM INT
+              trap 'printf "host=%s gpu=%s | stopped (parallel=%s ctx=%s)\\n" "$host" "${CUDA_VISIBLE_DEVICES:-}" "${OLLAMA_NUM_PARALLEL:-}" "${OLLAMA_CONTEXT_LENGTH:-}" >> "${OLLAMA_CALLS_FILE:?}"; rm -f "${state_dir}/server_ready"; exit 0' TERM INT
               while true; do
                 sleep 1
               done
@@ -356,7 +364,8 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
     _write_fake_python(
         fake_python,
         ollama_routes=[
-            ("ollama_qwen35_27b", "http://127.0.0.1:11435/api", "qwen3.5:27b", "1"),
+            ("ollama_qwen35_122b", "http://127.0.0.1:11434/api", "qwen3.5:122b", "0,1,2"),
+            ("ollama_qwen35_122b", "http://127.0.0.1:11435/api", "qwen3.5:122b", "3,4,5"),
         ],
     )
     _write_fake_local_ollama_commands(fake_bin)
@@ -381,7 +390,7 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
 
     assert completed.returncode == 0
     assert "Starting local Ollama server" in completed.stdout
-    assert "Pulling Ollama model qwen3.5:27b" in completed.stdout
+    assert completed.stdout.count("Pulling Ollama model qwen3.5:122b") == 2
     assert "local model store:" in completed.stdout
     assert "downloading:" in completed.stdout
     module_calls = [
@@ -393,8 +402,10 @@ def test_run_evolution_shell_wrapper_auto_starts_local_ollama_before_main(tmp_pa
         "-m src.main --config-name config_circle_packing_shinka mode=evolve",
     ]
     ollama_calls = ollama_calls_path.read_text(encoding="utf-8")
-    assert "host=127.0.0.1:11435 gpu=1 | serve" in ollama_calls
-    assert "host=127.0.0.1:11435 gpu=1 | stopped" in ollama_calls
+    assert "host=127.0.0.1:11434 gpu=0,1,2 | serve" in ollama_calls
+    assert "host=127.0.0.1:11435 gpu=3,4,5 | serve" in ollama_calls
+    assert "host=127.0.0.1:11434 gpu=0,1,2 | stopped" in ollama_calls
+    assert "host=127.0.0.1:11435 gpu=3,4,5 | stopped" in ollama_calls
     curl_calls = curl_calls_path.read_text(encoding="utf-8").splitlines()
     assert any("/api/tags" in line for line in curl_calls)
     assert any("/api/pull" in line for line in curl_calls)

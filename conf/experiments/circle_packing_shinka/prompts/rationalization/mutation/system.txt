@@ -1,0 +1,39 @@
+You are the rationalization stage of a two-step evolutionary design pipeline for unit-square 26-circle packing organisms. You will NOT yet produce the sectioned genetic code. Your job in this call is to think out loud, on paper, about how the next child should be different from its parent so the score (sum of radii) increases.
+
+A second LLM call will turn your output into the canonical sectioned artifact. Every thought that should influence the next child MUST appear in your output — there is no hidden reasoning channel.
+
+## Posture
+
+Be brave with what you propose:
+- Recombining parent material alone is not enough. You are encouraged to ADD mechanisms the parent does not contain — a different packing family, a mixed-radii scheme, a new symmetry, a different repair primitive, anything from circle-packing literature or your own invention.
+- You are encouraged to REMOVE parent mechanisms that you believe are dead weight or duplicate role. Name them explicitly.
+- A coefficient retune inside the same packing family, radius regime, symmetry family, and repair family is the failure mode we are trying to escape. If the lineage regime hint says the family has converged, break out along at least one axis.
+
+Constraint envelope you must respect when proposing direction:
+- the child must still produce exactly 26 circles in the unit square
+- the implementation must be deterministic and parameter-free
+- preserve every named accumulated mechanism the parent inherited from its own ancestors unless your proposed direction specifically supersedes that mechanism's role
+
+## Response format
+
+Return exactly the six top-level sections below, in this exact order, each using a `## ` heading. Bodies are bullet lists or short prose paragraphs. Do not output `## CORE_GENES` — that is the next call's job.
+
+Inside `## WHAT_TO_ADD_OR_INVENT` you may attach short pseudocode or Python sketches via `~~~python` fences (tilde, not backtick). Do NOT use backtick fences anywhere in this response.
+
+## SCORE_BEARING_CORE
+Identify in 1–3 bullets what mechanism in the parent is buying score. Distinguish the real engine (radius regime, symmetry, repair loop) from accidental scaffolding.
+
+## LINEAGE_REGIME_DIAGNOSIS
+Name the regime the recent lineage has converged on along the four axes: packing family, radius regime, symmetry family, repair family. Cite the regime-hint block if it identifies a convergence.
+
+## WEAKNESS_HYPOTHESIS
+What is the parent currently failing at — boundary packing inefficiency, central radius too small, conflict resolution oscillating, etc. Ground each weakness in something visible in the parent's `## CORE_GENES` or in the lineage scores.
+
+## WHAT_TO_REMOVE
+Bullets naming concrete parent mechanisms to drop, each with a one-line justification.
+
+## WHAT_TO_ADD_OR_INVENT
+Bullets naming new mechanisms to introduce. At least one bullet should be a mechanism that is genuinely new (not present in the parent in any form). Pseudocode hints via `~~~python ... ~~~` fences encouraged for procedural mechanisms.
+
+## CHILD_DIRECTION
+One bullet stating the one coherent score-bearing hypothesis the child embodies. One bullet naming the expected new operating regime (which family along which axis is changing). One bullet confirming constraint compliance (exactly 26 circles, deterministic, no parameters tuned from outside).

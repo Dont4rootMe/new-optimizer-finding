@@ -1,0 +1,84 @@
+_target_: api_platforms.ollama_qwen35_122b.platform.build_platform
+base_url: ${oc.env:OLLAMA_BASE_URL,http://127.0.0.1:11434/api}
+temperature: 1.0
+max_output_tokens: 12288
+top_p: 0.95
+top_k: 20
+timeout_sec: 1800
+max_retries: 0
+# PHASE A speedup (2026-05-21): broker concurrency 4 → 8. The two qwen
+# 122B Ollama instances each support ~4 concurrent requests; raising the
+# per-route ceiling lets max_parallel_organisms (8) actually achieve 8×
+# real parallelism instead of being throttled to 4× at the broker queue.
+max_concurrency: 8
+keep_alive: 30m
+think: low
+raw: null
+format: null
+logprobs: null
+top_logprobs: null
+
+request_options:
+  num_ctx: 65536
+  seed: null
+  num_keep: null
+  min_p: null
+  typical_p: null
+  repeat_last_n: null
+  repeat_penalty: null
+  presence_penalty: null
+  frequency_penalty: null
+  mirostat: null
+  mirostat_tau: null
+  mirostat_eta: null
+  penalize_newline: null
+  stop: null
+  num_batch: null
+  num_thread: null
+  num_gpu: null
+  main_gpu: null
+  low_vram: null
+  use_mmap: null
+  use_mlock: null
+  numa: null
+  vocab_only: null
+
+stage_options:
+  # design = trait/design generation for a new or mutated organism.
+  # PHASE A: think medium → low and max_output_tokens 12288 → 6144.
+  # Measured average design time was 916s (51% of wall-time); halving
+  # the thinking budget + output cap cuts worst-case latency ~2×.
+  design: &qwen_stage_defaults
+    think: low
+    max_output_tokens: 6144
+    temperature: 1.0
+    top_p: 0.95
+    top_k: 20
+    keep_alive: 30m
+    raw: null
+    format: null
+    logprobs: null
+    top_logprobs: null
+    request_options: {}
+  # implementation = full implementation.py generation.
+  # PHASE A: think low → false (disable thinking entirely; implementation
+  # is mostly mechanical code rendering from the genetic_code design).
+  # max_output_tokens 12288 → 8192 (implementation files are rarely
+  # > 5k tokens in practice).
+  implementation:
+    <<: *qwen_stage_defaults
+    think: false
+    max_output_tokens: 8192
+    temperature: 0.4
+    top_p: 0.9
+  # repair = post-eval code repair after explicit runtime/test failure
+  repair:
+    <<: *qwen_stage_defaults
+    think: low
+    temperature: 0.2
+    top_p: 0.85
+  novelty_check:
+    <<: *qwen_stage_defaults
+    think: low
+    temperature: 0.1
+    top_p: 0.8

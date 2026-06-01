@@ -30,7 +30,10 @@ evolve = [
   "accelerate>=0.33.0",
   "safetensors>=0.4.3",
   "sentencepiece>=0.2.0",
+  "plotly>=5.20.0",
+  "comet_ml>=3.40.0",
 ]
+shinka_baseline = ["shinka-evolve>=0.0.4"]
 
 [tool.setuptools]
 include-package-data = true

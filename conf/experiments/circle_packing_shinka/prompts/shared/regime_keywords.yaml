@@ -1,0 +1,38 @@
+# Regime convergence keyword map for circle_packing_shinka.
+#
+# Used by src/organisms/lineage_regime.py — same shape as awtf2025's
+# map. Each axis tracks a different aspect of the packing design.
+
+packing_family:
+  - "hex packing"
+  - "hexagonal"
+  - "square grid"
+  - "triangular scaffold"
+  - "centered grid"
+  - "concentric rings"
+  - "rings"
+
+radius_regime:
+  - "single radius"
+  - "uniform radii"
+  - "uniform radius"
+  - "mixed radii"
+  - "graded radii"
+  - "central large radius"
+  - "radius variance"
+
+symmetry_family:
+  - "rotational symmetry"
+  - "4-fold"
+  - "6-fold"
+  - "mirror symmetry"
+  - "axis symmetry"
+  - "asymmetric placement"
+
+repair_family:
+  - "no repair"
+  - "worst-conflict repair"
+  - "global shrink"
+  - "local relax"
+  - "perturbation repair"
+  - "feasibility pass"

@@ -13,6 +13,7 @@ def test_no_valopt_env_vars_in_active_surface() -> None:
         ROOT / "README.md",
         ROOT / "conf" / "config_optimization_survey.yaml",
         ROOT / "conf" / "config_circle_packing_shinka.yaml",
+        ROOT / "conf" / "config_awtf2025_heuristic.yaml",
         ROOT / "scripts" / "seed_population.sh",
         ROOT / "scripts" / "run_evolution.sh",
     ]
@@ -43,6 +44,7 @@ def test_canonical_presets_no_longer_embed_validation_mode_surface() -> None:
     for path in [
         ROOT / "conf" / "config_optimization_survey.yaml",
         ROOT / "conf" / "config_circle_packing_shinka.yaml",
+        ROOT / "conf" / "config_awtf2025_heuristic.yaml",
     ]:
         text = path.read_text(encoding="utf-8")
         assert "\norganism_dir:" not in text, str(path)
@@ -51,3 +53,4 @@ def test_canonical_presets_no_longer_embed_validation_mode_surface() -> None:
 def test_validation_presets_keep_standalone_organism_surface() -> None:
     assert not (ROOT / "conf" / "config_optimization_survey_validate.yaml").exists()
     assert not (ROOT / "conf" / "config_circle_packing_shinka_validate.yaml").exists()
+    assert not (ROOT / "conf" / "config_awtf2025_heuristic_validate.yaml").exists()

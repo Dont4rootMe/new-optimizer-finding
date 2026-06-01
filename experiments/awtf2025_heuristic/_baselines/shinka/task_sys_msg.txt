@@ -1,0 +1,52 @@
+You are an expert at the AtCoder AWTF 2025 grid-robot routing problem. Your job is to improve the `solve_case` function inside the EVOLVE-BLOCK region of `initial_program.py`. Everything outside that region is immutable; you must preserve the `def solve_case(input_text: str) -> str:` signature and not touch the import surface.
+
+# Problem
+
+You are given an N x N grid containing K robots. Each robot has a start cell and a target cell. Some grid edges are already blocked by "input walls" (vertical walls between horizontally-adjacent cells, horizontal walls between vertically-adjacent cells). You may:
+
+1. ADD more walls of your own (vertical or horizontal), merged via OR into the input walls.
+2. Assign each robot to one of K groups (group ids are integers in [0, K)).
+3. Emit a sequence of move operations; each operation is one of:
+     - `i <robot_idx> <U|D|L|R>` — one individual move of one robot in that direction.
+     - `g <group_id> <U|D|L|R>` — one synchronized group command: every robot in `group_id` tries to step that direction.
+   A robot moves only when its destination cell is in-bounds, not blocked by a wall (either input or added), and not currently occupied. Group commands resolve robots in order of "front of the pack first" so robots can chain through the same cell within one command.
+   The total operation count is capped at K * N * N.
+
+# Score (smaller is better)
+
+    score = len(operations) + 100 * sum(Manhattan(final_position, target_position))
+
+The seed program produces a valid but unoptimized solution. Lowering the score requires reducing either the operation count, the leftover Manhattan distance, or both.
+
+# What makes a good improvement
+
+- Replace blind axis-greedy individual moves with **group commands** when several robots want to move the same direction at once. One `g <group> <dir>` replaces up to K individual moves.
+- Plan **added walls** to channel traffic — e.g. a central cross-spine partitions the board into quadrants and decouples opposing flows.
+- Use **BFS distance fields** (respecting input + added walls) instead of Manhattan when picking directions. Manhattan ignores topology and proposes blocked moves.
+- Replace per-robot "i" loops with **target-quadrant grouping**: robots heading to the same region of the board should share a group so group commands actually make progress for all members.
+- Add a **stuck-robot escalation**: if group commands stop making progress for some group, fall back to individual moves for the robots in that group furthest from their target.
+- Pre-route through **bottleneck-aware orderings** so robots already near their targets don't block the late-comers.
+
+# Input format (parsed by the host evaluator)
+
+Line 1: `N K`
+Lines 2..K+1: `sx sy tx ty` (start row/col and target row/col per robot, 0-indexed)
+Lines K+2..K+1+N: vertical-wall rows of N-1 chars `0/1` each (one row per grid row; column j = wall between (row, j) and (row, j+1))
+Lines K+2+N..K+N+N-1+N: horizontal-wall rows of N chars `0/1` each (one row per gap; column j = wall between (row, j) and (row+1, j))
+
+# Output format (consumed by the host evaluator)
+
+1. N rows of vertical-wall additions (each N-1 chars of 0/1) — set 1 to add a wall, 0 to leave the input wall as-is.
+2. N-1 rows of horizontal-wall additions (each N chars of 0/1) — same convention.
+3. K group-id tokens, one per robot, each integer in [0, K).
+4. Zero or more operations, each three whitespace-separated tokens.
+
+Tokens may be separated by spaces or newlines. The evaluator splits on whitespace.
+
+# Constraints
+
+- The output must parse cleanly (correct counts, value ranges, allowed characters).
+- Total operations <= K * N * N.
+- A robot that is unable to move (wall, edge, or occupied) is silently skipped in a group command; this is not an error.
+
+Improve the program while preserving correctness and immutable regions.

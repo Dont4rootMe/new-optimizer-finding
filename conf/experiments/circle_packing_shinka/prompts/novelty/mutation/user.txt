@@ -1,11 +1,8 @@
 Evaluate whether this mutation child is meaningfully novel relative to its parent.
 
-=== CHILD GENETIC CODE DRAFT SELECTED BY EVOLUTION ===
-{inherited_gene_pool}
-
-=== EXCLUDED IDEAS ===
-These ideas were explicitly removed during mutation sampling.
-{removed_gene_pool}
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
 
 === PARENT GENETIC CODE ===
 {parent_genetic_code}
@@ -17,6 +14,10 @@ These ideas were explicitly removed during mutation sampling.
 {candidate_change_description}
 
 === TASK ===
-Decide whether the candidate child contains at least one genuinely new gene-level idea that is absent from the parent in substance, not just in wording.
-If it only rephrases or lightly retells parent ideas, reject it.
-If `CHANGE_DESCRIPTION` overclaims novelty that the genes do not support, reject it.
+Accept a candidate that introduces a coherent and visible mechanism shift relative to the parent — at least one CORE_GENES section must contain a substantive change that affects the effective center family, radius regime, geometry family, or repair/control regime.
+Reject a candidate that mainly reconstructs the parent verbatim, only rephrases parent ideas, only reshuffles ideas across sections without substantive change, or is too weak to change the organism's effective behavior.
+Reject children whose claimed mutation is only cosmetic or too weak to change the organism's effective behavior.
+Reject a candidate that keeps the same center-generation family, the same radius regime, and the same repair/control regime while only retelling the story or weakly retuning coefficients.
+Reject a retained one-radius regime unless the child genes make a genuinely different phenotype family explicit.
+Reject children whose apparent novelty comes mainly from elaboration, not from a changed mechanism.
+If `CHANGE_DESCRIPTION` overclaims novelty that the sectioned genes do not support, reject it.

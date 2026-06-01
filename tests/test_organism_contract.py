@@ -7,11 +7,35 @@ from pathlib import Path
 
 import pytest
 
-from src.evolve.storage import read_genetic_code, read_lineage, read_organism_meta, write_json, write_organism_meta
+from src.evolve.storage import (
+    organism_meta_path,
+    read_genetic_code,
+    read_lineage,
+    read_organism_meta,
+    write_json,
+    write_organism_meta,
+)
+from src.organisms.genetic_code_format import load_genome_schema
 from src.organisms.organism import (
     build_organism_from_response,
     format_lineage_summary,
     update_latest_lineage_entry,
+)
+
+ROOT = Path(__file__).resolve().parents[1]
+SCHEMA_SECTION_NAMES = tuple(
+    section.name
+    for section in load_genome_schema(
+        str(
+            ROOT
+            / "conf"
+            / "experiments"
+            / "circle_packing_shinka"
+            / "prompts"
+            / "shared"
+            / "genome_schema.txt"
+        )
+    )
 )
 
 
@@ -38,6 +62,47 @@ def _base_parsed() -> dict[str, str]:
         "INTERACTION_NOTES": "Momentum and warmup are coordinated.",
         "COMPUTE_NOTES": "No extra step_fn calls.",
         "CHANGE_DESCRIPTION": "Initial organism build.",
+    }
+
+
+def _sectioned_core_genes() -> str:
+    return """### INIT_GEOMETRY
+- Start from a centered triangular scaffold trimmed to the square.
+
+### RADIUS_POLICY
+- Assign initial radii from local scaffold spacing.
+
+### EXPANSION_POLICY
+- Increase radii in small density-aware growth steps.
+
+### CONFLICT_MODEL
+- Treat pairwise overlap and boundary penetration as the two primary violations.
+
+### REPAIR_POLICY
+- Resolve the worst conflict first by local deterministic center shifts.
+
+### CONTROL_POLICY
+- Alternate growth and repair until no score-improving feasible update remains.
+
+### PARAMETERS
+- Use smaller corrective moves after repeated conflict recurrence.
+
+### OPTIONAL_CODE_SKETCH
+- None."""
+
+
+def _sectioned_parsed() -> dict[str, str]:
+    return {
+        "CORE_GENES": _sectioned_core_genes(),
+        "INTERACTION_NOTES": (
+            "This organism assumes the scaffold is already close to feasible and relies on deterministic local "
+            "correction."
+        ),
+        "COMPUTE_NOTES": "The design implies a staged constructive search with repeated local feasibility restoration.",
+        "CHANGE_DESCRIPTION": (
+            "This organism tests whether a triangular scaffold combined with density-aware expansion and "
+            "worst-conflict-first repair can improve score while preserving deterministic feasibility."
+        ),
     }
 
 
@@ -83,9 +148,107 @@ def test_build_organism_rejects_missing_sections(tmp_path: Path) -> None:
         _build(tmp_path, parsed)
 
 
+def test_build_organism_rejects_unexpected_top_level_section(tmp_path: Path) -> None:
+    parsed = _base_parsed()
+    parsed["DEBUG"] = "This top-level section must not be silently discarded."
+
+    with pytest.raises(ValueError, match="unexpected section"):
+        _build(tmp_path, parsed)
+
+
 def test_build_organism_rejects_empty_implementation(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="non-empty implementation.py"):
         _build(tmp_path, _base_parsed(), implementation_code="   \n")
+
+
+def test_build_organism_accepts_sectioned_circle_packing_genetic_code(tmp_path: Path) -> None:
+    org = _build(
+        tmp_path,
+        _sectioned_parsed(),
+        expected_core_gene_sections=SCHEMA_SECTION_NAMES,
+    )
+
+    genetic_code = read_genetic_code(org.genetic_code_path)
+    assert genetic_code["format_kind"] == "sectioned"
+    assert [section["name"] for section in genetic_code["core_gene_sections"]] == list(SCHEMA_SECTION_NAMES)
+    assert "### INIT_GEOMETRY" in Path(org.genetic_code_path).read_text(encoding="utf-8")
+
+
+def test_build_organism_accepts_legacy_flat_genetic_code_during_section_migration(tmp_path: Path) -> None:
+    org = _build(
+        tmp_path,
+        _base_parsed(),
+        expected_core_gene_sections=SCHEMA_SECTION_NAMES,
+    )
+
+    genetic_code = read_genetic_code(org.genetic_code_path)
+    assert genetic_code["format_kind"] == "legacy_flat"
+    assert genetic_code["core_genes"] == ["adaptive momentum", "warmup schedule", "gradient clipping"]
+
+
+def test_build_organism_rejects_sectioned_core_with_wrong_order(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace(
+        "### INIT_GEOMETRY\n- Start from a centered triangular scaffold trimmed to the square.\n\n"
+        "### RADIUS_POLICY\n- Assign initial radii from local scaffold spacing.",
+        "### RADIUS_POLICY\n- Assign initial radii from local scaffold spacing.\n\n"
+        "### INIT_GEOMETRY\n- Start from a centered triangular scaffold trimmed to the square.",
+    )
+
+    with pytest.raises(ValueError, match="schema exactly"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
+
+
+def test_build_organism_rejects_sectioned_core_with_missing_section(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace(
+        "\n\n### PARAMETERS\n- Use smaller corrective moves after repeated conflict recurrence.",
+        "",
+    )
+
+    with pytest.raises(ValueError, match="schema exactly"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
+
+
+def test_build_organism_rejects_sectioned_core_with_duplicate_section(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace(
+        "### OPTIONAL_CODE_SKETCH\n- None.",
+        "### INIT_GEOMETRY\n- Duplicate geometry entry.\n\n### OPTIONAL_CODE_SKETCH\n- None.",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate CORE_GENES subsection"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
+
+
+def test_build_organism_rejects_sectioned_core_with_none_outside_optional_code_sketch(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace(
+        "- Start from a centered triangular scaffold trimmed to the square.",
+        "- None.",
+    )
+
+    with pytest.raises(ValueError, match="only valid inside OPTIONAL_CODE_SKETCH"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
+
+
+def test_build_organism_rejects_sectioned_core_with_unexpected_extra_section(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace(
+        "### OPTIONAL_CODE_SKETCH\n- None.",
+        "### EXTRA_SECTION\n- This section is not in the schema.\n\n### OPTIONAL_CODE_SKETCH\n- None.",
+    )
+
+    with pytest.raises(ValueError, match="schema exactly"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
+
+
+def test_build_organism_rejects_sectioned_core_with_malformed_subsection_heading(tmp_path: Path) -> None:
+    parsed = _sectioned_parsed()
+    parsed["CORE_GENES"] = _sectioned_core_genes().replace("### INIT_GEOMETRY", "### Init Geometry")
+
+    with pytest.raises(ValueError, match="Malformed CORE_GENES subsection heading"):
+        _build(tmp_path, parsed, expected_core_gene_sections=SCHEMA_SECTION_NAMES)
 
 
 def test_new_lineage_write_omits_diff_summary_and_summary_mentions_cross_island(tmp_path: Path) -> None:
@@ -148,7 +311,7 @@ def test_canonical_genetic_code_read_rejects_malformed_sections(tmp_path: Path) 
     path = org_dir / "genetic_code.md"
     path.write_text("adaptive momentum; warmup schedule; gradient clipping", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="required sections"):
+    with pytest.raises(ValueError, match="required sections|first top-level section"):
         read_genetic_code(path)
 
 
@@ -222,3 +385,107 @@ def test_canonical_organism_meta_round_trips_error_msg(tmp_path: Path) -> None:
 
     reloaded = read_organism_meta(org.organism_dir)
     assert reloaded.error_msg == "design response is missing COMPUTE_NOTES"
+
+
+def test_canonical_organism_meta_round_trips_token_usage(tmp_path: Path) -> None:
+    org = _build(tmp_path, _base_parsed())
+    org.token_usage = {
+        "ollama_gemma4_31b": {
+            "prompt_tokens": 120,
+            "completion_tokens": 340,
+            "total_tokens": 460,
+            "calls": 3,
+        },
+        "ollama_qwen35_35b": {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30,
+            "calls": 1,
+        },
+    }
+    write_organism_meta(org)
+
+    reloaded = read_organism_meta(org.organism_dir)
+    assert reloaded.token_usage == org.token_usage
+
+
+def test_canonical_organism_meta_defaults_token_usage_for_legacy_files(tmp_path: Path) -> None:
+    """organism.json written before token accounting omits the field entirely."""
+
+    org = _build(tmp_path, _base_parsed())
+    write_organism_meta(org)
+    meta_path = organism_meta_path(org.organism_dir)
+    payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    payload.pop("token_usage", None)
+    meta_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    reloaded = read_organism_meta(org.organism_dir)
+    assert reloaded.token_usage == {}
+
+
+def test_parent_fitness_signal_renders_gap_and_best_ancestor() -> None:
+    """Task A regression: Step 1 prompts now carry an explicit fitness gap.
+
+    The free-form lineage summary buried per-ancestor scores in a multi-line
+    block that the LLM tended to skim past. Pulling parent_score +
+    best_ancestor_score + the explicit gap into a labeled block forces the
+    rationalizer to engage with the actual fitness signal instead of doing
+    armchair plausibility reasoning.
+    """
+
+    from src.organisms.organism import format_parent_fitness_signal
+
+    rendered = format_parent_fitness_signal(
+        primary_label="parent",
+        primary_score=-50000.0,
+        primary_lineage=[
+            {"simple_score": -26000.0, "change_description": "Seed: quadrant isolation."},
+            {"simple_score": -45000.0, "change_description": "Urgency-weighted BFS routing."},
+            {"simple_score": -50000.0, "change_description": "Lane-priority vacuum mechanism."},
+        ],
+    )
+
+    assert "parent simple_score: -50000" in rendered
+    assert "best ancestor simple_score: -26000" in rendered
+    # Gap with explicit sign forces the LLM to read "+ means I regressed".
+    assert "gap (best_ancestor - parent): +24000" in rendered
+    # The best ancestor's mechanism is surfaced so the LLM can target it.
+    assert "Seed: quadrant isolation" in rendered
+
+
+def test_parent_fitness_signal_handles_crossover_two_parents() -> None:
+    from src.organisms.organism import format_parent_fitness_signal
+
+    rendered = format_parent_fitness_signal(
+        primary_label="mother",
+        primary_score=-30000.0,
+        primary_lineage=[
+            {"simple_score": -26000.0, "change_description": "Seed mother."}
+        ],
+        secondary_label="father",
+        secondary_score=-40000.0,
+        secondary_lineage=[
+            {"simple_score": -35000.0, "change_description": "Father with BFS routing."}
+        ],
+    )
+
+    assert "mother simple_score: -30000" in rendered
+    assert "father simple_score: -40000" in rendered
+    # Best ancestor is taken across both lineages.
+    assert "best ancestor simple_score: -26000" in rendered
+    assert "gap (best_ancestor - mother): +4000" in rendered
+
+
+def test_parent_fitness_signal_handles_empty_lineage_gracefully() -> None:
+    from src.organisms.organism import format_parent_fitness_signal
+
+    rendered = format_parent_fitness_signal(
+        primary_label="parent",
+        primary_score=None,
+        primary_lineage=[],
+    )
+
+    assert "parent simple_score: (unknown)" in rendered
+    assert "lineage has no scored entries" in rendered
+    # No explicit gap line — there is no anchor to compare to.
+    assert "gap (best_ancestor" not in rendered

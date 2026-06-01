@@ -1,0 +1,59 @@
+# === FIXED: DO NOT MODIFY ===
+import torch
+import torch.nn as nn
+# === END FIXED ===
+
+# === FIXED: OPTIMIZER_CONTRACT ===
+OPTIMIZER_NAME = "SectionAlignedOptimizer"
+
+
+class SectionAlignedOptimizer:
+    def __init__(self, model: nn.Module, max_steps: int) -> None:
+        self.model = model
+        self.max_steps = int(max_steps)
+        self.step_index = 0
+
+    def step(self, weights, grads, activations, step_fn) -> None:
+        del weights, activations, step_fn
+        params = [p for p in self.model.parameters() if p.requires_grad]
+
+        # === REGION: STATE_REPRESENTATION ===
+        # === END_REGION: STATE_REPRESENTATION ===
+
+        # === REGION: GRADIENT_PROCESSING ===
+        # === END_REGION: GRADIENT_PROCESSING ===
+
+        # === REGION: UPDATE_RULE ===
+        # === END_REGION: UPDATE_RULE ===
+
+        # === REGION: PARAMETER_GROUP_POLICY ===
+        # === END_REGION: PARAMETER_GROUP_POLICY ===
+
+        # === REGION: STEP_CONTROL_POLICY ===
+        # === END_REGION: STEP_CONTROL_POLICY ===
+
+        # === REGION: STABILITY_POLICY ===
+        # === END_REGION: STABILITY_POLICY ===
+
+        # === REGION: PARAMETERS ===
+        # === END_REGION: PARAMETERS ===
+
+        # === REGION: OPTIONAL_CODE_SKETCH ===
+        # === END_REGION: OPTIONAL_CODE_SKETCH ===
+
+        self.step_index += 1
+
+    def zero_grad(self, set_to_none: bool = True) -> None:
+        for param in self.model.parameters():
+            if param.grad is None:
+                continue
+            if set_to_none:
+                param.grad = None
+            else:
+                param.grad.detach_()
+                param.grad.zero_()
+
+
+def build_optimizer(model: nn.Module, max_steps: int):
+    return SectionAlignedOptimizer(model, max_steps)
+# === END FIXED ===

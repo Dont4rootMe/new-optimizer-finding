@@ -1,37 +1,52 @@
 Mutate this organism into a child.
 
-=== CHILD GENETIC CODE DRAFT ===
-This is the child-side draft already selected by evolution.
-This is the main object you must work on.
-{inherited_gene_pool}
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
 
-=== EXCLUDED IDEAS ===
-These ideas were deliberately removed during mutation sampling.
-Treat them as excluded-by-evolution context, not as default candidates to restore.
-{removed_gene_pool}
+=== STEP 1 DESIGN RATIONALE ===
+A prior rationalization call produced the design plan below. Materialize WHAT_TO_REMOVE, WHAT_TO_ADD_OR_INVENT and CHILD_DIRECTION in the structured artifact. If the block reads "(rationalization disabled — single-call mode)", proceed without it.
+{rationalization}
+
+=== PARENT GENETIC CODE ===
+This is the only parent. There is no pre-sampled child draft and no externally excluded gene pool.
+You decide which mechanism to evolve, which to keep verbatim, and which to drop.
+{parent_genetic_code}
+
+=== PARENT IMPLEMENTATION (ground truth Python) ===
+Below is the parent's actual `implementation.py` — the code that the host evaluator scored. The genetic code above is the design intent; this block is what actually runs.
+
+```python
+{parent_implementation}
+```
+
+=== PARENT LINEAGE SUMMARY ===
+Past idea changes and their outcomes. Scores in lineage: higher is better.
+Use score trends to identify which mechanisms helped, and to spot regime convergence (e.g. several recent children all keeping a single global radius; several recent children all using the same symmetry family).
+If the lineage shows convergence, prefer a mutation that breaks out of that regime instead of tuning inside it.
+{parent_lineage_summary}
+
+=== TOP-K INSPIRATION PROGRAMS (same island, sorted best first) ===
+Highest-scoring survivors on the parent's island, excluding the parent. Reference programs for designing the child's CORE_GENES.
+{inspirations}
 
 === NOVELTY REJECTION FEEDBACK ===
-If a previous child draft was rejected for lacking novelty, address these issues explicitly.
+If a previous candidate child was rejected for lacking novelty, address those issues explicitly.
 If there was no prior rejection, this section will say so.
 {novelty_rejection_feedback}
 
-=== PARENT GENETIC CODE (REFERENCE ONLY) ===
-Use this only to understand where the child draft came from.
-{parent_genetic_code}
-
-=== PARENT LINEAGE SUMMARY (REFERENCE ONLY) ===
-Use this only to understand past idea changes and outcomes.
-Scores in lineage: higher is better. Use score trends to identify which ideas improved performance.
-{parent_lineage_summary}
-
-=== PARENT IMPLEMENTATION CODE (REFERENCE ONLY) ===
-Use this only to understand how parent ideas were realized in code.
-Do not let this override the child genetic code draft.
-{parent_implementation_code}
-
 === TASK ===
 The parent organism already works and has been evaluated.
-Your goal: make ONE small, targeted improvement to the child draft that could push the score higher.
+Your goal: design one coherent score-seeking hypothesis change to the parent that could push the score higher.
+The child remains a unit-square packing organism and must still produce exactly 26 total circles.
+The result may revise several coupled sections when the mechanism requires it.
+Keep the mutation small in causal scope even when it spans multiple sections.
+Do not solve uncertainty by adding extra support genes everywhere; only add the minimum support needed for the new mechanism to make sense.
+Prefer edits that materially change the operating regime, not merely wording changes or cosmetic parameter nudges.
+A pure coefficient retuning is weak unless it clearly pushes the organism into a different packing family, radius regime, or repair regime.
+Verbatim repetition of the entire parent genome is invalid — at least one CORE_GENES section must materially change relative to the parent.
+State how the child should differ in expected packing family or operating regime, and why the change is not merely the same one-radius layout with different repair tuning.
 Do NOT replace the core algorithmic structure — refine it.
-The result should still be gene-centric and should include one unified novelty summary for the new child.
+The result must be a full sectioned genetic code in the canonical format, not a partial diff.
 If novelty rejection feedback is present, resolve it explicitly instead of rephrasing the parent.
+Return the structured design directly. Do not add preface text before `## CORE_GENES`.

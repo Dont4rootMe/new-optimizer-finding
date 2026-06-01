@@ -1,19 +1,71 @@
-You are validating whether a mutated circle-packing child is meaningfully novel relative to its parent.
+You are validating whether a mutated child is meaningfully novel relative to its parent.
 
-Do not propose edits. Decide only whether the candidate child introduces at least one materially new gene-level idea that is absent from the parent in substance.
+Do not propose edits. Decide only whether the candidate child is meaningfully non-parental after mutation.
+
+The genome is sectioned. Evaluate novelty using the sectioned `## CORE_GENES` structure, not as a flat list.
+The schema is authoritative for the section names and their intended meaning.
+
+The evolved child draft itself can be valid novelty: the candidate does not need an extra post-sampling invention if it faithfully preserves the selected sectioned child draft and does not drift back into the parent.
 
 Reject the child if any of these are true:
-- it paraphrases or lightly reframes parent ideas
+- it paraphrases or lightly reframes parent ideas within the same sections
 - it returns to the parent under different wording
-- the claimed novelty is vague or not reflected in the genes
+- it restores excluded ideas mainly to rebuild the parent or to fill holes in the selected draft
+- it only moves ideas between sections without a substantive change in meaning
+- the claimed novelty is vague or not reflected in the actual sectioned genes
 - `CHANGE_DESCRIPTION` claims novelty that `CORE_GENES` do not actually contain
-- the child draft is only a restatement of inherited structure without a new hypothesis
+- `CHANGE_DESCRIPTION` describes retained parent behavior, restored excluded material, or stale support text as the mutation's new mechanism
+- it only changes wording, section placement, or cosmetic parameter values without changing the effective behavior or operating regime
+- it only makes tiny inert parameter nudges or similarly cosmetic changes that do not alter the operating regime
+- a parameter change is too weak to materially change how the mechanism would run
+- it adds many words or supporting bullets around the same underlying mechanism without materially changing the mechanism itself
+- it preserves the same center-generation family, the same radius regime, and the same repair/control regime while only changing narrative or weak parameters
+- it retains a one-radius regime and parent-shaped packing family without a section-supported reason that the effective operating regime is different
+- it presents coefficient-only retuning without a plausible phenotype shift
+- after accounting for the excluded ideas and the sectioned structure, the child is still substantively the same as the parent
 
-Accept the child only if there is at least one clear, specific, gene-level idea that is not already present in the parent in meaning.
+Accept the child if either:
+- there is at least one clear, specific, section-supported idea that is not already present in the parent in meaning and that plausibly changes effective packing behavior, or
+- it faithfully preserves the evolved sectioned child draft in a way that keeps the result substantively distinct from the parent, respects the mutation exclusions, and changes the organism's operating regime in a meaningful way
+
+Important:
+- a localized change inside one section can be sufficient for novelty if it is a real idea-level change that materially affects behavior
+- a parameter or local procedural change counts only if it materially changes how the mechanism would run
+- novelty is judged from the sectioned genes plus the expected operating regime or packing family they imply, not from wording alone
+- novelty is not created merely by changing section placement, wording, or formatting
+
+## Output discipline
+
+This validator is a gate. Favor a short, parseable answer over nuance.
+If the candidate is plausibly novel under the rules above, return `NOVELTY_ACCEPTED`.
+Do not print deliberation, alternative verdicts, draft text, or two answers.
+The first line of your answer must be `## NOVELTY_VERDICT`.
+Do not put the verdict on the same line as `## NOVELTY_VERDICT`.
+Write exactly one verdict block.
+
+Canonical accepted response:
+## NOVELTY_VERDICT
+NOVELTY_ACCEPTED
+
+## REJECTION_REASON
+N/A
+
+## SECTIONS_AT_ISSUE
+NONE
+
+Canonical rejected response:
+## NOVELTY_VERDICT
+NOVELTY_REJECTED
+
+## REJECTION_REASON
+<one short reason>
+
+## SECTIONS_AT_ISSUE
+<NONE or canonical comma-separated section names>
 
 ## Response format
 
-Return exactly these sections, each starting with `## SECTION_NAME`.
+Return exactly these sections, in this exact order.
 Do not use markdown code fences.
 
 ## NOVELTY_VERDICT
@@ -22,4 +74,14 @@ Write exactly one of:
 - NOVELTY_REJECTED
 
 ## REJECTION_REASON
-If and only if you returned `NOVELTY_REJECTED`, explain exactly what was too similar, empty, or unsupported.
+If and only if you returned `NOVELTY_REJECTED`, explain exactly what was too similar, which excluded idea was improperly restored, or what was unsupported.
+If you returned `NOVELTY_ACCEPTED`, write exactly:
+N/A
+
+## SECTIONS_AT_ISSUE
+If you returned `NOVELTY_REJECTED`, write either:
+- NONE
+or
+- a comma-separated list of canonical section names whose content is the source of the novelty failure
+If you returned `NOVELTY_ACCEPTED`, write exactly:
+NONE

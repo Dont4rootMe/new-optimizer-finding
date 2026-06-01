@@ -20,9 +20,11 @@ from src.organisms.organism import save_organism_artifacts
 
 
 def _make_cfg(tmp_path: Path) -> object:
-    islands_dir = tmp_path / "islands"
-    islands_dir.mkdir(parents=True, exist_ok=True)
-    (islands_dir / "gradient_methods.txt").write_text("First-order methods", encoding="utf-8")
+    seed_program_path = tmp_path / "_baseline.py"
+    seed_program_path.write_text(
+        "import numpy as np\n\ndef run_optimizer(*args, **kwargs):\n    return {}\n",
+        encoding="utf-8",
+    )
     return OmegaConf.create(
         {
             "seed": 123,
@@ -49,12 +51,15 @@ def _make_cfg(tmp_path: Path) -> object:
                     "max_parallel_organisms": 1,
                 },
                 "islands": {
-                    "dir": str(islands_dir),
-                    "seed_organisms_per_island": 2,
+                    "mode": "from_seed",
+                    "seed_program_path": str(seed_program_path),
+                    "island_ids": ["gradient_methods"],
+                    "seeds_per_island": 2,
                     "max_organisms_per_island": 2,
                 },
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
+                    "genome_schema": "conf/experiments/optimization_survey/prompts/shared/genome_schema.txt",
                     "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
                     "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
                     "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
@@ -67,7 +72,7 @@ def _make_cfg(tmp_path: Path) -> object:
                     "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
-                    "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                    "implementation_template": "conf/experiments/optimization_survey/prompts/shared/template.txt",
                     "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
                     "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
                 },

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 import hydra
 from omegaconf import DictConfig
@@ -18,6 +19,11 @@ def run_evolution(cfg: DictConfig) -> dict:
     """Run canonical organism-first evolution from an already seeded population."""
 
     ensure_root_runtime_config(cfg, context="src.evolve.run")
+
+    from src.evolve.seed_run import _ensure_file_logging
+
+    population_root = Path(str(cfg.paths.population_root)).expanduser().resolve()
+    _ensure_file_logging(population_root, "run.log")
 
     from src.evolve.evolution_loop import EvolutionLoop
 

@@ -26,6 +26,7 @@ class ApiRouteConfig:
     model_name_or_path: str | None = None
     tokenizer_name: str | None = None
     gpu_ranks: list[int] = field(default_factory=list)
+    gpu_rank_groups: list[list[int]] = field(default_factory=list)
     torch_dtype: str | None = None
     attn_implementation: str | None = None
     trust_remote_code: bool = False

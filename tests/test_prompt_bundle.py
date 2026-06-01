@@ -17,6 +17,7 @@ def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
             "evolver": {
                 "prompts": {
                     "project_context": "conf/experiments/optimization_survey/prompts/shared/project_context.txt",
+                    "genome_schema": "conf/experiments/optimization_survey/prompts/shared/genome_schema.txt",
                     "seed_system": "conf/experiments/optimization_survey/prompts/seed/system.txt",
                     "seed_user": "conf/experiments/optimization_survey/prompts/seed/user.txt",
                     "mutation_system": "conf/experiments/optimization_survey/prompts/mutation/system.txt",
@@ -29,7 +30,7 @@ def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
                     "crossover_novelty_user": "conf/experiments/optimization_survey/prompts/novelty/crossover/user.txt",
                     "implementation_system": "conf/experiments/optimization_survey/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/optimization_survey/prompts/implementation/user.txt",
-                    "implementation_template": "conf/experiments/optimization_survey/prompts/implementation/template.txt",
+                    "implementation_template": "conf/experiments/optimization_survey/prompts/shared/template.txt",
                     "repair_system": "conf/experiments/optimization_survey/prompts/repair/system.txt",
                     "repair_user": "conf/experiments/optimization_survey/prompts/repair/user.txt",
                 }
@@ -39,12 +40,21 @@ def test_load_prompt_bundle_from_optimization_survey_conf_assets() -> None:
 
     bundle = load_prompt_bundle(cfg)
 
-    assert "automated evolutionary search for novel optimizers" in bundle.project_context
+    assert "automated evolutionary search for novel optimizer organisms" in bundle.project_context
     assert "## CORE_GENES" in bundle.seed_system
     assert "## NOVELTY_VERDICT" in bundle.mutation_novelty_system
-    assert "{island_description}" in bundle.seed_user
-    assert "Return only the final `implementation.py` text." in bundle.implementation_user
+    assert "=== COMPILATION MODE ===" in bundle.implementation_user
+    assert "## COMPILATION_MODE" in bundle.implementation_system
     assert "=== ERROR HISTORY ===" in bundle.repair_user
+    assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.repair_user
+    assert "Repair is a full-file rewrite, not a diff." in bundle.repair_system
+    assert "Assign every local variable before first use" in bundle.repair_system
+    assert "Execution-order discipline" in bundle.implementation_system
+    assert "child-side draft already selected by evolution" in bundle.mutation_user
+    assert "selected recombination is already coherent" in bundle.crossover_user
+    assert "valid source of novelty" in bundle.mutation_novelty_user
+    assert "preserves substantial material from both parents" in bundle.crossover_novelty_user
+    assert "# STATE_REPRESENTATION" in bundle.genome_schema
 
 
 def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contract() -> None:
@@ -53,6 +63,7 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
             "evolver": {
                 "prompts": {
                     "project_context": "conf/experiments/circle_packing_shinka/prompts/shared/project_context.txt",
+                    "genome_schema": "conf/experiments/circle_packing_shinka/prompts/shared/genome_schema.txt",
                     "seed_system": "conf/experiments/circle_packing_shinka/prompts/seed/system.txt",
                     "seed_user": "conf/experiments/circle_packing_shinka/prompts/seed/user.txt",
                     "mutation_system": "conf/experiments/circle_packing_shinka/prompts/mutation/system.txt",
@@ -65,7 +76,7 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
                     "crossover_novelty_user": "conf/experiments/circle_packing_shinka/prompts/novelty/crossover/user.txt",
                     "implementation_system": "conf/experiments/circle_packing_shinka/prompts/implementation/system.txt",
                     "implementation_user": "conf/experiments/circle_packing_shinka/prompts/implementation/user.txt",
-                    "implementation_template": "conf/experiments/circle_packing_shinka/prompts/implementation/template.txt",
+                    "implementation_template": "conf/experiments/circle_packing_shinka/prompts/shared/template.txt",
                     "repair_system": "conf/experiments/circle_packing_shinka/prompts/repair/system.txt",
                     "repair_user": "conf/experiments/circle_packing_shinka/prompts/repair/user.txt",
                 }
@@ -81,6 +92,34 @@ def test_circle_packing_mutation_and_crossover_prompts_restate_structured_contra
         assert "## CHANGE_DESCRIPTION" in prompt
     assert "## NOVELTY_VERDICT" in bundle.crossover_novelty_system
     assert "CURRENT IMPLEMENTATION.PY" in bundle.repair_user
+    assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.repair_user
+    assert "## Local repair strategy" in bundle.repair_system
+    assert "Single rewrite contract:" in bundle.implementation_system
+    assert "return ONLY the final full `implementation.py`" in bundle.implementation_system
+    assert "treat it as the concrete parent program" in bundle.implementation_system
+    assert "Validity preservation note" in bundle.implementation_user
+    # Post `removing-genetic-sampling` (circle_packing migration): mutation
+    # prompt no longer mentions "smallest coherent module" (that phrase referred
+    # to editing the random pre-sampled child draft); the new framing is "alter
+    # at most one causal module" working directly from the parent's full genome.
+    assert "alter at most one causal module" in bundle.mutation_system
+    assert "no pre-sampled child draft" in bundle.mutation_system.lower()
+    assert "whether repaired regions can regrow" in bundle.genome_schema
+    assert "Prefer low-parameter geometric structure" in bundle.genome_schema
+    assert "one coherent imported secondary module" in bundle.crossover_system
+    assert "primary-parent-dominant organism" in bundle.crossover_user
+    # Novelty user prompts reframed: the "valid source of novelty" framing made
+    # sense only when there was a pre-sampled child draft. Replaced with an
+    # explicit mechanism-shift requirement and a "neither parent presents on its
+    # own" rule for crossover.
+    assert "coherent and visible mechanism shift relative to the parent" in bundle.mutation_novelty_user
+    assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
+    assert "neither parent presents on its own" in bundle.crossover_novelty_user
+    assert "validity beats score" not in bundle.implementation_system
+    assert "preserve strong inherited maternal behavior" in bundle.implementation_system
+    assert "feasibility safety pass" not in bundle.implementation_user
+    assert "Repair is a full-file rewrite, not a diff." not in bundle.repair_system
+    assert "full-file output contract is an interface requirement" in bundle.repair_system
 
 
 def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
@@ -140,4 +179,5 @@ def test_load_prompt_bundle_from_explicit_paths(tmp_path: Path) -> None:
     assert bundle.mutation_novelty_user == "mutation novelty user"
     assert bundle.implementation_template == "implementation template"
     assert bundle.repair_user == "repair user"
+    assert bundle.genome_schema == ""
     assert compose_system_prompt(bundle.project_context, bundle.seed_system) == "project context\n\nseed system"

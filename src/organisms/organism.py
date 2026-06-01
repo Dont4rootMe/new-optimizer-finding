@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import functools
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
-from src.evolve.prompt_utils import PromptBundle, compose_system_prompt
+from src.evolve.prompt_utils import REPO_ROOT, PromptBundle, compose_system_prompt
 from src.evolve.storage import (
     genetic_code_path,
     implementation_path,
     lineage_path,
     organism_meta_path,
+    parse_genetic_code_text,
     read_genetic_code,
     read_lineage,
     write_genetic_code,
@@ -19,6 +22,7 @@ from src.evolve.storage import (
     write_lineage,
 )
 from src.evolve.types import LineageEntry, OrganismMeta
+from src.organisms.genetic_code_format import load_genome_schema
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,10 +35,24 @@ _REQUIRED_RESPONSE_SECTIONS = (
 )
 
 
-def read_organism_implementation(org: OrganismMeta) -> str:
-    """Return the raw implementation.py text for one organism."""
+@functools.lru_cache(maxsize=128)
+def _read_implementation_text_cached(path_str: str) -> str:
+    """Cached implementation.py text reader keyed by path string."""
 
-    return Path(org.implementation_path).read_text(encoding="utf-8")
+    return Path(path_str).read_text(encoding="utf-8")
+
+
+def read_organism_implementation(org: OrganismMeta) -> str:
+    """Return the raw implementation.py text for one organism.
+
+    Backed by an ``lru_cache`` keyed on the path string. Implementation
+    files are written once at organism-creation time and never modified
+    afterwards, so caching saves disk reads on the hot mutation /
+    crossover prompt-building path (each operator pulls the parent's
+    implementation at Step 1, Step 2, and Step 3).
+    """
+
+    return _read_implementation_text_cached(str(org.implementation_path))
 
 
 def format_implementation_code(code: str) -> str:
@@ -59,13 +77,7 @@ def read_organism_lineage(org: OrganismMeta) -> list[dict[str, Any]]:
 def format_genetic_code(genetic_code: dict[str, Any]) -> str:
     """Format canonical genetic code for inclusion in prompts."""
 
-    core_genes = genetic_code.get("core_genes", [])
-    if not isinstance(core_genes, list) or not core_genes:
-        core_gene_block = "(none)"
-    else:
-        core_gene_block = "\n".join(f"- {str(gene).strip()}" for gene in core_genes if str(gene).strip())
-        if not core_gene_block.strip():
-            core_gene_block = "(none)"
+    core_gene_block = _format_core_gene_block(genetic_code)
 
     interaction_notes = str(genetic_code.get("interaction_notes", "")).strip() or "(none)"
     compute_notes = str(genetic_code.get("compute_notes", "")).strip() or "(none)"
@@ -78,6 +90,193 @@ def format_genetic_code(genetic_code: dict[str, Any]) -> str:
         "COMPUTE_NOTES:\n"
         f"{compute_notes}"
     )
+
+
+def _format_gene_entry(text: object) -> str:
+    lines = str(text).strip().splitlines()
+    if not lines:
+        return ""
+    rendered = [f"- {lines[0].strip()}"]
+    rendered.extend(f"  {line.rstrip()}" for line in lines[1:])
+    return "\n".join(rendered)
+
+
+def _format_core_gene_block(genetic_code: dict[str, Any]) -> str:
+    sectioned = genetic_code.get("core_gene_sections")
+    if isinstance(sectioned, list) and sectioned:
+        blocks: list[str] = []
+        for section in sectioned:
+            if not isinstance(section, dict):
+                continue
+            name = str(section.get("name", "")).strip()
+            entries = section.get("entries", [])
+            if not name:
+                continue
+            blocks.append(f"### {name}")
+            if isinstance(entries, list):
+                blocks.extend(_format_gene_entry(entry) for entry in entries if str(entry).strip())
+        rendered = "\n".join(block for block in blocks if block.strip()).strip()
+        if rendered:
+            return rendered
+
+    core_genes = genetic_code.get("core_genes", [])
+    if not isinstance(core_genes, list) or not core_genes:
+        return "(none)"
+    rendered = "\n".join(_format_gene_entry(gene) for gene in core_genes if str(gene).strip())
+    return rendered.strip() or "(none)"
+
+
+def format_inspiration_organisms(
+    inspirations: list[OrganismMeta] | None,
+    *,
+    max_implementation_chars: int = 8000,
+) -> str:
+    """Render top-K archive inspirations into a single prompt block.
+
+    Shinka and FunSearch both show the LLM multiple "best programs"
+    alongside the parent so the LLM can identify what high-scoring
+    organisms have in common. Our prompt builders previously showed only
+    the single parent (no inspiration pool), so the LLM had no contrast
+    to anchor its mutation against. This helper formats up to N
+    inspirations as labeled blocks containing the inspiration's score,
+    island, and a truncated view of its implementation.py plus the most
+    recent change_description from its lineage.
+
+    The implementations are truncated to ``max_implementation_chars`` so
+    the prompt doesn't balloon past the local model's effective context;
+    8 kB is roughly 2 kB per inspiration when 3 are shown, comfortable
+    on a 32k-context Qwen.
+
+    Returns ``"(no inspirations)"`` when the list is empty so the prompt
+    placeholder is non-empty for ``str.format()`` and signals to the
+    LLM that no archive samples were available (e.g. on early gens
+    before the survivor pool has filled).
+    """
+
+    if not inspirations:
+        return "(no inspirations)"
+
+    blocks: list[str] = []
+    for index, organism in enumerate(inspirations, start=1):
+        score_value = getattr(organism, "simple_score", None)
+        score_str = f"{score_value:.4f}" if isinstance(score_value, (int, float)) else "(unscored)"
+        island_str = str(getattr(organism, "island_id", "(unknown)"))
+        change_desc = ""
+        try:
+            lineage = read_organism_lineage(organism)
+            if lineage:
+                latest = lineage[-1]
+                change_desc = str(latest.get("change_description", "")).strip()
+        except Exception:  # noqa: BLE001
+            change_desc = ""
+        if not change_desc:
+            change_desc = "(no recorded change description)"
+        impl_path = getattr(organism, "implementation_path", "")
+        impl_text = ""
+        try:
+            if impl_path:
+                impl_text = Path(impl_path).read_text(encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            impl_text = ""
+        impl_text = impl_text.rstrip()
+        if not impl_text:
+            impl_text = "(implementation unavailable)"
+        elif len(impl_text) > max_implementation_chars:
+            head = impl_text[: max_implementation_chars // 2]
+            tail = impl_text[-max_implementation_chars // 2 :]
+            impl_text = f"{head}\n# ... <truncated for prompt length> ...\n{tail}"
+
+        block_lines = [
+            f"--- INSPIRATION #{index} (simple_score={score_str}, island={island_str}) ---",
+            f"change_description: {change_desc}",
+            "implementation.py:",
+            "```python",
+            impl_text,
+            "```",
+        ]
+        blocks.append("\n".join(block_lines))
+    return "\n\n".join(blocks)
+
+
+def format_parent_fitness_signal(
+    *,
+    primary_label: str,
+    primary_score: float | None,
+    primary_lineage: list[dict[str, Any]],
+    secondary_label: str | None = None,
+    secondary_score: float | None = None,
+    secondary_lineage: list[dict[str, Any]] | None = None,
+) -> str:
+    """Render the explicit score-gap block injected at the top of Step 1.
+
+    Earlier prompt versions only carried per-ancestor scores inside the
+    free-form lineage summary; the LLM consistently produced "plausibility"
+    weakness hypotheses instead of grounding them in the actual fitness
+    signal. This helper pulls the parent score and best-ancestor score
+    forward into a labeled block so the rationalizer must reason against
+    a concrete number gap rather than infer one.
+
+    Layout:
+
+        === PARENT FITNESS SIGNAL ===
+        Higher simple_score = better. Use this gap to ground the weakness
+        hypothesis in actual evidence, not in plausibility arguments.
+
+        parent simple_score: <value>
+        best ancestor simple_score: <value>
+        gap (best_ancestor - parent): <delta>
+        best ancestor's mechanism shift: <change_description excerpt>
+
+    For crossover the primary parent is the mother and the secondary is
+    the father; both scores appear and the best ancestor is taken across
+    both lineages. When the parent already matches the best ancestor the
+    gap is 0 — the LLM should read this as "do not regress" rather than
+    "recover a lost mechanism".
+    """
+
+    def _fmt(value: float | None) -> str:
+        return f"{value:.4f}" if isinstance(value, (int, float)) else "(unknown)"
+
+    lines: list[str] = []
+    lines.append(
+        "Higher simple_score = better (less negative). Ground the weakness "
+        "hypothesis in this number gap rather than in plausibility arguments."
+    )
+    lines.append("")
+    lines.append(f"{primary_label} simple_score: {_fmt(primary_score)}")
+    if secondary_label is not None:
+        lines.append(f"{secondary_label} simple_score: {_fmt(secondary_score)}")
+
+    merged: list[dict[str, Any]] = list(primary_lineage)
+    if secondary_lineage:
+        merged.extend(secondary_lineage)
+
+    best_entry: dict[str, Any] | None = None
+    best_score: float | None = None
+    for entry in merged:
+        score = entry.get("simple_score")
+        if not isinstance(score, (int, float)):
+            continue
+        if best_score is None or score > best_score:
+            best_entry = entry
+            best_score = score
+
+    if best_entry is not None and best_score is not None:
+        lines.append(f"best ancestor simple_score: {_fmt(best_score)}")
+        if isinstance(primary_score, (int, float)):
+            gap = best_score - primary_score
+            lines.append(
+                f"gap (best_ancestor - {primary_label}): {gap:+.4f}"
+            )
+        change = str(best_entry.get("change_description", "")).strip()
+        if change:
+            if len(change) > 300:
+                change = change[:300].rstrip() + "..."
+            lines.append(f"best ancestor's mechanism shift: {change}")
+    else:
+        lines.append("best ancestor simple_score: (lineage has no scored entries yet)")
+
+    return "\n".join(lines)
 
 
 def format_lineage_summary(
@@ -120,13 +319,70 @@ def format_error_history(errors: list[dict[str, Any]]) -> str:
     if not errors:
         return "No prior evaluator errors."
 
+    expected_shape_re = re.compile(
+        r"expected(?:\s+(?:center|centers)?\s*shape)?\s*[:=]?\s*\(\s*\d+\s*,\s*2\s*\)",
+        re.IGNORECASE,
+    )
+    expected_vector_re = re.compile(
+        r"expected(?:\s+(?:radius|radii)?\s*shape)?\s*[:=]?\s*\(\s*\d+\s*,\s*\)",
+        re.IGNORECASE,
+    )
+    required_shape_re = re.compile(
+        r"(?:required|target)\s+(?:center|centers)?\s*shape\s*[:=]?\s*\(\s*\d+\s*,\s*2\s*\)",
+        re.IGNORECASE,
+    )
+    required_vector_re = re.compile(
+        r"(?:required|target)\s+(?:radius|radii)?\s*shape\s*[:=]?\s*\(\s*\d+\s*,\s*\)",
+        re.IGNORECASE,
+    )
+    def _tail_log(path_value: object, *, max_bytes: int = 3072) -> str | None:
+        # Read the last ``max_bytes`` of a logfile if the path exists on
+        # disk. The repair prompt previously only saw the formatted
+        # ``error_msg`` summary; the raw stderr/stdout was missing even
+        # though the orchestrator wrote it. Truncate from the front so the
+        # actual traceback (which is always near the tail) is preserved.
+        if not path_value:
+            return None
+        try:
+            log_path = Path(str(path_value))
+            if not log_path.exists():
+                return None
+            text = log_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            return None
+        text = text.rstrip()
+        if not text:
+            return None
+        if len(text) > max_bytes:
+            text = "...<truncated>...\n" + text[-max_bytes:]
+        return text
+
     lines: list[str] = []
     for entry in errors:
         attempt = entry.get("attempt", "?")
         status = entry.get("status", "unknown")
         error_msg = str(entry.get("error_msg", "")).strip() or "(none)"
+        error_msg = expected_shape_re.sub("Expected required center shape", error_msg)
+        error_msg = expected_vector_re.sub("Expected required radius shape", error_msg)
+        error_msg = required_shape_re.sub("required center shape", error_msg)
+        error_msg = required_vector_re.sub("required radius shape", error_msg)
         timestamp = str(entry.get("timestamp", "")).strip() or "(unknown time)"
         lines.append(f"- attempt={attempt} status={status} timestamp={timestamp} error={error_msg}")
+        # Inline the actual evaluator stderr/stdout when the orchestrator
+        # recorded them (``orchestrator._append_error_entry`` adds the
+        # file paths to each entry as of the FIX-mode plumbing work). The
+        # repair LLM needs the raw traceback, not just the one-line
+        # ``error_msg`` summary, to diagnose runtime crashes.
+        stderr_tail = _tail_log(entry.get("stderr_path"))
+        if stderr_tail:
+            lines.append("  --- LAST STDERR (truncated) ---")
+            lines.append(stderr_tail)
+            lines.append("  --- END STDERR ---")
+        stdout_tail = _tail_log(entry.get("stdout_path"))
+        if stdout_tail:
+            lines.append("  --- LAST STDOUT (truncated) ---")
+            lines.append(stdout_tail)
+            lines.append("  --- END STDOUT ---")
     return "\n".join(lines)
 
 
@@ -170,17 +426,6 @@ def update_latest_lineage_entry(
     write_lineage(org.lineage_path, lineage)
 
 
-def _normalize_gene_lines(core_genes_raw: str) -> list[str]:
-    genes: list[str] = []
-    for line in core_genes_raw.splitlines():
-        cleaned = line.strip()
-        if cleaned.startswith("- "):
-            cleaned = cleaned[2:].strip()
-        if cleaned:
-            genes.append(cleaned)
-    return genes
-
-
 def _validate_core_genes(genes: list[str]) -> None:
     if len(genes) < 3:
         raise ValueError("Canonical organism response must contain at least 3 non-empty CORE_GENES bullets.")
@@ -199,17 +444,46 @@ def _require_section(parsed: dict[str, str], key: str) -> str:
     return stripped
 
 
-def _build_genetic_code(parsed: dict[str, str]) -> dict[str, Any]:
-    genes = _normalize_gene_lines(_require_section(parsed, "CORE_GENES"))
-    _validate_core_genes(genes)
+def _validate_exact_design_response_sections(parsed: dict[str, str]) -> None:
+    actual = tuple(parsed.keys())
+    if actual == _REQUIRED_RESPONSE_SECTIONS:
+        return
+    missing = [name for name in _REQUIRED_RESPONSE_SECTIONS if name not in parsed]
+    unexpected = [name for name in actual if name not in _REQUIRED_RESPONSE_SECTIONS]
+    details: list[str] = []
+    if missing:
+        details.append(f"missing required section(s): {', '.join(missing)}")
+    if unexpected:
+        details.append(f"unexpected section(s): {', '.join(unexpected)}")
+    if not details:
+        details.append(
+            "sections are out of order; expected "
+            + ", ".join(_REQUIRED_RESPONSE_SECTIONS)
+            + "; got "
+            + ", ".join(actual)
+        )
+    raise ValueError("Canonical organism response must contain exactly the required top-level sections: " + "; ".join(details))
 
-    interaction_notes = _require_section(parsed, "INTERACTION_NOTES")
-    compute_notes = _require_section(parsed, "COMPUTE_NOTES")
-    return {
-        "core_genes": genes,
-        "interaction_notes": interaction_notes,
-        "compute_notes": compute_notes,
-    }
+
+def _design_response_genetic_code_text(parsed: dict[str, str]) -> str:
+    _validate_exact_design_response_sections(parsed)
+    return "\n\n".join(f"## {key}\n{_require_section(parsed, key)}" for key in _REQUIRED_RESPONSE_SECTIONS)
+
+
+def _build_genetic_code(
+    parsed: dict[str, str],
+    *,
+    expected_core_gene_sections: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    genetic_code = parse_genetic_code_text(
+        _design_response_genetic_code_text(parsed),
+        expected_section_names=expected_core_gene_sections,
+    )
+    if genetic_code.get("format_kind") == "legacy_flat":
+        genes = list(genetic_code.get("core_genes", []))
+        _validate_core_genes(genes)
+
+    return genetic_code
 
 
 def require_response_section(parsed: dict[str, str], key: str) -> str:
@@ -218,25 +492,78 @@ def require_response_section(parsed: dict[str, str], key: str) -> str:
     return _require_section(parsed, key)
 
 
-def build_genetic_code_from_design_response(parsed: dict[str, str]) -> dict[str, Any]:
+def build_genetic_code_from_design_response(
+    parsed: dict[str, str],
+    *,
+    expected_core_gene_sections: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
     """Public wrapper for canonical genetic-code extraction from design responses."""
 
-    return _build_genetic_code(parsed)
+    return _build_genetic_code(parsed, expected_core_gene_sections=expected_core_gene_sections)
+
+
+def load_expected_core_gene_sections_from_config(cfg: Any) -> tuple[str, ...] | None:
+    """Return schema-derived CORE_GENES subsection names when config declares a schema."""
+
+    try:
+        schema_path_value = cfg.evolver.prompts.get("genome_schema")
+    except Exception:  # noqa: BLE001
+        return None
+    if not schema_path_value:
+        return None
+
+    candidate = Path(str(schema_path_value)).expanduser()
+    if not candidate.is_absolute():
+        candidate = (REPO_ROOT / candidate).resolve()
+    sections = load_genome_schema(str(candidate))
+    return tuple(section.name for section in sections)
 
 
 def build_implementation_prompt_from_design(
     parsed: dict[str, str],
     prompts: PromptBundle,
+    *,
+    expected_core_gene_sections: tuple[str, ...] | None = None,
 ) -> tuple[str, str]:
     """Build the shared implementation-stage prompt from a design-stage response."""
 
-    genetic_code = build_genetic_code_from_design_response(parsed)
+    genetic_code = build_genetic_code_from_design_response(
+        parsed,
+        expected_core_gene_sections=expected_core_gene_sections,
+    )
     change_description = require_response_section(parsed, "CHANGE_DESCRIPTION")
-    system = compose_system_prompt(prompts.project_context, prompts.implementation_system)
-    user = prompts.implementation_user.format(
-        organism_genetic_code=format_genetic_code(genetic_code),
+    return build_implementation_prompt(
+        genetic_code=genetic_code,
         change_description=change_description,
+        prompts=prompts,
+    )
+
+
+def build_implementation_prompt(
+    *,
+    genetic_code: dict[str, Any],
+    change_description: str,
+    prompts: PromptBundle,
+    compilation_mode: str = "FULL",
+    changed_sections: str = "NONE",
+    base_parent_genetic_code: str = "NONE",
+    base_parent_implementation: str = "NONE",
+) -> tuple[str, str]:
+    """Build the shared implementation prompt from canonical genetic-code artifacts."""
+
+    normalized_change_description = str(change_description).strip()
+    if not normalized_change_description:
+        raise ValueError("Implementation prompt requires a non-empty CHANGE_DESCRIPTION.")
+
+    system = compose_system_prompt("", prompts.implementation_system)
+    user = prompts.implementation_user.format(
+        organism_genetic_code=format_genetic_code(dict(genetic_code)),
+        change_description=normalized_change_description,
         implementation_template=prompts.implementation_template,
+        compilation_mode=compilation_mode,
+        changed_sections=changed_sections,
+        base_parent_genetic_code=base_parent_genetic_code,
+        base_parent_implementation=base_parent_implementation,
     )
     return system, user
 
@@ -261,11 +588,12 @@ def build_repair_prompt(
         if candidate:
             change_description = candidate
 
-    system = compose_system_prompt(prompts.project_context, prompts.repair_system)
+    system = compose_system_prompt("", prompts.repair_system)
     user = prompts.repair_user.format(
         organism_genetic_code=format_genetic_code(genetic_code),
         change_description=change_description,
         current_implementation=format_implementation_code(current_implementation),
+        implementation_template=prompts.implementation_template,
         phase=str(phase),
         experiment_name=str(experiment_name),
         error_history=format_error_history(errors),
@@ -293,14 +621,18 @@ def build_organism_from_response(
     ancestor_ids: list[str] | None = None,
     cross_island: bool = False,
     father_island_id: str | None = None,
+    expected_core_gene_sections: tuple[str, ...] | None = None,
+    llm_pipeline_id: str = "",
+    token_usage: dict[str, Any] | None = None,
 ) -> OrganismMeta:
     """Build `OrganismMeta` from a canonical design response and raw implementation text."""
 
-    for key in _REQUIRED_RESPONSE_SECTIONS:
-        if key not in parsed:
-            raise ValueError(f"Canonical organism response is missing required section {key}.")
+    _validate_exact_design_response_sections(parsed)
 
-    genetic_code = build_genetic_code_from_design_response(parsed)
+    genetic_code = build_genetic_code_from_design_response(
+        parsed,
+        expected_core_gene_sections=expected_core_gene_sections,
+    )
     change_description = require_response_section(parsed, "CHANGE_DESCRIPTION")
     if not str(implementation_code).strip():
         raise ValueError("Implementation stage must return non-empty implementation.py text.")
@@ -344,8 +676,13 @@ def build_organism_from_response(
         llm_route_id=llm_route_id,
         llm_provider=llm_provider,
         provider_model_id=provider_model_id,
+        llm_pipeline_id=llm_pipeline_id,
         prompt_hash=prompt_hash,
         seed=seed,
+        token_usage={
+            str(route): dict(counts) if isinstance(counts, dict) else counts
+            for route, counts in (token_usage or {}).items()
+        },
     )
 
     save_organism_artifacts(org, genetic_code=genetic_code, lineage=lineage)

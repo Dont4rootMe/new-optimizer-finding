@@ -1,0 +1,26 @@
+Evaluate whether this crossover child is meaningfully novel relative to its parents.
+
+=== GENOME SECTION SCHEMA ===
+The schema below is authoritative for the structure and meaning of CORE_GENES.
+{genome_schema}
+
+=== PRIMARY PARENT GENETIC CODE ===
+{mother_genetic_code}
+
+=== SECONDARY PARENT GENETIC CODE ===
+{father_genetic_code}
+
+=== CANDIDATE CHILD GENETIC CODE ===
+{candidate_genetic_code}
+
+=== CANDIDATE CHILD CHANGE_DESCRIPTION ===
+{candidate_change_description}
+
+=== TASK ===
+Accept a coherent primary-parent-dominant recombination that imports one substantive module from the secondary parent and produces an organism that is materially different from each parent — at least one CORE_GENES section must contain a recombination that neither parent presents on its own.
+Reject a candidate that collapses back to one parent, drops any meaningful secondary contribution, only rephrases parent ideas, only rearranges parental content across sections, or is formally two-parental but too weak to define a meaningful new operating regime.
+Reject a child whose selected recombination is formally two-parental but too weak to define a meaningful new operating regime.
+Reject a child whose recombination looks richer only because it contains more section text rather than a stronger transferred mechanism.
+Reject a child that keeps the dominant parent's wall family, grouping family, routing family, and repair regime while only renaming the imported module or weakly retuning it.
+Reject a retained single-group-per-robot regime unless the transferred module clearly implies a different operating regime.
+If `CHANGE_DESCRIPTION` overclaims novelty that the sectioned genes do not support, reject it.

@@ -6,13 +6,81 @@ from pathlib import Path
 
 from hydra import compose, initialize_config_dir
 
+from src.evolve.operators import SeedOperator
 from src.evolve.prompt_utils import load_prompt_bundle
-from src.evolve.types import OrganismMeta
+from src.evolve.types import Island, OrganismMeta
 from src.organisms.crossbreeding import _build_crossbreed_prompt
 from src.organisms.mutation import _build_mutate_prompt
-from src.organisms.organism import save_organism_artifacts
+from src.organisms.novelty import build_crossover_novelty_prompt, build_mutation_novelty_prompt
+from src.organisms.organism import (
+    build_implementation_prompt,
+    build_repair_prompt,
+    format_error_history,
+    save_organism_artifacts,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
+PROMPT_ROOT = ROOT / "conf" / "experiments" / "circle_packing_shinka" / "prompts"
+SCHEMA_BLOCK = (
+    "=== GENOME SECTION SCHEMA ===\n"
+    "The schema below is authoritative for the structure and meaning of CORE_GENES.\n"
+    "{genome_schema}"
+)
+SECTION_HEADINGS = (
+    "### INIT_GEOMETRY",
+    "### RADIUS_POLICY",
+    "### EXPANSION_POLICY",
+    "### CONFLICT_MODEL",
+    "### REPAIR_POLICY",
+    "### CONTROL_POLICY",
+    "### PARAMETERS",
+    "### OPTIONAL_CODE_SKETCH",
+)
+IMPLEMENTATION_REGION_ORDER = (
+    "PARAMETERS",
+    "INIT_GEOMETRY",
+    "RADIUS_POLICY",
+    "CONFLICT_MODEL",
+    "REPAIR_POLICY",
+    "EXPANSION_POLICY",
+    "CONTROL_POLICY",
+    "OPTIONAL_CODE_SKETCH",
+)
+NON_DESIGN_LEAK_PHRASES = (
+    "Place 26 circles",
+    "centers.shape == (26, 2)",
+    "radii.shape == (26,)",
+    "Constraints enforced by the evaluator",
+    "Score = sum of radii",
+    "Every circle fully inside [0, 1]",
+    "No overlaps",
+)
+
+
+def _sectioned_core_genes_body() -> str:
+    return "\n\n".join(
+        f"{heading}\n- {'None.' if heading.endswith('OPTIONAL_CODE_SKETCH') else 'Section-local test idea.'}"
+        for heading in SECTION_HEADINGS
+    )
+
+
+def _sectioned_genetic_code() -> dict[str, object]:
+    return {
+        "core_gene_sections": [
+            {
+                "name": heading[4:],
+                "entries": ["None." if heading.endswith("OPTIONAL_CODE_SKETCH") else "Section-local test idea."],
+            }
+            for heading in SECTION_HEADINGS
+        ],
+        "interaction_notes": "The sectioned ideas are mutually supportive.",
+        "compute_notes": "The design uses deterministic staged construction.",
+    }
+
+
+def _assert_no_non_design_contract_leak(text: str) -> None:
+    for phrase in NON_DESIGN_LEAK_PHRASES:
+        assert phrase not in text
 
 
 def _compose_cfg():
@@ -84,61 +152,401 @@ def test_circle_packing_prompt_bundle_uses_gene_centric_language() -> None:
     bundle = load_prompt_bundle(cfg)
 
     assert "primary object is the organism's genetic code" in bundle.project_context
-    assert "Do not invent new major ideas at implementation time." in bundle.implementation_system
-    assert "child genetic code draft" in bundle.mutation_system.lower()
-    assert "child draft" in bundle.crossover_system.lower()
+    assert "exactly 26 total circles in the unit square" in bundle.project_context
+    assert "maximize score subject to validity" in bundle.project_context
+    assert "score-bearing mechanism" in bundle.project_context
+    assert "smallest set of genes that defines a real score-bearing mechanism" in bundle.project_context
+    assert "compact faithful deterministic implementation" in bundle.project_context
+    assert "Textual novelty is not the same as phenotype novelty." in bundle.project_context
+    assert "Uniform-radii organisms are allowed only" in bundle.project_context
+    assert "Noise-like ingredients are supporting detail" in bundle.project_context
+    assert "# INIT_GEOMETRY" in bundle.genome_schema
+    assert "whether repaired regions can regrow" in bundle.genome_schema
+    assert "Prefer low-parameter geometric structure" in bundle.genome_schema
+    assert "Global terminal shrink-to-feasibility is normally not a repair policy" in bundle.genome_schema
+    assert "Prefer `- None.` unless a genuinely local executable sketch is necessary" in bundle.genome_schema
+    assert "do not invent new major ideas at implementation time" in bundle.implementation_system
+    assert "preserve inherited behavior outside the changed sections unless the child genes require a coordinated adjustment or a distinct packing regime" in bundle.implementation_system
+    assert "when the changed sections still imply the same phenotype family, preserve strong inherited maternal behavior" in bundle.implementation_system
+    assert "do not silently keep the maternal radius, layout, or repair regime" in bundle.implementation_system
+    assert "Single rewrite contract:" in bundle.implementation_system
+    # Post `removing-genetic-sampling` branch: the LLM works directly from the
+    # parent's full genome. No child-draft / excluded-ideas framing.
+    assert "no pre-sampled child draft" in bundle.mutation_system.lower()
+    assert "no pre-sampled child draft" in bundle.crossover_system.lower()
+    assert "verbatim repetition of the entire parent genome is an invalid mutation" in bundle.mutation_system
+    assert "verbatim cloning of the primary parent is an invalid crossover" in bundle.crossover_system
+    # Lineage-aware diversification nudge.
+    assert "regime convergence" in bundle.mutation_user.lower()
+    assert "alter at most one causal module" in bundle.mutation_system
+    assert "same one-radius layout with different repair tuning" in bundle.mutation_system
+    assert "one coherent imported secondary module" in bundle.crossover_system
+    assert "modify at most one major causal block" in bundle.crossover_system
+    assert "same parent-shaped one-radius regime with a renamed imported module" in bundle.crossover_system
+    # Post `removing-genetic-sampling`: novelty user prompts reframed —
+    # "valid source of novelty" / "preserves substantial material from both
+    # parents" replaced by explicit mechanism-shift requirements.
+    assert "coherent and visible mechanism shift relative to the parent" in bundle.mutation_novelty_user
+    assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
+    assert "supporting bullets around the same underlying mechanism" in bundle.mutation_novelty_system
+    assert "same center-generation family, the same radius regime, and the same repair/control regime" in bundle.mutation_novelty_system
+    assert "neither parent presents on its own" in bundle.crossover_novelty_user
+    assert "same center-generation family, the same radius regime, and the same repair/control regime as the dominant parent" in bundle.crossover_novelty_system
+    assert "full-file output contract is an interface requirement" in bundle.repair_system
+    assert "do not replace it with a short generic packing" in bundle.repair_system
+    assert "do not silently collapse a distinct gene-implied phenotype back to a generic uniform safe layout" in bundle.repair_system
+    assert "treat that exact local issue as the primary repair target" in bundle.repair_system
+    assert "Centers shape incorrect" in bundle.repair_system
+    assert "Keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the repaired file" in bundle.repair_system
 
 
-def test_circle_packing_mutation_prompt_prioritizes_child_draft(tmp_path: Path) -> None:
+def test_circle_packing_generation_prompt_files_are_section_schema_aware() -> None:
+    prompt_files = {
+        "seed_system": PROMPT_ROOT / "seed" / "system.txt",
+        "seed_user": PROMPT_ROOT / "seed" / "user.txt",
+        "mutation_system": PROMPT_ROOT / "mutation" / "system.txt",
+        "mutation_user": PROMPT_ROOT / "mutation" / "user.txt",
+        "crossover_system": PROMPT_ROOT / "crossover" / "system.txt",
+        "crossover_user": PROMPT_ROOT / "crossover" / "user.txt",
+    }
+    prompts = {name: path.read_text(encoding="utf-8") for name, path in prompt_files.items()}
+
+    for name, text in prompts.items():
+        assert text.strip()
+        if name.endswith("_user"):
+            assert SCHEMA_BLOCK in text
+        if name.endswith("_system"):
+            assert "## CORE_GENES" in text
+            assert "## INTERACTION_NOTES" in text
+            assert "## COMPUTE_NOTES" in text
+            assert "## CHANGE_DESCRIPTION" in text
+            assert "full end-to-end implementation" in text
+            assert "put code in `CHANGE_DESCRIPTION`" in text or "`CHANGE_DESCRIPTION` must remain plain-language" in text
+            positions = [text.index(heading) for heading in SECTION_HEADINGS]
+            assert positions == sorted(positions)
+
+
+def test_circle_packing_generation_prompts_removed_flat_and_global_ban_contracts() -> None:
+    texts = [
+        (PROMPT_ROOT / "seed" / "system.txt").read_text(encoding="utf-8"),
+        (PROMPT_ROOT / "mutation" / "system.txt").read_text(encoding="utf-8"),
+        (PROMPT_ROOT / "crossover" / "system.txt").read_text(encoding="utf-8"),
+        (PROMPT_ROOT / "shared" / "project_context.txt").read_text(encoding="utf-8"),
+    ]
+    combined = "\n".join(texts)
+
+    assert "At least 3 bullets, at most 7" not in combined
+    assert "Genes must NEVER contain" not in combined
+    assert "Genes and CHANGE_DESCRIPTION are idea-level artifacts. They must NEVER contain" not in combined
+    assert "Hardcoded numeric constants" not in combined
+    assert "No Python code, no variable names, no hardcoded constants" not in combined
+    assert "full end-to-end implementation" in combined
+    assert "must not contain Python code, code-like snippets" in combined
+
+
+def test_circle_packing_generation_prompt_rendering_includes_schema(tmp_path: Path) -> None:
+    cfg = _compose_cfg()
+    bundle = load_prompt_bundle(cfg)
+    parent = _make_parent(tmp_path, "parent_schema", "symmetric_constructions")
+    secondary = _make_parent(tmp_path, "secondary_schema", "iterative_repair")
+    island = Island(
+        island_id="symmetric_constructions",
+        name="Symmetric constructions",
+    )
+
+    _, seed_user = SeedOperator(island).build_prompts(bundle)
+    _, mutation_user = _build_mutate_prompt(
+        inherited_genes=["Child draft idea about local geometry"],
+        removed_genes=["Excluded draft idea"],
+        parent=parent,
+        prompts=bundle,
+    )
+    _, crossover_user = _build_crossbreed_prompt(
+        inherited_genes=["Merged child draft idea about local geometry"],
+        mother=parent,
+        father=secondary,
+        prompts=bundle,
+    )
+
+    for rendered in (seed_user, mutation_user, crossover_user):
+        assert "=== GENOME SECTION SCHEMA ===" in rendered
+        assert "{genome_schema}" not in rendered
+        assert "# INIT_GEOMETRY" in rendered
+        assert "# OPTIONAL_CODE_SKETCH" in rendered
+
+
+def test_circle_packing_non_design_prompts_include_explicit_count_without_shape_leak(tmp_path: Path) -> None:
+    cfg = _compose_cfg()
+    bundle = load_prompt_bundle(cfg)
+    parent = _make_parent(tmp_path, "parent_no_leak", "symmetric_constructions")
+    secondary = _make_parent(tmp_path, "secondary_no_leak", "iterative_repair")
+    candidate_design = {
+        "CORE_GENES": _sectioned_core_genes_body(),
+        "INTERACTION_NOTES": "The sectioned ideas are mutually supportive.",
+        "COMPUTE_NOTES": "The design uses deterministic staged construction.",
+        "CHANGE_DESCRIPTION": "A sectioned validation fixture.",
+    }
+
+    counted_prompt_pairs = [
+        build_implementation_prompt(
+            genetic_code=_sectioned_genetic_code(),
+            change_description="A generic implementation fixture.",
+            prompts=bundle,
+        ),
+    ]
+    prompt_pairs = [
+        *counted_prompt_pairs,
+        build_mutation_novelty_prompt(
+            inherited_genes=["Child draft sectioned idea"],
+            removed_genes=["Excluded idea"],
+            parent=parent,
+            candidate_design=candidate_design,
+            prompts=bundle,
+            expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
+        ),
+        build_crossover_novelty_prompt(
+            inherited_genes=["Merged sectioned idea"],
+            mother=parent,
+            father=secondary,
+            candidate_design=candidate_design,
+            prompts=bundle,
+            expected_core_gene_sections=tuple(heading[4:] for heading in SECTION_HEADINGS),
+        ),
+    ]
+
+    for system_prompt, user_prompt in counted_prompt_pairs:
+        assert "exactly 26 total circles" in f"{system_prompt}\n{user_prompt}"
+
+    for system_prompt, user_prompt in prompt_pairs:
+        _assert_no_non_design_contract_leak(system_prompt)
+        _assert_no_non_design_contract_leak(user_prompt)
+
+    Path(parent.implementation_path).write_text(
+        "import numpy as np\n\n"
+        "def run_packing():\n"
+        "    centers = np.array([[0.5, 0.5]], dtype=float)\n"
+        "    radii = np.array([0.1], dtype=float)\n"
+        "    return centers, radii, float(np.sum(radii))\n",
+        encoding="utf-8",
+    )
+    repair_system, repair_user = build_repair_prompt(
+        parent,
+        bundle,
+        phase="simple",
+        experiment_name="fixture",
+        errors=[],
+    )
+    assert "exactly 26 total circles" in f"{repair_system}\n{repair_user}"
+    _assert_no_non_design_contract_leak(repair_system)
+    _assert_no_non_design_contract_leak(repair_user)
+
+
+def test_circle_packing_repair_error_history_preserves_explicit_count_contract() -> None:
+    rendered = format_error_history(
+        [
+            {
+                "attempt": 1,
+                "status": "failed",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "error_msg": (
+                    "Centers shape incorrect. Expected (26, 2); radii expected=(26,). "
+                    "Implementation must produce exactly 26 circles."
+                ),
+            },
+            {
+                "attempt": 2,
+                "status": "failed",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "error_msg": "Target center shape: (26, 2); required radii shape (26,).",
+            }
+        ]
+    )
+
+    assert "Expected (26" not in rendered
+    assert "expected=(26" not in rendered
+    assert "exactly 26 circles" in rendered
+    assert "Expected required center shape" in rendered
+    assert "Expected required radius shape" in rendered
+    assert "required center shape" in rendered
+    assert "required radius shape" in rendered
+    assert "required number of circles" not in rendered
+
+
+def test_circle_packing_validation_prompts_are_section_schema_aware() -> None:
+    bundle = load_prompt_bundle(_compose_cfg())
+
+    novelty_prompts = (
+        bundle.mutation_novelty_system,
+        bundle.mutation_novelty_user,
+        bundle.crossover_novelty_system,
+        bundle.crossover_novelty_user,
+    )
+    for prompt in novelty_prompts:
+        assert "sectioned `## CORE_GENES`" in prompt or "=== GENOME SECTION SCHEMA ===" in prompt
+    for prompt in (bundle.mutation_novelty_system, bundle.crossover_novelty_system):
+        assert "not as a flat list" in prompt
+    for prompt in (bundle.mutation_novelty_user, bundle.crossover_novelty_user):
+        assert "=== GENOME SECTION SCHEMA ===" in prompt
+        assert "{genome_schema}" in prompt
+    for prompt in (bundle.mutation_novelty_system, bundle.crossover_novelty_system):
+        assert "## NOVELTY_VERDICT" in prompt
+        assert "## REJECTION_REASON" in prompt
+        assert "## SECTIONS_AT_ISSUE" in prompt
+        assert "Do not propose edits" in prompt
+        assert "The first line of your answer must be `## NOVELTY_VERDICT`." in prompt
+        assert "Do not put the verdict on the same line as `## NOVELTY_VERDICT`." in prompt
+        assert "Canonical accepted response:" in prompt
+
+
+def test_circle_packing_implementation_and_repair_prompts_do_not_require_genome_schema() -> None:
+    bundle = load_prompt_bundle(_compose_cfg())
+
+    non_generation_prompts = (
+        bundle.implementation_system,
+        bundle.implementation_user,
+        bundle.implementation_template,
+        bundle.repair_system,
+        bundle.repair_user,
+    )
+    assert all("{genome_schema}" not in prompt for prompt in non_generation_prompts)
+
+
+def test_circle_packing_implementation_prompt_uses_single_full_rewrite_contract() -> None:
+    bundle = load_prompt_bundle(_compose_cfg())
+    combined_prompt = "\n".join((bundle.implementation_system, bundle.implementation_user))
+
+    assert "Single rewrite contract:" in bundle.implementation_system
+    assert "return ONLY the final full `implementation.py`" in bundle.implementation_system
+    assert "when maternal base code is supplied, treat it as the concrete parent program" in bundle.implementation_system
+    assert "rewrite the complete child file from that parent program" in bundle.implementation_system
+    assert "not changed snippets, patch artifacts, or prose" in bundle.implementation_system
+    assert "the first non-empty line must be a Python import line" in bundle.implementation_system
+    assert "write executable code, not a comment-only reasoning trace" in bundle.implementation_system
+    assert "candidate histories, or duplicated full constructions" in bundle.implementation_system
+    assert "duplicated full constructions" in bundle.implementation_system
+    assert "keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the code" in bundle.implementation_system
+    assert "do not invent new major ideas at implementation time" in combined_prompt
+    assert "do not output a full `implementation.py`" not in bundle.implementation_system
+    assert "=== COMPILATION MODE ===" not in bundle.implementation_user
+    assert "=== CHANGED_SECTIONS ===" in bundle.implementation_user
+    assert "=== MATERNAL BASE GENETIC CODE ===" in bundle.implementation_user
+    assert "=== MATERNAL BASE IMPLEMENTATION ===" in bundle.implementation_user
+    assert "=== CANONICAL IMPLEMENTATION SCAFFOLD ===" in bundle.implementation_user
+    assert "Return the final full Python file only." in bundle.implementation_user
+    assert "use it as the concrete parent program" in bundle.implementation_user
+    assert "do not return changed snippets only" in bundle.implementation_user
+    assert "keep `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` in the file" in bundle.implementation_user
+    assert "not repeated generated batches, candidate histories, or repair trajectories" in bundle.implementation_user
+    assert "RUN_PACKING_BODY" not in bundle.implementation_template
+    assert "# EVOLVE-BLOCK-START" in bundle.implementation_template
+    assert "# EVOLVE-BLOCK-END" in bundle.implementation_template
+    for region in tuple(heading[4:] for heading in SECTION_HEADINGS):
+        assert f"# SECTION: {region}" in bundle.implementation_template
+    positions = [bundle.implementation_template.index(f"# SECTION: {region}") for region in IMPLEMENTATION_REGION_ORDER]
+    assert positions == sorted(positions)
+    assert "validity beats score" not in combined_prompt
+    assert "feasibility safety pass" not in combined_prompt
+    assert "final safety pass" not in combined_prompt
+    assert "PARAMETERS occurs late" not in combined_prompt
+
+
+def test_circle_packing_seed_prompts_reject_ambiguous_26_circle_generators() -> None:
+    bundle = load_prompt_bundle(_compose_cfg())
+
+    assert "must arithmetically and unambiguously produce exactly 26 circles" in bundle.seed_system
+    assert "target exactly 26 total circles" in bundle.seed_system
+    assert "self-check the arithmetic in the gene text" in bundle.seed_system
+    assert "5 by 5 grid plus center" in bundle.seed_system
+    assert "30 minus 4 equals 26" in bundle.seed_system
+    assert "count-safe fallback is still a fallback baseline" in bundle.seed_system
+    assert "one directly executable deterministic path" in bundle.seed_system
+    assert "prefer `- None.` in `OPTIONAL_CODE_SKETCH`" in bundle.seed_system
+    assert "without requiring the implementation model to resolve contradictions" in bundle.seed_user
+
+
+def test_circle_packing_mutation_prompt_works_from_parent_full_genome(tmp_path: Path) -> None:
+    """Post `removing-genetic-sampling` branch: mutation prompt works from the
+    parent's full genome directly, no child-draft / excluded-ideas framing.
+    """
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
     parent = _make_parent(tmp_path, "parent_a", "symmetric_constructions")
 
     _, user_prompt = _build_mutate_prompt(
-        inherited_genes=[
-            "Child idea about structural organization",
-            "Child idea about feasibility preservation",
-            "Child idea about refinement logic",
-        ],
-        removed_genes=["Excluded idea about older organization"],
+        inherited_genes=[],
+        removed_genes=[],
         parent=parent,
         prompts=bundle,
     )
 
-    assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
-    assert "=== EXCLUDED IDEAS ===" in user_prompt
+    assert "=== PARENT GENETIC CODE ===" in user_prompt
+    assert "=== PARENT LINEAGE SUMMARY ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
-    assert "REFERENCE ONLY" in user_prompt
-    assert "Do not let this override the child genetic code draft." in user_prompt
-    assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
-        "=== PARENT GENETIC CODE (REFERENCE ONLY) ==="
-    )
+    assert "coherent score-seeking hypothesis change" in user_prompt
+    # Old child-draft / excluded-ideas markers must not appear.
+    assert "CHILD GENETIC CODE DRAFT" not in user_prompt
+    assert "EXCLUDED IDEAS" not in user_prompt
+    assert "{inherited_gene_pool}" not in user_prompt
+    assert "{removed_gene_pool}" not in user_prompt
+    assert "IMPLEMENTATION CODE" not in user_prompt
 
 
-def test_circle_packing_crossover_prompt_prioritizes_child_draft(tmp_path: Path) -> None:
+def test_circle_packing_crossover_prompt_works_from_two_parent_full_genomes(tmp_path: Path) -> None:
+    """Post `removing-genetic-sampling`: crossover prompt works from both parent
+    full genomes directly, no merged-child-draft framing.
+    """
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
     mother = _make_parent(tmp_path, "mother_a", "symmetric_constructions")
     father = _make_parent(tmp_path, "father_b", "iterative_repair")
 
     _, user_prompt = _build_crossbreed_prompt(
-        inherited_genes=[
-            "Merged child idea about overall construction",
-            "Merged child idea about feasibility maintenance",
-            "Merged child idea about refinement policy",
-        ],
+        inherited_genes=[],
         mother=mother,
         father=father,
         prompts=bundle,
     )
 
-    assert "=== CHILD GENETIC CODE DRAFT ===" in user_prompt
+    assert "=== PRIMARY PARENT GENETIC CODE ===" in user_prompt
+    assert "=== SECONDARY PARENT GENETIC CODE ===" in user_prompt
     assert "=== NOVELTY REJECTION FEEDBACK ===" in user_prompt
-    assert "REFERENCE ONLY" in user_prompt
-    assert "Do not let it override the child draft." in user_prompt
-    assert user_prompt.index("=== CHILD GENETIC CODE DRAFT ===") < user_prompt.index(
-        "=== PRIMARY PARENT GENETIC CODE (REFERENCE ONLY) ==="
+    assert "primary-parent-dominant organism" in user_prompt
+    assert "CHILD GENETIC CODE DRAFT" not in user_prompt
+    assert "{inherited_gene_pool}" not in user_prompt
+    assert "IMPLEMENTATION CODE" not in user_prompt
+
+
+def test_circle_packing_prompt_surface_removes_safe_local_search_bias() -> None:
+    bundle = load_prompt_bundle(_compose_cfg())
+    combined = "\n".join(
+        (
+            bundle.mutation_system,
+            bundle.crossover_system,
+            bundle.mutation_novelty_system,
+            bundle.crossover_novelty_system,
+            bundle.implementation_system,
+            bundle.implementation_user,
+            bundle.repair_system,
+            bundle.repair_user,
+        )
     )
+
+    assert "ONE targeted improvement" not in combined
+    assert "smallest number of sections" not in combined
+    assert "one or two specific ideas" not in combined
+    assert "Accept unless you find a blocking contradiction" not in combined
+    assert "validity beats score" not in combined
+    assert "feasibility safety pass" not in combined
+    assert "Repair is a full-file rewrite, not a diff." not in combined
+    assert "objective and validity discipline encoded in the supplied genetic code" in bundle.implementation_system
+    assert "one coherent imported secondary module" in bundle.crossover_system
+    assert "claim-by-claim summary" in bundle.mutation_system
+    assert "claim-by-claim summary" in bundle.crossover_system
+    assert "retained parent behavior" in bundle.mutation_novelty_system
+    assert "falsely attributes a mechanism to the secondary parent" in bundle.crossover_novelty_system
+    assert "distinct packing regime or phenotype shift" in combined
+    assert "tiny inert parameter nudges" in bundle.mutation_novelty_system
+    assert "Repair the smallest affected code span necessary" in bundle.repair_system
 
 
 def test_circle_packing_mutation_prompt_renders_novelty_feedback(tmp_path: Path) -> None:
@@ -164,15 +572,9 @@ def test_circle_packing_mutation_prompt_renders_novelty_feedback(tmp_path: Path)
 def test_circle_packing_prompts_avoid_solution_leading_lists() -> None:
     cfg = _compose_cfg()
     bundle = load_prompt_bundle(cfg)
-    root = ROOT / "conf" / "experiments" / "circle_packing_shinka" / "prompts"
-
-    symmetric_text = (root / "islands" / "symmetric_constructions.txt").read_text(encoding="utf-8")
-    iterative_text = (root / "islands" / "iterative_repair.txt").read_text(encoding="utf-8")
 
     banned = ("rings", "rows", "lattices", "greedy local moves")
     for token in banned:
         assert token not in bundle.seed_system.lower()
         assert token not in bundle.mutation_system.lower()
         assert token not in bundle.crossover_system.lower()
-        assert token not in symmetric_text.lower()
-        assert token not in iterative_text.lower()

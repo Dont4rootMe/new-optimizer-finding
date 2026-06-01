@@ -1,0 +1,37 @@
+Produce the design rationale for the next mutation child of this awtf2025 heuristic organism.
+
+=== PARENT FITNESS SIGNAL ===
+{parent_fitness_signal}
+
+=== PARENT GENETIC CODE ===
+{parent_genetic_code}
+
+=== PARENT IMPLEMENTATION (ground truth Python) ===
+Below is the parent's actual `implementation.py` — the code that produced the score above. Diagnose the `WEAKNESS_HYPOTHESIS` against this code, not just the prose `## CORE_GENES` description: the description and the code can drift apart, and a "weakness" the prose admits to might not exist in the code (or vice versa).
+
+```python
+{parent_implementation}
+```
+
+=== PARENT LINEAGE SUMMARY ===
+Past idea changes in this lineage and their outcomes (higher score = better).
+{parent_lineage_summary}
+
+=== TOP-K INSPIRATION PROGRAMS (same island, sorted best first) ===
+These are the highest-scoring organisms currently surviving on the parent's island, excluding the parent. Use them as reference programs to spot common patterns (which mechanisms recur in the best performers? which the parent lacks?). If this block reads "(no inspirations)" the survivor pool is too small to sample yet — fall back to single-parent reasoning.
+{inspirations}
+
+=== LINEAGE REGIME HINT ===
+Auto-generated convergence diagnosis from the last several ancestors. Treat as one input among others.
+{lineage_regime_hint}
+
+=== NOVELTY REJECTION FEEDBACK (only present on retries) ===
+If a previous candidate child was rejected for lacking novelty, the critique is below. Adjust your `## CHILD_DIRECTION` to address it; do not rationalize the rejected candidate.
+{novelty_rejection_feedback}
+
+=== TASK ===
+Diagnose what is currently NOT being solved well by the parent. Use the `PARENT FITNESS SIGNAL` block above as the primary anchor: the `gap` between the parent and the best ancestor tells you whether this lineage is improving (gap is roughly 0, you're at the frontier — propose a forward step) or regressing (gap is positive, you lost something the best ancestor had — diagnose what was lost). Propose a direction for the next child that (a) materially changes at least one of the four axes (wall family, grouping family, routing family, repair regime), and (b) plausibly pushes the absolute contest score lower.
+
+Removing inherited machinery is a first-class move. Adding mechanisms you think of yourself, not inherited from the parent, is a first-class move. Pure coefficient retuning inside the existing regime is NOT a meaningful leap and should be avoided.
+
+Fill out the six sections in the system-prompt order. Do not emit `## CORE_GENES` — that is the next call's job.

@@ -1,0 +1,225 @@
+resume: true
+max_generations: 150
+# false or -1 disables this cap. If both generation and organism caps are enabled,
+# evolution stops at whichever cap is reached first.
+max_organism_creations: false
+max_retries_per_eval: 0
+
+# Optional per-model token-budget stop (additional to the generation/organism
+# caps above, not a replacement). Maps route_id -> token cap. ``false`` (the
+# default for every model) means no cap on that model; an integer caps the
+# cumulative LLM tokens that route may spend. When any capped route reaches its
+# budget, evolution stops at the next generation boundary. Tokens are summed
+# from each organism's persisted ``token_usage`` so the tally is resume-safe.
+max_tokens_per_model:
+  ollama_gemma4_31b: false
+  ollama_qwen35_122b: false
+
+creation:
+  # PHASE A speedup (2026-05-21): retries cut to 1, validator-retries to 0,
+  # parallelism dropped from 15 → 8 to match real broker capacity. See
+  # plan file "users-artemon-downloads-awtf2025-heuris-merry-stonebraker.md"
+  # for the diagnosis behind these numbers.
+  max_attempts_to_create_organism: 1
+  max_attempts_to_repair_organism_after_error: 2
+  max_attempts_to_regenerate_organism_after_novelty_rejection: 0
+  max_parallel_organisms: 8
+
+islands:
+  # ``from_seed`` is the only supported mode: copy a single handwritten
+  # baseline program (``seed_program_path``) into K×N organisms across
+  # the ``island_ids``. No LLM calls during the seed phase. This is the
+  # Shinka / FunSearch / AlphaEvolve pattern — diversity emerges from
+  # the evolutionary stage (mutation, crossover, bandit selection,
+  # lineage_regime_hint), not from handwritten per-island seed prompts.
+  mode: from_seed
+  seed_program_path: experiments/awtf2025_heuristic/_baselines/shinka/initial_program.py
+  island_ids: [macro_partitioning, staged_routing_repair]
+  seeds_per_island: 5
+  max_organisms_per_island: 10
+
+prompts:
+  project_context: conf/experiments/awtf2025_heuristic/prompts/shared/project_context.txt
+  genome_schema: conf/experiments/awtf2025_heuristic/prompts/shared/genome_schema.txt
+
+  seed_system: conf/experiments/awtf2025_heuristic/prompts/seed/system.txt
+  seed_user: conf/experiments/awtf2025_heuristic/prompts/seed/user.txt
+
+  mutation_system: conf/experiments/awtf2025_heuristic/prompts/mutation/system.txt
+  mutation_user: conf/experiments/awtf2025_heuristic/prompts/mutation/user.txt
+  mutation_novelty_system: conf/experiments/awtf2025_heuristic/prompts/novelty/mutation/system.txt
+  mutation_novelty_user: conf/experiments/awtf2025_heuristic/prompts/novelty/mutation/user.txt
+  mutation_rationalization_system: conf/experiments/awtf2025_heuristic/prompts/rationalization/mutation/system.txt
+  mutation_rationalization_user: conf/experiments/awtf2025_heuristic/prompts/rationalization/mutation/user.txt
+
+  crossover_system: conf/experiments/awtf2025_heuristic/prompts/crossover/system.txt
+  crossover_user: conf/experiments/awtf2025_heuristic/prompts/crossover/user.txt
+  crossover_novelty_system: conf/experiments/awtf2025_heuristic/prompts/novelty/crossover/system.txt
+  crossover_novelty_user: conf/experiments/awtf2025_heuristic/prompts/novelty/crossover/user.txt
+  crossover_rationalization_system: conf/experiments/awtf2025_heuristic/prompts/rationalization/crossover/system.txt
+  crossover_rationalization_user: conf/experiments/awtf2025_heuristic/prompts/rationalization/crossover/user.txt
+
+  implementation_system: conf/experiments/awtf2025_heuristic/prompts/implementation/system.txt
+  implementation_user: conf/experiments/awtf2025_heuristic/prompts/implementation/user.txt
+  implementation_template: conf/experiments/awtf2025_heuristic/prompts/shared/template.txt
+  repair_system: conf/experiments/awtf2025_heuristic/prompts/repair/system.txt
+  repair_user: conf/experiments/awtf2025_heuristic/prompts/repair/user.txt
+
+  # FunSearch / Shinka-style multi-program prompting: how many top-K
+  # survivors from the parent's island to inline into Step 1 / Step 2
+  # prompts (alongside the parent itself). Set to 0 to disable and fall
+  # back to single-parent reasoning. Effective only after the survivor
+  # pool has filled — early gens with too few survivors get an empty
+  # block regardless.
+  # PHASE A: 2 → 0. Each inspiration adds ~5kB to design+impl prompts
+  # which trims thinking_chars but the marginal value vs. cost was not
+  # worth the latency hit. Re-enable after PHASE B if measured gain > 0.
+  num_inspirations: 0
+
+reproduction:
+  # PHASE A: 10 → 6 offspring per generation. With max_parallel_organisms=8
+  # this lets every offspring run in parallel and avoids broker queueing.
+  offspring_per_generation: 6
+  operator_selection_strategy: random
+  operator_weights:
+    within_island_crossover: 0.4
+    inter_island_crossover: 0.1
+    mutation: 0.5
+  island_sampling:
+    within_island_crossover: unified
+    inter_island_crossover: unified
+    mutation: unified
+  # Adaptive parent-island sampling. `strategy: uniform` reproduces the
+  # legacy unified behaviour. `strategy: bandit` swaps in a discounted
+  # Thompson sampler that learns which islands are currently producing
+  # high-quality survivors and gradually shifts probability toward them
+  # while still exploring (Beta posteriors mean low-data arms still get
+  # picked sometimes). Reward = score quantile within a sliding window
+  # of recent evaluated organisms; dead organisms get 0. The discount
+  # factor γ controls how fast the bandit forgets old observations
+  # (γ=0.97 ≈ 33 effective recent observations per arm).
+  parent_island_sampling:
+    strategy: bandit                   # uniform | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile      # survival | score_quantile | hybrid
+      reward_window: 50
+      survival_weight: 0.3
+  # Adaptive partner-island sampling for inter_island_crossover. A
+  # *separate* Thompson sampler is kept per origin island, so the
+  # bandit can learn that "from island A, partner B is good" without
+  # forcing "from island B, partner A is also good".
+  cross_island_partner_sampling:
+    strategy: bandit                   # uniform | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile
+      reward_window: 50
+      survival_weight: 0.3
+  species_sampling:
+    strategy: weighted_rule
+    weighted_rule_lambda: 1.0
+    mutation_softmax_temperature: 1.0
+    within_island_crossover_softmax_temperature: 1.0
+    inter_island_crossover_softmax_temperature: 1.0
+  selection_score:
+    mode: weighted_sum
+    normalize_weights: true
+    weights:
+      simple_score: 1.0
+      inheritance_fitness: 0.0
+
+operators:
+  mutation:
+    gene_removal_probability: 0.1
+  crossover:
+    primary_parent_gene_inheritance_probability: 0.7
+
+phases:
+  simple:
+    eval_mode: full
+    timeout_sec_per_eval: 180
+    experiments:
+      - group_commands_and_wall_planning
+    allocation:
+      enabled: false
+  great_filter:
+    enabled: false
+    interval_generations: 5
+    eval_mode: full
+    timeout_sec_per_eval: 120
+    top_h_per_island: 5
+    experiments:
+      - group_commands_and_wall_planning
+    allocation:
+      enabled: false
+
+llm:
+  selection_strategy: random
+  seed: 123
+
+  route_weights:
+    ollama_gemma4_31b: 1.0
+
+  # Adaptive LLM-route sampling. `weighted_static` (default) keeps using
+  # the `route_weights` block above unchanged. `bandit` swaps in a
+  # discounted Thompson sampler keyed on the same routes; the existing
+  # `route_weights` are folded in as a Beta-prior bias so users keep
+  # their per-model tuning when switching modes.
+  #
+  # NOTE: when `pipelines` (below) is defined and non-empty, route
+  # selection happens through the pipeline mapping and this `route_*`
+  # path is bypassed for organism stages — see comments on `pipelines`.
+  route_sampling:
+    strategy: bandit                   # uniform | weighted_static | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile      # survival | score_quantile | hybrid
+      reward_window: 50
+      survival_weight: 0.3
+
+  # Pipeline configurations. Each entry is a named bundle of
+  # `canonical_stage -> route_id` assignments. When this block is
+  # non-empty the bandit sampler switches granularity from individual
+  # routes to whole pipelines: one pipeline is sampled per organism and
+  # *every stage of that organism* uses the pipeline's stage mapping.
+  # Reward (organism simple_score) is fed back to the pipeline arm.
+  #
+  # Canonical stages must each be present (no defaults):
+  #   - rationalization        (Step 1 of two-step design)
+  #   - design                 (Step 2 of two-step design, also retries)
+  #   - implementation         (also implementation_attempt / template)
+  #   - novelty                (novelty_check)
+  #   - repair                 (post-eval repair after evaluator failure)
+  #
+  # To get back to legacy per-stage independent routing, set this to []
+  # (or remove it) and the `route_weights` / `route_sampling` path
+  # above takes over.
+  pipelines:
+    - id: qwen_creative_gemma_check
+      stages:
+        rationalization: ollama_qwen35_122b
+        design: ollama_qwen35_122b
+        implementation: ollama_qwen35_122b
+        novelty: ollama_gemma4_31b
+        repair: ollama_gemma4_31b
+
+  pipeline_sampling:
+    strategy: bandit                   # uniform | weighted_static | bandit
+    bandit:
+      algorithm: discounted_thompson
+      discount: 0.97
+      prior_alpha: 1.0
+      prior_beta: 1.0
+      reward_mode: score_quantile
+      reward_window: 50
+      survival_weight: 0.3
