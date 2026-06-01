@@ -3,7 +3,7 @@
 # conf/config_co-bench.yaml via the CO_BENCH_TASK selector (defaults below are
 # TSP so this composes standalone). Cloned from circle_packing_shinka.
 resume: true
-max_generations: 150
+max_generations: 300
 max_organism_creations: false
 max_retries_per_eval: 0
 
