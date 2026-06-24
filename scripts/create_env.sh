@@ -32,7 +32,9 @@ Options:
                          none  -> base install only (no extras)
   -c, --channel CHAN   Conda channel for the python/pip packages.
                        Default: conda-forge.
-  -f, --force          If the env already exists, remove and recreate it.
+  -f, --force          If the env already exists, delete and recreate it from
+                       scratch. Without --force an existing env is REUSED and
+                       only missing / outdated packages are installed into it.
   -y, --yes            Non-interactive (assume yes for the manager prompts).
   -h, --help           Show this help.
 
@@ -44,6 +46,10 @@ Examples:
   ./scripts/create_env.sh optfind --extras none      # base deps only
 
 Notes:
+  - If <env-name> already exists it is reused: the script skips creation and
+    just runs the editable install, so pip pulls in only the missing/updated
+    packages. Use --force to wipe and rebuild instead. (When reusing, --python
+    is ignored -- the existing env keeps its interpreter.)
   - torch/torchvision come from pip's default index (a CUDA build on Linux, a
     CPU build on macOS); pass a custom index by editing the pip step if you
     need a specific CUDA wheel.
@@ -179,21 +185,28 @@ echo "==> channel : $CHANNEL"
 echo "==> extras  : ${extras_norm:-<none>}"
 echo "==> install : pip install -e \"${PIP_TARGET}\"  (from ${ROOT_DIR})"
 
+REUSE_ENV=0
 if env_exists; then
   if [[ "$FORCE" -eq 1 ]]; then
     echo "==> env '$ENV_NAME' exists; removing (--force)..."
     "$MANAGER" env remove -n "$ENV_NAME" ${YES_FLAG} || "$MANAGER" remove -n "$ENV_NAME" --all ${YES_FLAG}
   else
-    echo "Error: env '$ENV_NAME' already exists. Re-run with --force to recreate it." >&2
-    exit 1
+    REUSE_ENV=1
+    echo "==> env '$ENV_NAME' already exists; reusing it -- pip will install only"
+    echo "    missing / outdated packages (pass --force to delete and recreate)."
+    echo "    note: --python ${PY_VERSION} is ignored for an existing env."
   fi
 fi
 
 # --------------------------------------------------------------------------
-# Create the env + pip install (editable) into it
+# Create the env (unless reusing an existing one) + pip install (editable)
 # --------------------------------------------------------------------------
-echo "==> creating env '$ENV_NAME' (python=$PY_VERSION) with $MANAGER ..."
-"$MANAGER" create ${YES_FLAG} -n "$ENV_NAME" -c "$CHANNEL" "python=${PY_VERSION}" pip
+if [[ "$REUSE_ENV" -eq 1 ]]; then
+  echo "==> reusing existing env '$ENV_NAME'."
+else
+  echo "==> creating env '$ENV_NAME' (python=$PY_VERSION) with $MANAGER ..."
+  "$MANAGER" create ${YES_FLAG} -n "$ENV_NAME" -c "$CHANNEL" "python=${PY_VERSION}" pip
+fi
 
 echo "==> upgrading pip tooling in '$ENV_NAME' ..."
 "$MANAGER" run -n "$ENV_NAME" python -m pip install --upgrade pip setuptools wheel
