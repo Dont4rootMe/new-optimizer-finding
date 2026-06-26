@@ -2,19 +2,27 @@
 
 One .ipynb per task. Each notebook submits TWO independent cluster jobs:
 
-  1. **Normal run**  -> ``scripts/run_evolution.sh --seed --config-name <preset>``
+  1. **Normal run**  -> scripts/run_evolution.sh --seed --config-name <preset>
        starts the local Ollama instances, seeds generation 0, runs evolution.
-  2. **Baseline**    -> ``scripts/run_shinka_baseline.sh --config-name baselines/<preset>``
+  2. **Baseline**    -> scripts/run_shinka_baseline.sh --config-name baselines/<preset>
        same Ollama lifecycle -> ShinkaEvolve over the same task evaluator.
+
+Both jobs point their cluster ``script`` at ``scripts/cluster_job.py`` rather
+than at a bash command. The cluster's ``pytorch2`` job type runs ``script``
+through torchrun (one process per GPU), which is built for a DDP training
+script -- but this project's evolution loop / baseline is a SINGLE-PROCESS
+orchestrator (the GPUs host Ollama, not a DDP model). ``cluster_job.py`` runs
+the real wrapper on global rank 0 only (other ranks exit 0), inside the
+project env, with all GPUs visible. A bash command as ``script`` fails:
+torchrun would try to ``python`` its first token (we hit exactly that -- a
+``cd ...`` script became ``python cd``).
 
 The cluster scaffold (``client_lib.Job`` shape, ``echimbulatov | ... #ID0137
 #rnd`` job description, queue ``diff``, region ``A100-MT``, ``priority_class``,
 the a100.8gpu SKU formula, and the Comet creds) is copied verbatim from the
-canonical job-run notebook. Only the launch command + experiment identity
-change per task. The Comet api_key / workspace are identical to the canonical
-notebook (and to the repo's Hydra config), and ``COMET_RUN_NAME`` is left
-unset so the config's canonical per-task run-name (a system-visible
-identifier) is preserved.
+canonical job-run notebook. Comet api_key / workspace are identical to that
+notebook and to the repo's Hydra config, and ``COMET_RUN_NAME`` is left unset
+so the config's canonical per-task run-name is preserved.
 
 Regenerate with:  python notebooks/job_runs/_generate_job_notebooks.py
 """
@@ -27,19 +35,14 @@ from pathlib import Path
 # --- cluster constants (confirmed with the operator) ------------------------
 WORK_DIR = "/home/jovyan/echimbulatov/fork_afedorov/constant_repos/new-optimizer-finding"
 BASE_IMAGE = "cr.ai.cloud.ru/2754eb6e-ae19-4123-87ce-06ec3cc96500/job-latentdiffusion:flash-clear"
+# Project env created by scripts/create_env.sh; the wrapper runs inside it via
+# `<manager> run -n <env>` so lib_runtime.sh resolves the right Python.
+ENV_NAME = "optfind"
+ENV_MANAGER = "conda"
 
 OUT_DIR = Path(__file__).resolve().parent
 
 
-# --- per-task definitions ---------------------------------------------------
-# slug          : notebook file slug + EXP_BASE used in the job description
-# title         : notebook H1
-# blurb         : 2-4 line task description (markdown)
-# run_config    : evolution-run Hydra preset (--config-name)
-# baseline_config: ShinkaEvolve baseline preset (--config-name)
-# overrides     : hydra overrides appended to BOTH jobs ("" or CO_BENCH_TASK=...)
-# comet_run     : canonical Comet run-name produced by the config (display only)
-# bootstrap     : True -> chain scripts/bootstrap_cobench.sh first (CO-Bench data)
 def _cobench(task_id: str, slug: str, title_task: str, blurb: str) -> dict:
     return {
         "slug": f"cobench-{slug}",
@@ -47,7 +50,7 @@ def _cobench(task_id: str, slug: str, title_task: str, blurb: str) -> dict:
         "blurb": blurb,
         "run_config": "config_co-bench",
         "baseline_config": "baselines/co-bench",
-        "overrides": f" experiments.co_bench.CO_BENCH_TASK={task_id}",
+        "task_id": task_id,         # CO-Bench CO_BENCH_TASK id (UPPER-CASE)
         "comet_run": f"cobench-{slug}",
         "bootstrap": True,
     }
@@ -64,7 +67,7 @@ TASKS: list[dict] = [
         ),
         "run_config": "config_circle_packing_shinka",
         "baseline_config": "baselines/circle_packing_shinka",
-        "overrides": "",
+        "task_id": "",
         "comet_run": "circle-packing-shinka",
         "bootstrap": False,
     },
@@ -80,7 +83,7 @@ TASKS: list[dict] = [
         ),
         "run_config": "config_awtf2025_heuristic",
         "baseline_config": "baselines/awtf2025_heuristic",
-        "overrides": "",
+        "task_id": "",
         "comet_run": "awtf2025_heuristic",
         "bootstrap": False,
     },
@@ -117,7 +120,6 @@ TASKS: list[dict] = [
 ]
 
 
-# --- cell builders ----------------------------------------------------------
 def _md(text: str) -> dict:
     return {"cell_type": "markdown", "metadata": {}, "source": text}
 
@@ -127,23 +129,31 @@ def _code(text: str) -> dict:
 
 
 def _title_md(task: dict) -> str:
+    task_flag = f" --task {task['task_id']}" if task["task_id"] else ""
+    boot_flag = " --bootstrap" if task["bootstrap"] else ""
     bootstrap_note = ""
     if task["bootstrap"]:
         bootstrap_note = (
-            "\n\n> **CO-Bench data:** both jobs chain `scripts/bootstrap_cobench.sh` first "
-            "(clone the CO-Bench checkout + download the dataset into `./data/co-bench`). "
-            "It is idempotent — re-runs skip work that already exists."
+            "\n\n> **CO-Bench data:** the launcher passes `--bootstrap`, so rank 0 runs "
+            "`scripts/bootstrap_cobench.sh` first (clone the CO-Bench checkout + download the "
+            "dataset into `./data/co-bench`). It is idempotent — re-runs skip existing work."
         )
     return (
         f"# Job run — {task['title']}\n\n"
         f"{task['blurb']}\n\n"
-        "Two **independent** cluster jobs, each with its own *submit / status / kill* cells:\n\n"
-        f"1. **Normal run** — `scripts/run_evolution.sh --seed --config-name {task['run_config']}"
-        f"{task['overrides']}` (starts Ollama, seeds gen 0, evolves to the configured stop criteria).\n"
-        f"2. **Baseline** — `scripts/run_shinka_baseline.sh --config-name {task['baseline_config']}"
-        f"{task['overrides']}` (ShinkaEvolve over the same evaluator + local Ollama).\n\n"
+        "Two **independent** cluster jobs, each with its own *submit / status / kill* cells. "
+        "Both set the job `script` to **`scripts/cluster_job.py`** (a real Python file, which is "
+        "what the cluster's `pytorch2`/torchrun launch expects); it runs the real wrapper on "
+        "global **rank 0 only** (other ranks exit 0) inside the project env, with all 8 GPUs "
+        "visible for Ollama:\n\n"
+        f"1. **Normal run** — `cluster_job.py --kind evolve --config-name {task['run_config']}"
+        f"{task_flag}{boot_flag} --env <env> ...` → `run_evolution.sh --seed` (starts Ollama, "
+        "seeds gen 0, evolves).\n"
+        f"2. **Baseline** — `cluster_job.py --kind baseline --config-name {task['baseline_config']}"
+        f"{task_flag}{boot_flag} --env <env> ...` → `run_shinka_baseline.sh` (ShinkaEvolve).\n\n"
         f"Canonical Comet run-name (set by the repo config, **unchanged**): `{task['comet_run']}`. "
-        "Run *Common config* first, then either job group."
+        "Edit `ENV_NAME` / `ENV_MANAGER` in *Common config* to the env you made with "
+        "`scripts/create_env.sh`. Run *Common config* first, then either job group."
         f"{bootstrap_note}"
     )
 
@@ -158,10 +168,11 @@ BASE_IMAGE = "@@BASE_IMAGE@@"
 
 # ---------------------------------------------------------------------------
 # Hardware - a100.{N_GPUS}gpu SKU in the A100-MT region (verbatim from the
-# canonical job-run notebook on this cluster). The organism-first evolution
-# loop is a SINGLE-PROCESS orchestrator; the 8 GPUs host the local Ollama
-# model instances that scripts/run_evolution.sh + scripts/lib_runtime.sh
-# start (gemma 4 31B + qwen 3.5 across the 8 GPUs - see the experiment config).
+# canonical job-run notebook on this cluster). The cluster's pytorch2 job type
+# launches `script` under torchrun with one process per GPU; scripts/cluster_job.py
+# runs the orchestrator on rank 0 only and keeps all N_GPUS visible so the local
+# Ollama instances (gemma 4 31B + qwen 3.5 - see the experiment config) can be
+# placed across them.
 # ---------------------------------------------------------------------------
 N_NODES = 1
 N_GPUS = 8
@@ -178,6 +189,14 @@ print(f"Instance: {INSTANCE_TYPE}  (region={REGION})")
 print(f"Total GPUs: {_total_gpus}  (= {N_NODES} nodes x {N_GPUS} GPUs)")
 
 # ---------------------------------------------------------------------------
+# Project env (create it once with scripts/create_env.sh). The wrapper runs
+# inside it via `<ENV_MANAGER> run -n <ENV_NAME>` so lib_runtime.sh resolves
+# the right Python. Set ENV_NAME="" to use whatever Python is already on PATH.
+# ---------------------------------------------------------------------------
+ENV_NAME = "@@ENV_NAME@@"
+ENV_MANAGER = "@@ENV_MANAGER@@"   # conda | micromamba | mamba
+
+# ---------------------------------------------------------------------------
 # Experiment identity. EXP_BASE is the human label used in the job description
 # only. The system-visible run identity (the Comet run-name) is owned by the
 # repo's Hydra config (cfg.comet.run_name) and left at its canonical default:
@@ -186,8 +205,10 @@ print(f"Total GPUs: {_total_gpus}  (= {N_NODES} nodes x {N_GPUS} GPUs)")
 EXP_BASE = "@@EXP_BASE@@"
 RUN_CONFIG = "@@RUN_CONFIG@@"             # normal evolution-run preset
 BASELINE_CONFIG = "@@BASELINE_CONFIG@@"   # ShinkaEvolve baseline preset
-OVERRIDES = "@@OVERRIDES@@"               # hydra overrides appended to BOTH jobs
+TASK_ID = "@@TASK_ID@@"                   # CO-Bench CO_BENCH_TASK id (UPPER); "" otherwise
 NEEDS_COBENCH_BOOTSTRAP = @@BOOTSTRAP@@   # CO-Bench needs the dataset + checkout first
+
+LAUNCHER = f"{WORK_DIR}/scripts/cluster_job.py"
 
 # ---------------------------------------------------------------------------
 # Common job env - cluster scaffolding + Comet creds. Same Comet api_key and
@@ -212,22 +233,36 @@ common_env = {
     "COMET_PROJECT": "new-optimizer-search",
     "COMET_MODE": "online",
     "COMET_LOGGING_CONSOLE": "true",
-}'''
+}
+
+def _env_flags():
+    """Shared cluster_job.py flags: env selection + GPU visibility."""
+    flags = f" --num-gpus {N_GPUS}"
+    if ENV_NAME:
+        flags = f" --env {ENV_NAME} --manager {ENV_MANAGER}" + flags
+    return flags
+
+def _task_flags():
+    """CO-Bench task selector + dataset bootstrap, if applicable."""
+    flags = f" --task {TASK_ID}" if TASK_ID else ""
+    if NEEDS_COBENCH_BOOTSTRAP:
+        flags += " --bootstrap"
+    return flags'''
 
 
 _RUN_SCRIPT = '''# ---------------------------------------------------------------------------
-# Normal training run = the organism-first evolution loop.
-# scripts/run_evolution.sh:
-#   * starts/refreshes the local Ollama instances declared in the config
-#     (scripts/lib_runtime.sh) on the node GPUs,
+# Normal training run = the organism-first evolution loop, launched on rank 0
+# by scripts/cluster_job.py -> scripts/run_evolution.sh:
+#   * starts/refreshes the local Ollama instances (scripts/lib_runtime.sh),
 #   * with --seed, bootstraps the generation-0 population if missing,
 #   * runs seeding + evolution to the configured stop criteria
 #     (max_generations / max_organism_creations / per-model token budget).
+# `script` is a plain `<file.py> <flags>` line (no cd / bash / && / =), so the
+# cluster's torchrun launch runs `python cluster_job.py ...` cleanly.
 # ---------------------------------------------------------------------------
-_bootstrap = f"bash {WORK_DIR}/scripts/bootstrap_cobench.sh && " if NEEDS_COBENCH_BOOTSTRAP else ""
 run_script = (
-    f"cd {WORK_DIR} && {_bootstrap}"
-    f"bash scripts/run_evolution.sh --seed --config-name {RUN_CONFIG}{OVERRIDES}"
+    f"{LAUNCHER} --kind evolve --config-name {RUN_CONFIG}"
+    f"{_task_flags()}{_env_flags()}"
 )
 EXP_NAME_RUN = f"{EXP_BASE}-run"
 print(f"[{EXP_NAME_RUN}]")
@@ -262,15 +297,14 @@ run_job.logs()'''
 
 
 _BASELINE_SCRIPT = '''# ---------------------------------------------------------------------------
-# Baseline = ShinkaEvolve over the SAME task evaluator + local Ollama models.
-# scripts/run_shinka_baseline.sh shares the Ollama lifecycle with the run above
-# and invokes src.baselines.shinka.run (ShinkaEvolve dataclasses + our
-# evaluator). Writes its per-program DB under shinka_runs/.
+# Baseline = ShinkaEvolve over the SAME task evaluator + local Ollama models,
+# launched on rank 0 by scripts/cluster_job.py -> scripts/run_shinka_baseline.sh
+# (shares the Ollama lifecycle with the run above; invokes src.baselines.shinka.run
+# and writes its per-program DB under shinka_runs/).
 # ---------------------------------------------------------------------------
-_bootstrap = f"bash {WORK_DIR}/scripts/bootstrap_cobench.sh && " if NEEDS_COBENCH_BOOTSTRAP else ""
 baseline_script = (
-    f"cd {WORK_DIR} && {_bootstrap}"
-    f"bash scripts/run_shinka_baseline.sh --config-name {BASELINE_CONFIG}{OVERRIDES}"
+    f"{LAUNCHER} --kind baseline --config-name {BASELINE_CONFIG}"
+    f"{_task_flags()}{_env_flags()}"
 )
 EXP_NAME_BASELINE = f"{EXP_BASE}-baseline"
 print(f"[{EXP_NAME_BASELINE}]")
@@ -305,10 +339,12 @@ def _common_cfg(task: dict) -> str:
     return (
         _COMMON_CFG.replace("@@WORK_DIR@@", WORK_DIR)
         .replace("@@BASE_IMAGE@@", BASE_IMAGE)
+        .replace("@@ENV_NAME@@", ENV_NAME)
+        .replace("@@ENV_MANAGER@@", ENV_MANAGER)
         .replace("@@EXP_BASE@@", task["slug"])
         .replace("@@RUN_CONFIG@@", task["run_config"])
         .replace("@@BASELINE_CONFIG@@", task["baseline_config"])
-        .replace("@@OVERRIDES@@", task["overrides"])
+        .replace("@@TASK_ID@@", task["task_id"])
         .replace("@@BOOTSTRAP@@", "True" if task["bootstrap"] else "False")
         .replace("@@COMET_RUN@@", task["comet_run"])
     )
