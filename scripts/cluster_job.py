@@ -71,10 +71,17 @@ def _wrapper_argv(args: argparse.Namespace) -> list[str]:
 
 
 def _maybe_env_prefix(args: argparse.Namespace) -> list[str]:
-    """`<manager> run -n <env>` prefix so the wrapper uses the project env."""
-    if not args.env:
-        return []
-    return [args.manager, "run", "-n", args.env]
+    """`<manager> run -p/-n <env>` prefix so the wrapper uses the project env.
+
+    Prefer --env-path (a prefix env at an absolute path on the shared
+    filesystem, which survives into a fresh job container) over --env (a named
+    env, which usually does NOT).
+    """
+    if args.env_path:
+        return [args.manager, "run", "-p", args.env_path]
+    if args.env:
+        return [args.manager, "run", "-n", args.env]
+    return []
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -83,7 +90,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config-name", required=True, dest="config_name")
     parser.add_argument("--task", default="", help="CO-Bench CO_BENCH_TASK id (UPPER-CASE); blank for non-CO-Bench.")
     parser.add_argument("--bootstrap", action="store_true", help="Run scripts/bootstrap_cobench.sh first (CO-Bench data).")
-    parser.add_argument("--env", default="", help="conda/micromamba env to run the wrapper in (blank = current PATH).")
+    parser.add_argument("--env", default="", help="Named conda/micromamba env to run the wrapper in (blank = current PATH).")
+    parser.add_argument("--env-path", default="", dest="env_path",
+                        help="Prefix env at an absolute path (preferred for cluster jobs); wins over --env.")
     parser.add_argument("--manager", default="conda", choices=["conda", "micromamba", "mamba"])
     parser.add_argument("--num-gpus", type=int, default=8, dest="num_gpus",
                         help="Make GPUs 0..N-1 visible on rank 0 (0 = leave CUDA_VISIBLE_DEVICES untouched).")

@@ -6,7 +6,14 @@ set -euo pipefail
 #
 # The project is a normal pip package (pyproject.toml), so the env manager only
 # provides the Python interpreter; dependencies are installed with pip inside
-# the new env via `<manager> run -n <name> ...` (no activation needed).
+# the new env via `<manager> run -n/-p <env> ...` (no activation needed).
+#
+# Two env styles:
+#   --name NAME     a *named* env (lives in the manager's envs dir).
+#   --prefix PATH   a *prefix* env at an absolute path. Use this for cloud jobs:
+#                   a job container starts fresh from the base image, so named
+#                   envs created interactively are NOT visible to it; a prefix
+#                   env on a SHARED/persistent path (e.g. next to this repo) is.
 
 show_help() {
   cat <<'EOF'
@@ -15,9 +22,13 @@ Create a conda / micromamba env for this project and install it (editable).
 Usage:
   ./scripts/create_env.sh <env-name> [options]
   ./scripts/create_env.sh --name <env-name> [options]
+  ./scripts/create_env.sh --prefix /abs/path/to/env [options]
 
-Required:
-  <env-name> | -n, --name NAME   Name of the environment to create.
+Env location (choose exactly one):
+  <env-name> | -n, --name NAME   Named env (in the manager's envs dir).
+  -P, --prefix PATH              Prefix env at an absolute PATH. Preferred for
+                                 cluster jobs -- put it on a shared/persistent
+                                 filesystem so job containers can see it.
 
 Options:
   -m, --manager {conda|micromamba|mamba}
@@ -43,13 +54,15 @@ Examples:
   ./scripts/create_env.sh --name optfind --manager micromamba
   ./scripts/create_env.sh optfind -p 3.11 -e evolve,co_bench
   ./scripts/create_env.sh optfind --extras all --force
-  ./scripts/create_env.sh optfind --extras none      # base deps only
+  # Cluster jobs: prefix env on the shared FS next to the repo (one-time):
+  ./scripts/create_env.sh --prefix /home/.../constant_repos/.conda-envs/optfind \
+      --manager conda --extras evolve,shinka_baseline,co_bench
 
 Notes:
-  - If <env-name> already exists it is reused: the script skips creation and
-    just runs the editable install, so pip pulls in only the missing/updated
-    packages. Use --force to wipe and rebuild instead. (When reusing, --python
-    is ignored -- the existing env keeps its interpreter.)
+  - If the env already exists it is reused: the script skips creation and just
+    runs the editable install, so pip pulls in only the missing/updated
+    packages. Use --force to wipe and rebuild. (When reusing, --python is
+    ignored -- the existing env keeps its interpreter.)
   - torch/torchvision come from pip's default index (a CUDA build on Linux, a
     CPU build on macOS); pass a custom index by editing the pip step if you
     need a specific CUDA wheel.
@@ -57,7 +70,6 @@ Notes:
     loop and baselines use (openai, anthropic, comet_ml, plotly, psutil, ...).
   - `shinka_baseline` adds shinka-evolve; `co_bench` adds the dataset/solver
     deps -- the CO-Bench checkout + dataset still need scripts/bootstrap_cobench.sh.
-  - After it finishes, activate with:  <manager> activate <env-name>
 EOF
 }
 
@@ -65,6 +77,7 @@ EOF
 # Defaults
 # --------------------------------------------------------------------------
 ENV_NAME=""
+PREFIX=""
 MANAGER=""
 PY_VERSION="3.11"
 EXTRAS="evolve"
@@ -82,6 +95,8 @@ while [[ $# -gt 0 ]]; do
     -h|--help) show_help; exit 0 ;;
     -n|--name) ENV_NAME="${2:-}"; shift 2 ;;
     --name=*) ENV_NAME="${1#*=}"; shift ;;
+    -P|--prefix) PREFIX="${2:-}"; shift 2 ;;
+    --prefix=*) PREFIX="${1#*=}"; shift ;;
     -m|--manager) MANAGER="${2:-}"; shift 2 ;;
     --manager=*) MANAGER="${1#*=}"; shift ;;
     -p|--python) PY_VERSION="${2:-}"; shift 2 ;;
@@ -99,20 +114,38 @@ while [[ $# -gt 0 ]]; do
       exit 2
       ;;
     *)
-      if [[ -z "$ENV_NAME" ]]; then
+      if [[ -z "$ENV_NAME" && -z "$PREFIX" ]]; then
         ENV_NAME="$1"; shift
       else
-        echo "Error: unexpected positional argument '$1' (env name already set to '$ENV_NAME')." >&2
+        echo "Error: unexpected positional argument '$1' (env already set)." >&2
         exit 2
       fi
       ;;
   esac
 done
 
-if [[ -z "$ENV_NAME" ]]; then
-  echo "Error: an environment name is required (positional or --name)." >&2
+if [[ -n "$ENV_NAME" && -n "$PREFIX" ]]; then
+  echo "Error: pass either a name or --prefix, not both." >&2
+  exit 2
+fi
+if [[ -z "$ENV_NAME" && -z "$PREFIX" ]]; then
+  echo "Error: an environment is required (positional/--name, or --prefix PATH)." >&2
   show_help >&2
   exit 2
+fi
+
+# Target args shared by every manager call: `-n NAME` or `-p PATH`.
+if [[ -n "$PREFIX" ]]; then
+  # Make the prefix absolute without requiring it (or its parent) to exist yet.
+  case "$PREFIX" in
+    /*) : ;;
+    *)  PREFIX="$(pwd)/$PREFIX" ;;
+  esac
+  MGR_TARGET=( -p "$PREFIX" )
+  ENV_REF="$PREFIX"
+else
+  MGR_TARGET=( -n "$ENV_NAME" )
+  ENV_REF="$ENV_NAME"
 fi
 
 # --------------------------------------------------------------------------
@@ -172,14 +205,18 @@ else
 fi
 
 # --------------------------------------------------------------------------
-# Handle an existing env of the same name
+# Does the env already exist?
 # --------------------------------------------------------------------------
 env_exists() {
-  "$MANAGER" env list 2>/dev/null | awk '{print $1}' | grep -Fxq "$ENV_NAME"
+  if [[ -n "$PREFIX" ]]; then
+    [[ -e "$PREFIX/conda-meta" || -x "$PREFIX/bin/python" ]]
+  else
+    "$MANAGER" env list 2>/dev/null | awk '{print $1}' | grep -Fxq "$ENV_NAME"
+  fi
 }
 
 echo "==> manager : $MANAGER"
-echo "==> env name: $ENV_NAME"
+echo "==> env     : $ENV_REF"
 echo "==> python  : $PY_VERSION"
 echo "==> channel : $CHANNEL"
 echo "==> extras  : ${extras_norm:-<none>}"
@@ -188,44 +225,51 @@ echo "==> install : pip install -e \"${PIP_TARGET}\"  (from ${ROOT_DIR})"
 REUSE_ENV=0
 if env_exists; then
   if [[ "$FORCE" -eq 1 ]]; then
-    echo "==> env '$ENV_NAME' exists; removing (--force)..."
-    "$MANAGER" env remove -n "$ENV_NAME" ${YES_FLAG} || "$MANAGER" remove -n "$ENV_NAME" --all ${YES_FLAG}
+    echo "==> env '$ENV_REF' exists; removing (--force)..."
+    "$MANAGER" env remove "${MGR_TARGET[@]}" ${YES_FLAG} \
+      || "$MANAGER" remove "${MGR_TARGET[@]}" --all ${YES_FLAG}
   else
     REUSE_ENV=1
-    echo "==> env '$ENV_NAME' already exists; reusing it -- pip will install only"
+    echo "==> env '$ENV_REF' already exists; reusing it -- pip will install only"
     echo "    missing / outdated packages (pass --force to delete and recreate)."
     echo "    note: --python ${PY_VERSION} is ignored for an existing env."
   fi
 fi
 
 # --------------------------------------------------------------------------
-# Create the env (unless reusing an existing one) + pip install (editable)
+# Create the env (unless reusing) + pip install (editable) into it
 # --------------------------------------------------------------------------
 if [[ "$REUSE_ENV" -eq 1 ]]; then
-  echo "==> reusing existing env '$ENV_NAME'."
+  echo "==> reusing existing env '$ENV_REF'."
 else
-  echo "==> creating env '$ENV_NAME' (python=$PY_VERSION) with $MANAGER ..."
-  "$MANAGER" create ${YES_FLAG} -n "$ENV_NAME" -c "$CHANNEL" "python=${PY_VERSION}" pip
+  if [[ -n "$PREFIX" ]]; then
+    mkdir -p "$(dirname "$PREFIX")"
+  fi
+  echo "==> creating env '$ENV_REF' (python=$PY_VERSION) with $MANAGER ..."
+  "$MANAGER" create ${YES_FLAG} "${MGR_TARGET[@]}" -c "$CHANNEL" "python=${PY_VERSION}" pip
 fi
 
-echo "==> upgrading pip tooling in '$ENV_NAME' ..."
-"$MANAGER" run -n "$ENV_NAME" python -m pip install --upgrade pip setuptools wheel
+echo "==> upgrading pip tooling in '$ENV_REF' ..."
+"$MANAGER" run "${MGR_TARGET[@]}" python -m pip install --upgrade pip setuptools wheel
 
-echo "==> installing this project (editable) into '$ENV_NAME' ..."
+echo "==> installing this project (editable) into '$ENV_REF' ..."
 # Run from the repo root so the `.[extras]` editable target resolves here.
-( cd "${ROOT_DIR}" && "$MANAGER" run -n "$ENV_NAME" python -m pip install -e "${PIP_TARGET}" )
+( cd "${ROOT_DIR}" && "$MANAGER" run "${MGR_TARGET[@]}" python -m pip install -e "${PIP_TARGET}" )
 
 # --------------------------------------------------------------------------
 # Report
 # --------------------------------------------------------------------------
 echo
-echo "Done. Environment '$ENV_NAME' is ready."
-echo "  python: $("$MANAGER" run -n "$ENV_NAME" python --version 2>&1)"
+echo "Done. Environment '$ENV_REF' is ready."
+echo "  python: $("$MANAGER" run "${MGR_TARGET[@]}" python --version 2>&1)"
 echo
 echo "Activate it with:"
-echo "  $MANAGER activate $ENV_NAME"
+echo "  $MANAGER activate $ENV_REF"
+if [[ -n "$PREFIX" ]]; then
+  echo "Reference it in cluster_job.py with:  --env-path $PREFIX"
+fi
 if [[ ",$extras_norm," == *",co_bench,"* ]]; then
   echo
   echo "co_bench extra installed -- also fetch the CO-Bench checkout + dataset:"
-  echo "  $MANAGER run -n $ENV_NAME bash ${ROOT_DIR}/scripts/bootstrap_cobench.sh"
+  echo "  $MANAGER run ${MGR_TARGET[*]} bash ${ROOT_DIR}/scripts/bootstrap_cobench.sh"
 fi

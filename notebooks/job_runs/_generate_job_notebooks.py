@@ -35,10 +35,6 @@ from pathlib import Path
 # --- cluster constants (confirmed with the operator) ------------------------
 WORK_DIR = "/home/jovyan/echimbulatov/fork_afedorov/constant_repos/new-optimizer-finding"
 BASE_IMAGE = "cr.ai.cloud.ru/2754eb6e-ae19-4123-87ce-06ec3cc96500/job-latentdiffusion:flash-clear"
-# Project env created by scripts/create_env.sh; the wrapper runs inside it via
-# `<manager> run -n <env>` so lib_runtime.sh resolves the right Python.
-ENV_NAME = "optfind"
-ENV_MANAGER = "conda"
 
 OUT_DIR = Path(__file__).resolve().parent
 
@@ -152,13 +148,16 @@ def _title_md(task: dict) -> str:
         f"2. **Baseline** — `cluster_job.py --kind baseline --config-name {task['baseline_config']}"
         f"{task_flag}{boot_flag} --env <env> ...` → `run_shinka_baseline.sh` (ShinkaEvolve).\n\n"
         f"Canonical Comet run-name (set by the repo config, **unchanged**): `{task['comet_run']}`. "
-        "Edit `ENV_NAME` / `ENV_MANAGER` in *Common config* to the env you made with "
-        "`scripts/create_env.sh`. Run *Common config* first, then either job group."
+        "Set `ENV_PATH` in *Common config* to a **prefix env on the shared filesystem** "
+        "(named conda envs are invisible to a fresh job container); create it once with "
+        "`scripts/create_env.sh --prefix <ENV_PATH> ...`. Run *Common config* first, then either job group."
         f"{bootstrap_note}"
     )
 
 
-_COMMON_CFG = '''import client_lib
+_COMMON_CFG = '''import os
+
+import client_lib
 
 # ---------------------------------------------------------------------------
 # Cluster + repo paths
@@ -189,12 +188,19 @@ print(f"Instance: {INSTANCE_TYPE}  (region={REGION})")
 print(f"Total GPUs: {_total_gpus}  (= {N_NODES} nodes x {N_GPUS} GPUs)")
 
 # ---------------------------------------------------------------------------
-# Project env (create it once with scripts/create_env.sh). The wrapper runs
-# inside it via `<ENV_MANAGER> run -n <ENV_NAME>` so lib_runtime.sh resolves
-# the right Python. Set ENV_NAME="" to use whatever Python is already on PATH.
+# Project env. A job runs in a FRESH base-image container, so a *named* conda
+# env created interactively is NOT visible to it -- use a PREFIX env at an
+# absolute path on the SHARED/persistent filesystem (the repo's parent dir is
+# mounted in the job). Create it ONCE (on any node that mounts this path):
+#   ./scripts/create_env.sh --prefix <ENV_PATH> --manager conda \
+#       --extras evolve,shinka_baseline,co_bench
+# The wrapper then runs via `<ENV_MANAGER> run -p <ENV_PATH>` so lib_runtime.sh
+# resolves the right Python. To use a named env instead, set ENV_NAME and clear
+# ENV_PATH; set both empty to use whatever Python is already on PATH.
 # ---------------------------------------------------------------------------
-ENV_NAME = "@@ENV_NAME@@"
-ENV_MANAGER = "@@ENV_MANAGER@@"   # conda | micromamba | mamba
+ENV_MANAGER = "conda"   # conda | micromamba | mamba
+ENV_PATH = os.path.join(os.path.dirname(WORK_DIR), ".conda-envs", "optfind")
+ENV_NAME = ""           # alternative to ENV_PATH: a named env
 
 # ---------------------------------------------------------------------------
 # Experiment identity. EXP_BASE is the human label used in the job description
@@ -238,7 +244,9 @@ common_env = {
 def _env_flags():
     """Shared cluster_job.py flags: env selection + GPU visibility."""
     flags = f" --num-gpus {N_GPUS}"
-    if ENV_NAME:
+    if ENV_PATH:
+        flags = f" --env-path {ENV_PATH} --manager {ENV_MANAGER}" + flags
+    elif ENV_NAME:
         flags = f" --env {ENV_NAME} --manager {ENV_MANAGER}" + flags
     return flags
 
@@ -339,8 +347,6 @@ def _common_cfg(task: dict) -> str:
     return (
         _COMMON_CFG.replace("@@WORK_DIR@@", WORK_DIR)
         .replace("@@BASE_IMAGE@@", BASE_IMAGE)
-        .replace("@@ENV_NAME@@", ENV_NAME)
-        .replace("@@ENV_MANAGER@@", ENV_MANAGER)
         .replace("@@EXP_BASE@@", task["slug"])
         .replace("@@RUN_CONFIG@@", task["run_config"])
         .replace("@@BASELINE_CONFIG@@", task["baseline_config"])
