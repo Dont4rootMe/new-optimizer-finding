@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -43,6 +44,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _RANK_ENV_VARS = ("RANK", "OMPI_COMM_WORLD_RANK", "PMI_RANK", "GROUP_RANK", "LOCAL_RANK")
+
+# Official static linux build; bundles the GPU runtime libs alongside bin/ollama.
+OLLAMA_URL = "https://ollama.com/download/ollama-linux-amd64.tgz"
 
 
 def global_rank() -> int:
@@ -153,6 +157,96 @@ def _ensure_env(args: argparse.Namespace, env: dict) -> int:
     return 1
 
 
+def _ollama_present(ollama_dir: str) -> bool:
+    return os.path.exists(os.path.join(ollama_dir, "bin", "ollama"))
+
+
+def _download_and_extract_ollama(ollama_dir: str) -> int:
+    import tarfile
+    import tempfile
+    import urllib.request
+
+    os.makedirs(ollama_dir, exist_ok=True)
+    tmp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".tgz", delete=False) as tmp:
+            tmp_path = tmp.name
+        urllib.request.urlretrieve(OLLAMA_URL, tmp_path)
+        with tarfile.open(tmp_path, "r:gz") as tf:
+            tf.extractall(ollama_dir)  # trusted source; layout is bin/ + lib/
+        os.chmod(os.path.join(ollama_dir, "bin", "ollama"), 0o755)
+        return 0
+    except Exception as exc:  # noqa: BLE001
+        print(f"[cluster_job] ollama download/extract failed: {exc}", file=sys.stderr, flush=True)
+        return 1
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+def _ensure_ollama(args: argparse.Namespace, env: dict) -> int:
+    """Put the `ollama` CLI on PATH (the run/baseline wrappers require it).
+
+    If it is already on PATH (image provides it) or already cached at
+    --ollama-dir, just reuse it; otherwise download the official static linux
+    build once to the shared filesystem (lock-guarded), and prepend its bin dir
+    to the subprocess PATH so `conda run` -> the wrapper can find it.
+    """
+    if args.no_ensure_ollama:
+        return 0
+    ollama_dir = args.ollama_dir or os.path.join(os.path.dirname(str(REPO_ROOT)), ".ollama-dist")
+    bin_dir = os.path.join(ollama_dir, "bin")
+
+    if _ollama_present(ollama_dir):
+        env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
+        print(f"[cluster_job] using cached ollama at {bin_dir}", flush=True)
+        return 0
+    if shutil.which("ollama"):
+        print("[cluster_job] ollama already on PATH; using it.", flush=True)
+        return 0
+
+    lock = ollama_dir + ".creating.lock"
+    try:
+        os.makedirs(os.path.dirname(ollama_dir), exist_ok=True)
+    except OSError:
+        pass
+    try:
+        os.mkdir(lock)
+        owns_lock = True
+    except FileExistsError:
+        owns_lock = False
+
+    if owns_lock:
+        print(f"[cluster_job] ollama missing; downloading {OLLAMA_URL} -> {ollama_dir}", flush=True)
+        try:
+            rc = _download_and_extract_ollama(ollama_dir)
+        finally:
+            try:
+                os.rmdir(lock)
+            except OSError:
+                pass
+        if rc != 0 or not _ollama_present(ollama_dir):
+            return rc or 1
+    else:
+        print(f"[cluster_job] another job is downloading ollama to {ollama_dir}; waiting...", flush=True)
+        deadline = time.time() + 1800
+        while time.time() < deadline:
+            if _ollama_present(ollama_dir):
+                break
+            time.sleep(10)
+        if not _ollama_present(ollama_dir):
+            print(f"[cluster_job] timed out waiting for ollama. Remove {lock} and retry, "
+                  "or install ollama into the image.", file=sys.stderr, flush=True)
+            return 1
+
+    env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
+    print(f"[cluster_job] ollama ready at {bin_dir}", flush=True)
+    return 0
+
+
 def _maybe_env_prefix(args: argparse.Namespace) -> list[str]:
     """`<manager> run -p/-n <env>` prefix so the wrapper uses the project env.
 
@@ -181,6 +275,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="pip extras for the env when auto-creating it (superset that serves run + baseline + co_bench).")
     parser.add_argument("--no-ensure-env", action="store_true", dest="no_ensure_env",
                         help="Do NOT auto-create the env if missing (fail fast instead).")
+    parser.add_argument("--ollama-dir", default="", dest="ollama_dir",
+                        help="Where to cache the ollama binary (default: <repo_parent>/.ollama-dist).")
+    parser.add_argument("--no-ensure-ollama", action="store_true", dest="no_ensure_ollama",
+                        help="Do NOT auto-provision the ollama CLI (assume it is on PATH).")
     parser.add_argument("--num-gpus", type=int, default=8, dest="num_gpus",
                         help="Make GPUs 0..N-1 visible on rank 0 (0 = leave CUDA_VISIBLE_DEVICES untouched).")
     parser.add_argument("--print-only", action="store_true", help="Print the resolved commands and exit (no execution).")
@@ -218,6 +316,11 @@ def main(argv: list[str] | None = None) -> int:
         rc = _ensure_env(args, env)
         if rc != 0:
             return rc
+
+    # Ensure the `ollama` CLI is on PATH (the wrappers require it).
+    rc = _ensure_ollama(args, env)
+    if rc != 0:
+        return rc
 
     for step in steps:
         result = subprocess.run(step, cwd=str(REPO_ROOT), env=env)
