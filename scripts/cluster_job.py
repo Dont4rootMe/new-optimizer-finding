@@ -45,8 +45,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _RANK_ENV_VARS = ("RANK", "OMPI_COMM_WORLD_RANK", "PMI_RANK", "GROUP_RANK", "LOCAL_RANK")
 
-# Official static linux build; bundles the GPU runtime libs alongside bin/ollama.
-OLLAMA_URL = "https://ollama.com/download/ollama-linux-amd64.tgz"
+# Official static linux build (gzip tarball: bin/ollama + bundled GPU libs).
+# Pinned to the last .tgz-packaged release line -- newer releases ship
+# .tar.zst, which Python's tarfile cannot decompress without extra tooling.
+# Override with --ollama-url if you need a specific version.
+OLLAMA_URL = "https://github.com/ollama/ollama/releases/download/v0.11.4/ollama-linux-amd64.tgz"
 
 
 def global_rank() -> int:
@@ -161,7 +164,7 @@ def _ollama_present(ollama_dir: str) -> bool:
     return os.path.exists(os.path.join(ollama_dir, "bin", "ollama"))
 
 
-def _download_and_extract_ollama(ollama_dir: str) -> int:
+def _download_and_extract_ollama(ollama_dir: str, url: str) -> int:
     import tarfile
     import tempfile
     import urllib.request
@@ -171,7 +174,7 @@ def _download_and_extract_ollama(ollama_dir: str) -> int:
     try:
         with tempfile.NamedTemporaryFile(suffix=".tgz", delete=False) as tmp:
             tmp_path = tmp.name
-        urllib.request.urlretrieve(OLLAMA_URL, tmp_path)
+        urllib.request.urlretrieve(url, tmp_path)
         with tarfile.open(tmp_path, "r:gz") as tf:
             tf.extractall(ollama_dir)  # trusted source; layout is bin/ + lib/
         os.chmod(os.path.join(ollama_dir, "bin", "ollama"), 0o755)
@@ -198,6 +201,7 @@ def _ensure_ollama(args: argparse.Namespace, env: dict) -> int:
     if args.no_ensure_ollama:
         return 0
     ollama_dir = args.ollama_dir or os.path.join(os.path.dirname(str(REPO_ROOT)), ".ollama-dist")
+    ollama_url = args.ollama_url or OLLAMA_URL
     bin_dir = os.path.join(ollama_dir, "bin")
 
     if _ollama_present(ollama_dir):
@@ -220,9 +224,9 @@ def _ensure_ollama(args: argparse.Namespace, env: dict) -> int:
         owns_lock = False
 
     if owns_lock:
-        print(f"[cluster_job] ollama missing; downloading {OLLAMA_URL} -> {ollama_dir}", flush=True)
+        print(f"[cluster_job] ollama missing; downloading {ollama_url} -> {ollama_dir}", flush=True)
         try:
-            rc = _download_and_extract_ollama(ollama_dir)
+            rc = _download_and_extract_ollama(ollama_dir, ollama_url)
         finally:
             try:
                 os.rmdir(lock)
@@ -277,6 +281,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Do NOT auto-create the env if missing (fail fast instead).")
     parser.add_argument("--ollama-dir", default="", dest="ollama_dir",
                         help="Where to cache the ollama binary (default: <repo_parent>/.ollama-dist).")
+    parser.add_argument("--ollama-url", default="", dest="ollama_url",
+                        help="Override the ollama .tgz download URL (default: pinned official build).")
     parser.add_argument("--no-ensure-ollama", action="store_true", dest="no_ensure_ollama",
                         help="Do NOT auto-provision the ollama CLI (assume it is on PATH).")
     parser.add_argument("--num-gpus", type=int, default=8, dest="num_gpus",
