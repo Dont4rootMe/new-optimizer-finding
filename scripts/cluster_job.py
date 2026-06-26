@@ -37,6 +37,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -70,6 +71,88 @@ def _wrapper_argv(args: argparse.Namespace) -> list[str]:
     return argv
 
 
+def _env_present(args: argparse.Namespace) -> bool:
+    """True if the requested env already exists (prefix path or named env)."""
+    if args.env_path:
+        return os.path.exists(os.path.join(args.env_path, "conda-meta")) or os.path.exists(
+            os.path.join(args.env_path, "bin", "python")
+        )
+    if args.env:
+        try:
+            out = subprocess.run([args.manager, "env", "list"], capture_output=True, text=True)
+            return any(
+                line.split() and line.split()[0] == args.env for line in out.stdout.splitlines()
+            )
+        except Exception:  # noqa: BLE001
+            return False
+    return True  # no env requested -> nothing to ensure
+
+
+def _ensure_env(args: argparse.Namespace, env: dict) -> int:
+    """Create the project env if it is missing (idempotent, lock-guarded).
+
+    On a fresh job container the shared-FS prefix env may not exist yet. Build
+    it once with scripts/create_env.sh; concurrent jobs coordinate via an
+    mkdir lock next to the prefix so only one creates it and the rest wait.
+    Returns 0 on success (env present), non-zero to abort the job.
+    """
+    if _env_present(args):
+        return 0
+    create = ["bash", "scripts/create_env.sh", "--manager", args.manager,
+              "--extras", args.env_extras, "-y"]
+    if args.env_path:
+        create += ["--prefix", args.env_path]
+    elif args.env:
+        create += ["--name", args.env]
+    else:
+        return 0
+
+    # Named envs have no shared lock target; just build it.
+    if not args.env_path:
+        print(f"[cluster_job] env missing; creating: {' '.join(create)}", flush=True)
+        return subprocess.run(create, cwd=str(REPO_ROOT), env=env).returncode
+
+    lock = args.env_path + ".creating.lock"
+    try:
+        os.makedirs(args.env_path.rsplit("/", 1)[0], exist_ok=True)
+    except OSError:
+        pass
+    try:
+        os.mkdir(lock)  # atomic: only one creator wins
+        owns_lock = True
+    except FileExistsError:
+        owns_lock = False
+
+    if owns_lock:
+        print(f"[cluster_job] env missing; creating prefix env: {' '.join(create)}", flush=True)
+        try:
+            rc = subprocess.run(create, cwd=str(REPO_ROOT), env=env).returncode
+        finally:
+            try:
+                os.rmdir(lock)
+            except OSError:
+                pass
+        if rc != 0:
+            return rc
+        if not _env_present(args):
+            print("[cluster_job] create_env.sh finished but env still not present.", file=sys.stderr, flush=True)
+            return 1
+        return 0
+
+    # Another job is building it: wait for the env to appear.
+    print(f"[cluster_job] another job is creating {args.env_path}; waiting...", flush=True)
+    deadline = time.time() + 3600
+    while time.time() < deadline:
+        if _env_present(args):
+            print("[cluster_job] env became available; continuing.", flush=True)
+            return 0
+        time.sleep(15)
+    print(f"[cluster_job] timed out waiting for {args.env_path}. If a previous build "
+          f"crashed, remove {lock} and retry, or create the env manually with "
+          "scripts/create_env.sh.", file=sys.stderr, flush=True)
+    return 1
+
+
 def _maybe_env_prefix(args: argparse.Namespace) -> list[str]:
     """`<manager> run -p/-n <env>` prefix so the wrapper uses the project env.
 
@@ -94,6 +177,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--env-path", default="", dest="env_path",
                         help="Prefix env at an absolute path (preferred for cluster jobs); wins over --env.")
     parser.add_argument("--manager", default="conda", choices=["conda", "micromamba", "mamba"])
+    parser.add_argument("--env-extras", default="evolve,shinka_baseline,co_bench", dest="env_extras",
+                        help="pip extras for the env when auto-creating it (superset that serves run + baseline + co_bench).")
+    parser.add_argument("--no-ensure-env", action="store_true", dest="no_ensure_env",
+                        help="Do NOT auto-create the env if missing (fail fast instead).")
     parser.add_argument("--num-gpus", type=int, default=8, dest="num_gpus",
                         help="Make GPUs 0..N-1 visible on rank 0 (0 = leave CUDA_VISIBLE_DEVICES untouched).")
     parser.add_argument("--print-only", action="store_true", help="Print the resolved commands and exit (no execution).")
@@ -125,6 +212,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[cluster_job] step: {' '.join(step)}", flush=True)
     if args.print_only:
         return 0
+
+    # Self-bootstrap the project env if it is missing (unless disabled).
+    if not args.no_ensure_env:
+        rc = _ensure_env(args, env)
+        if rc != 0:
+            return rc
 
     for step in steps:
         result = subprocess.run(step, cwd=str(REPO_ROOT), env=env)
