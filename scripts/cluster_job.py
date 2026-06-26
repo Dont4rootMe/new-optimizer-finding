@@ -45,11 +45,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _RANK_ENV_VARS = ("RANK", "OMPI_COMM_WORLD_RANK", "PMI_RANK", "GROUP_RANK", "LOCAL_RANK")
 
-# Official static linux build (gzip tarball: bin/ollama + bundled GPU libs).
-# Pinned to the last .tgz-packaged release line -- newer releases ship
-# .tar.zst, which Python's tarfile cannot decompress without extra tooling.
-# Override with --ollama-url if you need a specific version.
-OLLAMA_URL = "https://github.com/ollama/ollama/releases/download/v0.11.4/ollama-linux-amd64.tgz"
+# Official static linux build (bin/ollama + bundled GPU libs). Current releases
+# ship .tar.zst (zstd); we decompress it with python `zstandard` (a conda
+# dependency, so importable under the base conda python) with shell fallbacks.
+# `latest` so the models' minimum-Ollama-version requirement is satisfied.
+# Override with --ollama-url (a .tgz URL also works -- extraction auto-detects).
+OLLAMA_URL = "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst"
 
 
 def global_rank() -> int:
@@ -164,19 +165,64 @@ def _ollama_present(ollama_dir: str) -> bool:
     return os.path.exists(os.path.join(ollama_dir, "bin", "ollama"))
 
 
-def _download_and_extract_ollama(ollama_dir: str, url: str) -> int:
+def _extract_archive(archive_path: str, dest_dir: str, url: str) -> int:
+    """Extract a .tar.zst (zstd) or .tgz/.tar.gz (gzip) tarball into dest_dir."""
     import tarfile
+
+    low = url.lower()
+    if low.endswith((".tar.zst", ".tzst", ".zst")):
+        # Prefer python zstandard (a conda dependency -> usually importable).
+        try:
+            import zstandard  # type: ignore
+
+            dctx = zstandard.ZstdDecompressor()
+            with open(archive_path, "rb") as fh, dctx.stream_reader(fh) as reader:
+                with tarfile.open(fileobj=reader, mode="r|") as tf:  # streaming, non-seekable
+                    tf.extractall(dest_dir)
+            return 0
+        except ImportError:
+            pass
+        # Shell fallbacks if zstandard is unavailable.
+        for cmd in (
+            ["tar", "--use-compress-program=unzstd", "-xf", archive_path, "-C", dest_dir],
+            ["tar", "--zstd", "-xf", archive_path, "-C", dest_dir],
+        ):
+            try:
+                if subprocess.run(cmd).returncode == 0:
+                    return 0
+            except FileNotFoundError:
+                continue
+        try:
+            decomp = subprocess.Popen(["zstd", "-dc", archive_path], stdout=subprocess.PIPE)
+            rc = subprocess.run(["tar", "-x", "-C", dest_dir], stdin=decomp.stdout).returncode
+            decomp.wait()
+            if rc == 0:
+                return 0
+        except FileNotFoundError:
+            pass
+        print("[cluster_job] cannot decompress .tar.zst (need python zstandard, or "
+              "zstd / GNU tar --zstd on PATH).", file=sys.stderr, flush=True)
+        return 1
+    # gzip tarball
+    with tarfile.open(archive_path, "r:gz") as tf:
+        tf.extractall(dest_dir)
+    return 0
+
+
+def _download_and_extract_ollama(ollama_dir: str, url: str) -> int:
     import tempfile
     import urllib.request
 
     os.makedirs(ollama_dir, exist_ok=True)
+    suffix = ".tar.zst" if ".zst" in url.lower() else ".tgz"
     tmp_path = ""
     try:
-        with tempfile.NamedTemporaryFile(suffix=".tgz", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp_path = tmp.name
         urllib.request.urlretrieve(url, tmp_path)
-        with tarfile.open(tmp_path, "r:gz") as tf:
-            tf.extractall(ollama_dir)  # trusted source; layout is bin/ + lib/
+        rc = _extract_archive(tmp_path, ollama_dir, url)  # trusted source; layout is bin/ + lib/
+        if rc != 0:
+            return rc
         os.chmod(os.path.join(ollama_dir, "bin", "ollama"), 0o755)
         return 0
     except Exception as exc:  # noqa: BLE001
