@@ -30,6 +30,8 @@ if [[ -x "${DEEPSEEK_ENV_DIR}/bin/python" && -f "$ready_marker" ]]; then
 import importlib.metadata
 import sys
 import torch
+import sgl_kernel  # noqa: F401
+import sglang  # noqa: F401
 
 expected = sys.argv[1]
 variant = sys.argv[2]
@@ -108,6 +110,8 @@ import sys
 from pathlib import Path
 
 import torch
+import sgl_kernel  # noqa: F401
+import sglang  # noqa: F401
 
 expected = sys.argv[1]
 actual = importlib.metadata.version("sglang")
@@ -116,6 +120,7 @@ if actual != expected:
 payload = {
     "python": platform.python_version(),
     "sglang": actual,
+    "sglang_kernel": importlib.metadata.version("sglang-kernel"),
     "torch": torch.__version__,
     "cuda": torch.version.cuda,
     "cuda_available": torch.cuda.is_available(),
