@@ -1092,6 +1092,19 @@ facts, not final fitness measurements. Final acceptance remains generation 300,
 no inflight transaction, parse-clean nonzero token summary and audited survivor
 scores.
 
+Read-only live snapshot at **2026-08-04 11:00 UTC** (no new scheduler job was
+submitted): generation 57 was finalized, generation 58 was inflight, the active
+population remained 10 and the append-only usage-event count was 1,018. The
+retained scheduler-log window exposed 71 generation-mapped finite simple
+evaluations across generations 29–57; the best observed score was
+`2.5724993178889592` at generation 57, `+26.85%` over the rounded `2.028` seed
+anchor. This is a live operational observation, not proof of the final survivor
+or a generation-300 result. Cloud.ru had already evicted exact per-organism
+score lines for generations 0–28, so the report explicitly leaves generations
+1–28 blank rather than interpolating them. Reproducible source points and the
+checked chart are under
+`reports/cluster_progress/circle_packing_progress_g57_20260804T1059Z.{json,png}`.
+
 CUDA heterogeneity probe:
 
 | Job | Outcome / finding |
@@ -1283,6 +1296,11 @@ git diff --stat origin/master...origin/<branch>
 
 ## Change log этой базы
 
+- **2026-08-04, read-only live progress curve:** parsed the existing production
+  scheduler log without submitting a job and captured finalized generation 57,
+  generation 58 inflight, 10 active organisms, 1,018 usage events and best
+  retained-window simple score `2.5724993178889592`. Added a JSON/PNG report
+  with an explicit generations-1–28 retention gap; this remains non-terminal.
 - **2026-08-04, cluster naming protocol:** future submissions now require an
   explicit human-approved `--run-id`; agents may neither invent a label nor use
   a default. Scheduler-visible labels are provider/model/revision-neutral but
