@@ -28,7 +28,9 @@ def test_sglang_command_is_tp8_dspark_and_hopper_safe() -> None:
     assert "--speculative-algorithm DSPARK" in rendered
     assert "--reasoning-parser deepseek-v4" in rendered
     assert "--tool-call-parser deepseekv4" in rendered
-    assert "--moe-runner-backend" not in command
+    assert "--moe-runner-backend marlin" in rendered
+    assert "--cuda-graph-max-bs-decode 8" in rendered
+    assert "--cuda-graph-max-bs" not in command
     assert "flashinfer_mxfp4" not in command
     assert "--speculative-draft-model-path" not in command
 

@@ -162,8 +162,8 @@ def build_sglang_command(
 ) -> list[str]:
     """Return the conservative throughput-oriented 8xH100 launch command.
 
-    DeepSeek's stock FP4 checkpoint is intentionally left to SGLang's Hopper
-    auto-selection (W4A16/Marlin). Blackwell-only MXFP4 flags are forbidden.
+    DeepSeek's stock FP4 checkpoint is pinned to SGLang's Hopper W4A16/Marlin
+    runner. Blackwell-only MXFP4 flags are forbidden.
     DSpark is bundled in the 0731 checkpoint and needs no separate draft model.
     """
 
@@ -182,6 +182,8 @@ def build_sglang_command(
         SERVED_MODEL_NAME,
         "--tp",
         "8",
+        "--moe-runner-backend",
+        "marlin",
         "--speculative-algorithm",
         "DSPARK",
         "--mem-fraction-static",
@@ -192,7 +194,7 @@ def build_sglang_command(
         str(context_length),
         "--max-running-requests",
         str(max_running_requests),
-        "--cuda-graph-max-bs",
+        "--cuda-graph-max-bs-decode",
         str(max_running_requests),
         "--swa-full-tokens-ratio",
         "0.1",

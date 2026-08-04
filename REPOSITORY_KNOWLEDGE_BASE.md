@@ -681,8 +681,8 @@ fallback. Exact concrete override по-прежнему имеет приори�
   the incompatible legacy `sglang-0.5.16` environment. Primary references:
   [SGLang v0.5.16 Dockerfile](https://github.com/sgl-project/sglang/blob/v0.5.16/docker/Dockerfile),
   [NVIDIA CUDA compatibility guide](https://docs.nvidia.com/deploy/cuda-compatibility/).
-- H100 constraint: use stock official FP4 checkpoint and SGLang's automatic
-  Hopper W4A16/Marlin path. Do not force `flashinfer_mxfp4` or other
+- H100 constraint: use stock official FP4 checkpoint and explicitly pin
+  SGLang's Hopper W4A16/Marlin runner. Do not force `flashinfer_mxfp4` or other
   Blackwell-only FP4 kernels. BF16 compressed state reduces KV-state memory;
   serving starts conservatively at `mem-fraction-static=0.88`, chunked prefill
   8192, context 65536, max running requests/cuda graph batch 8, SWA full-token
