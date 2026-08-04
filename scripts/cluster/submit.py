@@ -10,6 +10,8 @@ from typing import Any
 
 from scripts.cluster.common import (
     BASE_IMAGE,
+    CUDA_CURAND_VERSION,
+    DEEPGEMM_KERNEL_CACHE_ID,
     DEEPGEMM_NVCC_VERSION,
     DEEPGEMM_TOOLCHAIN_ID,
     INSTANCE_TYPE,
@@ -70,9 +72,11 @@ def build_job_kwargs(
             runtime_shared_root / "toolchains" / DEEPGEMM_TOOLCHAIN_ID
         ),
         "DEEPGEMM_NVCC_VERSION": DEEPGEMM_NVCC_VERSION,
-        "SGLANG_DG_CACHE_DIR": str(
-            runtime_shared_root / "kernel_cache" / f"deep_gemm-sm90-{DEEPGEMM_TOOLCHAIN_ID}"
-        ),
+        "CUDA_CURAND_VERSION": CUDA_CURAND_VERSION,
+        # DeepGEMM cubins depend on NVCC/SM architecture, not on the additive
+        # cuRAND development headers in the compiler prefix. Keep the cache
+        # namespace stable when the immutable toolchain contract grows.
+        "SGLANG_DG_CACHE_DIR": str(runtime_shared_root / "kernel_cache" / DEEPGEMM_KERNEL_CACHE_ID),
         "TVM_FFI_CACHE_DIR": str(runtime_shared_root / "kernel_cache" / TVM_FFI_CACHE_ID),
         "HF_HOME": str(runtime_shared_root / "model_cache" / "huggingface"),
         "SGLANG_VERSION": SGLANG_VERSION,

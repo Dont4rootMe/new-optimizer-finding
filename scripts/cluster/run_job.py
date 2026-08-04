@@ -21,6 +21,7 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 from scripts.cluster.common import (
+    CUDA_CURAND_VERSION,
     DEEPGEMM_NVCC_VERSION,
     DEEPGEMM_TOOLCHAIN_ID,
     MODEL_ID,
@@ -268,6 +269,7 @@ def main() -> int:
         "deep_gemm_toolchain": {
             "id": DEEPGEMM_TOOLCHAIN_ID,
             "nvcc_version": DEEPGEMM_NVCC_VERSION,
+            "curand_version": CUDA_CURAND_VERSION,
             "path": str(toolchain_dir),
             "kernel_cache": str(deep_gemm_cache_dir),
             "tvm_ffi_version": TVM_FFI_VERSION,
@@ -302,6 +304,7 @@ def main() -> int:
             "SGLANG_DSV4_COMPRESS_STATE_DTYPE": "bf16",
             "DEEPGEMM_CUDA_TOOLCHAIN_DIR": str(toolchain_dir),
             "DEEPGEMM_NVCC_VERSION": DEEPGEMM_NVCC_VERSION,
+            "CUDA_CURAND_VERSION": CUDA_CURAND_VERSION,
             "DG_JIT_NVCC_COMPILER": str(toolchain_dir / "bin" / "nvcc"),
             "DG_JIT_PRINT_COMPILER_COMMAND": "1",
             "SGLANG_DG_CACHE_DIR": str(deep_gemm_cache_dir),

@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 
 from scripts.cluster.common import (
+    CUDA_CURAND_VERSION,
+    DEEPGEMM_KERNEL_CACHE_ID,
     DEEPGEMM_NVCC_VERSION,
     DEEPGEMM_TOOLCHAIN_ID,
     SGLANG_RUNTIME_ID,
@@ -83,16 +85,20 @@ def test_submit_contract_uses_one_binary_worker(tmp_path: Path) -> None:
     assert kwargs["env_variables"]["SGLANG_CUDA_VARIANT"] == "cu126"
     assert kwargs["env_variables"]["DEEPSEEK_ENV_DIR"].endswith(SGLANG_RUNTIME_ID)
     assert kwargs["env_variables"]["DEEPGEMM_NVCC_VERSION"] == "12.9.86"
+    assert kwargs["env_variables"]["CUDA_CURAND_VERSION"] == "10.3.10.19"
     assert kwargs["env_variables"]["DEEPGEMM_CUDA_TOOLCHAIN_DIR"].endswith(
         DEEPGEMM_TOOLCHAIN_ID
     )
-    assert DEEPGEMM_TOOLCHAIN_ID in kwargs["env_variables"]["SGLANG_DG_CACHE_DIR"]
+    assert kwargs["env_variables"]["SGLANG_DG_CACHE_DIR"].endswith(
+        DEEPGEMM_KERNEL_CACHE_ID
+    )
     assert kwargs["env_variables"]["TVM_FFI_CACHE_DIR"].endswith(TVM_FFI_CACHE_ID)
     assert "queue_name" not in kwargs
 
 
 def test_deepgemm_compiler_contract_is_exact_and_parseable() -> None:
     assert DEEPGEMM_NVCC_VERSION == "12.9.86"
+    assert CUDA_CURAND_VERSION == "10.3.10.19"
     assert MHC_DIFFERENCE_TOLERANCE == 1e-6
     assert TVM_FFI_VERSION == "0.1.11"
     output = "Cuda compilation tools, release 12.9, V12.9.86\n"
@@ -100,6 +106,10 @@ def test_deepgemm_compiler_contract_is_exact_and_parseable() -> None:
     helper = ROOT / "scripts" / "cluster" / "bootstrap_cuda_toolchain.sh"
     assert helper.is_file()
     assert 'DEEPGEMM_NVCC_VERSION:-12.9.86' in helper.read_text(encoding="utf-8")
+    helper_text = helper.read_text(encoding="utf-8")
+    assert 'CUDA_CURAND_VERSION:-10.3.10.19' in helper_text
+    assert 'libcurand-dev=${CUDA_CURAND_VERSION}' in helper_text
+    assert "#include <curand_kernel.h>" in helper_text
 
 
 def test_sglang_runtime_rewrites_cuda13_metadata_to_audited_cuda126_wheels() -> None:

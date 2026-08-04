@@ -7,10 +7,15 @@ set -euo pipefail
 # selected only for cubin generation through DG_JIT_NVCC_COMPILER.
 
 DEEPGEMM_NVCC_VERSION="${DEEPGEMM_NVCC_VERSION:-12.9.86}"
+CUDA_CURAND_VERSION="${CUDA_CURAND_VERSION:-10.3.10.19}"
 DEEPGEMM_CUDA_TOOLCHAIN_DIR="${DEEPGEMM_CUDA_TOOLCHAIN_DIR:?DEEPGEMM_CUDA_TOOLCHAIN_DIR must be an explicit absolute path}"
 
 if [[ "$DEEPGEMM_NVCC_VERSION" != "12.9.86" ]]; then
   echo "Unaudited DeepGEMM compiler version: ${DEEPGEMM_NVCC_VERSION}" >&2
+  exit 2
+fi
+if [[ "$CUDA_CURAND_VERSION" != "10.3.10.19" ]]; then
+  echo "Unaudited cuRAND development version: ${CUDA_CURAND_VERSION}" >&2
   exit 2
 fi
 if [[ "$(uname -m)" != "x86_64" ]]; then
@@ -28,9 +33,13 @@ fi
 
 nvcc_path="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/bin/nvcc"
 ready_marker="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/.toolchain-ready.json"
+curand_header="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/include/curand.h"
+curand_kernel_header="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/include/curand_kernel.h"
 validate_toolchain() {
   [[ -x "$nvcc_path" && -f "$ready_marker" ]] || return 1
   [[ -f "${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/targets/x86_64-linux/lib/libcudart.so" ]] || return 1
+  [[ -f "$curand_header" && -f "$curand_kernel_header" ]] || return 1
+  grep -F '"sm90a_curand_cubin_smoke": "passed"' "$ready_marker" >/dev/null || return 1
   "$nvcc_path" --version | grep -F "V${DEEPGEMM_NVCC_VERSION}" >/dev/null
 }
 
@@ -85,10 +94,13 @@ export CONDA_PKGS_DIRS="$package_cache"
   --override-channels \
   --channel nvidia \
   --channel conda-forge \
-  "cuda-nvcc=${DEEPGEMM_NVCC_VERSION}"
+  "cuda-nvcc=${DEEPGEMM_NVCC_VERSION}" \
+  "libcurand-dev=${CUDA_CURAND_VERSION}"
 
 "$nvcc_path" --version | grep -F "V${DEEPGEMM_NVCC_VERSION}" >/dev/null
 test -f "${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/targets/x86_64-linux/lib/libcudart.so"
+test -f "$curand_header"
+test -f "$curand_kernel_header"
 smoke_dir="$(mktemp -d /tmp/evolutionloop-nvcc-smoke.XXXXXX)"
 cleanup_smoke() {
   rm -rf -- "$smoke_dir"
@@ -100,14 +112,17 @@ from pathlib import Path
 
 Path(sys.argv[1]).write_text(
     r'''#include <stdint.h>
+#include <curand_kernel.h>
 __device__ __forceinline__ void st128(const __int128_t* ptr, __int128_t val) {
   asm volatile("st.shared.b128 [%0], %1;" :: "l"(__cvta_generic_to_shared(ptr)), "q"(val));
 }
 extern "C" __global__ void smoke(const __int128_t* input, __int128_t* output) {
+  curandStatePhilox4_32_10_t random_state;
+  curand_init(7, threadIdx.x, 0, &random_state);
   __shared__ __int128_t value;
   st128(&value, input[0]);
   __syncthreads();
-  if (threadIdx.x == 0) output[0] = value;
+  if (threadIdx.x == 0 && curand_uniform(&random_state) > 0.0f) output[0] = value;
 }
 ''',
     encoding="utf-8",
@@ -120,7 +135,7 @@ test -s "$smoke_dir/kernel.cubin"
 
 "$conda_executable" list --prefix "$DEEPGEMM_CUDA_TOOLCHAIN_DIR" --explicit \
   > "${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/.conda-explicit.txt"
-python3 - "$ready_marker" "$DEEPGEMM_NVCC_VERSION" "$nvcc_path" <<'PY'
+python3 - "$ready_marker" "$DEEPGEMM_NVCC_VERSION" "$CUDA_CURAND_VERSION" "$nvcc_path" <<'PY'
 import json
 import platform
 import sys
@@ -131,10 +146,12 @@ Path(sys.argv[1]).write_text(
     json.dumps(
         {
             "architecture": platform.machine(),
-            "compiler": sys.argv[3],
+            "compiler": sys.argv[4],
+            "curand_version": sys.argv[3],
             "nvcc_version": sys.argv[2],
             "published_at": datetime.now(timezone.utc).isoformat(),
             "sm90a_int128_cubin_smoke": "passed",
+            "sm90a_curand_cubin_smoke": "passed",
         },
         indent=2,
         sort_keys=True,

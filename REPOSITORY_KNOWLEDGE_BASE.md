@@ -1073,6 +1073,7 @@ CUDA heterogeneity probe:
 | `lm-mpi-job-43117c55-06be-486d-a398-54674f86fe57` | Integrated exact `114b3110f8c7fb73efec11fbb1f5f2a0ec1103fc` 1×H100 acceptance scheduler-completed. It sanitized the driver path, reused the published cu126 runtime and `nvcc 12.9.86`, passed the numerical DeepGEMM MHC smoke, precompiled/validated all three production TVM-FFI modules, and persisted both smoke JSON artifacts under the dedicated regional run. |
 | `lm-mpi-job-cb856e1b-481b-48ae-bc9b-cfd553b7c79f` | Independent regional-NFS readback scheduler-completed and parsed both `114b311` smoke artifacts: NVIDIA H100 80GB HBM3 (CC 9.0), Torch `2.11.0+cu126`, runtime CUDA 12.6, NVCC `12.9.86`, TVM-FFI `0.1.11`, BF16 world size 8, and cached `cuda_ipc`, `communicator`, `custom_all_reduce_bf16_t_8` shared objects. It also proved compute jobs have neither an AWS credentials file nor AWS credential environment, so secret-free S3 relay is unavailable. |
 | `lm-mpi-job-9025f0bf-80f1-4cb6-a32d-2b2fbbeecd1c` | Exact `2456f094ec57bc33845d04f87ebdb83ef30964d5` production retry sanitized the driver path, reused the validated cu126 runtime/model cache, initialized NCCL ranks 0–7, and loaded all 48 DeepSeek shards. It then failed before server readiness when `nvcc 12.6.85` rejected DeepGEMM's 128-bit PTX constraint during the 21-bucket MHC prenorm prewarm on every TP rank. No EvolutionLoop state or LLM usage exists. |
+| `lm-mpi-job-e28269e2-eaf1-4d42-8c67-cac66c0cedb3` | Exact `8f804a1e169b1be93a09493ef21225f167cc8f34` TP=8 production attempt used the isolated `nvcc 12.9.86`, activated NVLink custom all-reduce, loaded all 48 shards, and successfully advanced through DeepSeek-V4's DeepGEMM/MHC prewarm. CUDA-graph capture then exposed the next missing compiler-prefix dependency: FlashInfer sampling and renormalization JIT both stopped on `fatal error: curand.h: No such file or directory`. Scheduler `Failed`; endpoint/EvolutionLoop never started and usage remained zero. The fix pins NVIDIA `libcurand-dev 10.3.10.19`, gives the additive compiler contract a new immutable prefix, preserves the compatible DeepGEMM/TVM caches, and compiles an actual SM90a `curand_kernel.h` cubin before publishing readiness. This is a startup diagnostic, not a fitness result. |
 
 Bootstrap smoke `lm-mpi-job-3c02e882-bc28-434f-9ed2-1a3841b66c2a` failed
 before workers became READY and emitted no user-code output. Its only new
@@ -1200,7 +1201,7 @@ Finalization live использует изолированный `.venv`. По�
 
 ```bash
 .venv/bin/pytest -q
-# 475 passed, 8 skipped in 162.46s
+# 485 passed, 8 skipped in 162.70s
 
 python -m compileall -q src experiments api_platforms scripts/cluster
 git diff --check
@@ -1240,6 +1241,12 @@ git diff --stat origin/master...origin/<branch>
 
 ## Change log этой базы
 
+- **2026-08-04, TP=8 cold-start post-mortem:** production job
+  `lm-mpi-job-e28269e2-eaf1-4d42-8c67-cac66c0cedb3` proved the optimized
+  DeepGEMM/MHC and custom-all-reduce paths, then found missing `curand.h` in the
+  compiler-only prefix during FlashInfer sampling JIT. Cluster bootstrap now
+  pins `libcurand-dev 10.3.10.19`, validates a real cuRAND SM90a cubin and keeps
+  already valid JIT caches. Full regression suite: 485 passed, 8 skipped.
 - **2026-08-04, `finalize/evolutionloop-deepseek-v4` (base `641777d`):**
   зафиксирован canonical EvolutionLoop protocol; добавлены backbone composition,
   generic OpenAI-compatible inference, exact DeepSeek/SGLang 8×H100 job,

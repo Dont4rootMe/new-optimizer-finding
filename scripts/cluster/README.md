@@ -34,6 +34,16 @@ path is exported through `DG_JIT_NVCC_COMPILER`; its libraries are never added
 to `LD_LIBRARY_PATH`, so PyTorch remains on the portable cu126 runtime. The
 persistent `SGLANG_DG_CACHE_DIR` reuses compiled kernels across job retries.
 
+The immutable compiler prefix also pins NVIDIA `libcurand-dev 10.3.10.19`.
+FlashInfer compiles its sampling/renormalization kernels during CUDA-graph
+capture and requires `curand.h`; a compiler-only `cuda-nvcc` prefix reaches
+model load but fails before the HTTP endpoint becomes ready. The bootstrap now
+compiles a real SM90a `curand_kernel.h` cubin before publishing its ready
+marker. cuRAND is compile-time-only here and the prefix still never enters
+runtime `LD_LIBRARY_PATH`. DeepGEMM's persistent cubin cache remains keyed only
+by NVCC version and SM architecture, so adding the headers does not invalidate
+already compiled kernels.
+
 SGLang's TP=8 NVLink custom-all-reduce path also JIT-compiles three TVM-FFI
 modules (`cuda_ipc`, `communicator`, and BF16 world-size-8 custom all-reduce).
 The same isolated 12.9 prefix is exposed as `CUDA_HOME`; its
