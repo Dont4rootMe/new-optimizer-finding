@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Dump all LLM requests/responses/errors for organisms in a generation folder.
 
-Usage: python dump_llm.py <gen_dir> <out_dir>
+Usage: python -m scripts.analysis.dump_llm <gen_dir> <out_dir>
 """
 from __future__ import annotations
 
+import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -209,8 +209,12 @@ def dump_organism(org_dir: Path, out_dir: Path) -> dict[str, Any]:
 
 
 def main() -> None:
-    gen_dir = Path(sys.argv[1])
-    out_dir = Path(sys.argv[2])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("generation_dir")
+    parser.add_argument("output_dir")
+    args = parser.parse_args()
+    gen_dir = Path(args.generation_dir).expanduser().resolve()
+    out_dir = Path(args.output_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summaries: list[dict[str, Any]] = []

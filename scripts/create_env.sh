@@ -266,7 +266,7 @@ echo
 echo "Activate it with:"
 echo "  $MANAGER activate $ENV_REF"
 if [[ -n "$PREFIX" ]]; then
-  echo "Reference it in cluster_job.py with:  --env-path $PREFIX"
+  echo "Legacy Ollama launcher: scripts/legacy/ollama_torchrun_job.py --env-path $PREFIX"
 fi
 if [[ ",$extras_norm," == *",co_bench,"* ]]; then
   echo

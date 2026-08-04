@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Rank-0 launcher for cloud (pytorch2 / torchrun) jobs.
+"""Legacy rank-0 launcher for Ollama cloud (pytorch2 / torchrun) jobs.
 
 The cluster's ``pytorch2`` job type runs a job's ``script`` through
 ``torch.distributed.launch`` / ``torchrun`` as ``python <script>`` with one
@@ -21,10 +21,12 @@ So jobs point ``script`` at this file instead. It:
   * makes all node GPUs visible on rank 0 (``--num-gpus``) so Ollama can place
     its instances across them.
 
-Usage (built by notebooks/job_runs/*.ipynb):
-  cluster_job.py --kind evolve   --config-name config_co-bench --task TSP \
+New jobs should use ``scripts/cluster/`` and ``type=binary``. This entrypoint
+remains available only to reproduce the historical multi-rank Ollama path:
+
+  ollama_torchrun_job.py --kind evolve --config-name config_co-bench --task TSP \
       --bootstrap --env optfind --manager conda --num-gpus 8
-  cluster_job.py --kind baseline --config-name baselines/circle_packing_shinka \
+  ollama_torchrun_job.py --kind baseline --config-name baselines/circle_packing_shinka \
       --env optfind --manager conda --num-gpus 8
 
 Only stdlib is used, so it runs under the cluster's base Python; the heavy deps
@@ -41,7 +43,7 @@ import sys
 import time
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _RANK_ENV_VARS = ("RANK", "OMPI_COMM_WORLD_RANK", "PMI_RANK", "GROUP_RANK", "LOCAL_RANK")
 
@@ -328,7 +330,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ollama-dir", default="", dest="ollama_dir",
                         help="Where to cache the ollama binary (default: <repo_parent>/.ollama-dist).")
     parser.add_argument("--ollama-url", default="", dest="ollama_url",
-                        help="Override the ollama .tgz download URL (default: pinned official build).")
+                        help="Override the ollama archive URL (default: official latest; legacy/non-reproducible).")
     parser.add_argument("--no-ensure-ollama", action="store_true", dest="no_ensure_ollama",
                         help="Do NOT auto-provision the ollama CLI (assume it is on PATH).")
     parser.add_argument("--num-gpus", type=int, default=8, dest="num_gpus",

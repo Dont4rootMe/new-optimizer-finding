@@ -186,7 +186,9 @@ population_root/
 
 Resume reads `population_state.json` and rehydrates `OrganismMeta` for each active organism. Missing canonical files are real errors during resume.
 
-The `dump_llm.py` script collapses one generation directory into per-organism markdown excerpts plus an `INDEX.md`. That tool is what produced the `~/Downloads/llm_excerpt_all/` post-mortem corpus.
+`python -m scripts.analysis.dump_llm` collapses one generation directory into
+per-organism markdown excerpts plus an `INDEX.md`. That tool produced the
+historical `~/Downloads/llm_excerpt_all/` post-mortem corpus.
 
 ## LLM routing
 
@@ -237,7 +239,7 @@ Step 1 is **cached across validator retries**: novelty/compatibility rejections 
 
 Step 1 also receives a **lineage regime hint** (Tier 2 C). `src/organisms/lineage_regime.py::summarize_recent_regime` scans the parent's recent ancestors (last 8 by default), matches their `change_description` against family-specific keyword categories (`wall_family`, `grouping_family`, `routing_family`, `repair_regime` for awtf2025; `packing_family`, `radius_regime`, `symmetry_family`, `repair_family` for circle_packing), and emits a short prose hint marking axes that have converged on a single family vs axes that no recent ancestor has used. The hint is injected **only** into Step 1's user prompt — Step 2 doesn't need it, the rationale already encodes the regime-break decision.
 
-**Persistence**: Step 1's output lives in `org_dir/llm_rationalization.json` (separate from `llm_request.json`/`llm_response.json` so the design stage's overwrite doesn't lose it). Both `dump_llm.py` and `dump_llm_excerpt.py` surface it.
+**Persistence**: Step 1's output lives in `org_dir/llm_rationalization.json` (separate from `llm_request.json`/`llm_response.json` so the design stage's overwrite doesn't lose it). Both `scripts.analysis.dump_llm` and `scripts.analysis.dump_llm_excerpt` surface it.
 
 **Soft-fail by design**: if Step 1 LLM call fails, returns malformed output, or the generator lacks `run_rationalization_stage` (test fakes), the operator silently falls back to single-call mode and Step 2 sees the stub. No exceptions reach the loop.
 
@@ -379,4 +381,4 @@ P1–P6 came out of the 426-organism atcoder post-mortem; P7–P10 came out of t
 - `src/organisms/compatibility.py`, `novelty.py`, `mutation.py`, `crossbreeding.py`, `operators.py` — operator and validator contracts
 - `conf/evolver/<family>.yaml` — per-family budgets, weights, prompts, llm
 - `conf/experiments/<family>/prompts/` — every LLM-facing prompt for that family
-- `dump_llm.py` — post-mortem dump of one generation directory
+- `scripts/analysis/dump_llm.py` — post-mortem dump of one generation directory

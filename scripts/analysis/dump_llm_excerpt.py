@@ -6,15 +6,15 @@ This is a condensed companion to dump_llm.py:
 - can scan an entire population folder (gen_*/island_*/org_*)
 
 Usage:
-  python dump_llm_excerpt.py <population_dir> <out_dir>
+  python -m scripts.analysis.dump_llm_excerpt <population_dir> <out_dir>
 """
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -271,8 +271,12 @@ def dump_excerpt(org_dir: Path, out_dir: Path, gen_name: str) -> dict[str, Any]:
 
 
 def main() -> None:
-    population_dir = Path(sys.argv[1])
-    out_dir = Path(sys.argv[2])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("population_dir")
+    parser.add_argument("output_dir")
+    args = parser.parse_args()
+    population_dir = Path(args.population_dir).expanduser().resolve()
+    out_dir = Path(args.output_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summaries: list[dict[str, Any]] = []
@@ -318,4 +322,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

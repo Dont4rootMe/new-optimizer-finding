@@ -21,6 +21,8 @@ conf/backbone/        interchangeable LLM routes and stage pipelines
 conf/experiments/     task runtime configuration and prompt assets
 api_platforms/        provider-neutral LLM registry and backends
 scripts/cluster/      reproducible single-job 8xH100 serving + monitoring
+scripts/analysis/     post-mortem renderers for persisted LLM traces
+scripts/legacy/       compatibility-only historical launchers
 tests/                contracts, regressions, and integrations
 ```
 
@@ -111,6 +113,10 @@ python -m src.evolve.token_usage_report \
   /absolute/path/to/population/llm_usage.jsonl \
   --output /absolute/path/to/token_usage_summary.json
 ```
+
+For human-readable trace dumps use `python -m scripts.analysis.dump_llm` for
+one generation or `python -m scripts.analysis.dump_llm_excerpt` for a complete
+population.
 
 ## Add a task
 

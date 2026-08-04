@@ -61,6 +61,10 @@
   launcher, использовали ошибочный для single coordinator `pytorch2`, были
   привязаны к Ollama и содержали plaintext credential. Credential не переносился;
   Comet теперь opt-in только через environment.
+- Удалены ошибочно tracked `.tmp_manual_pipeline` outputs; runtime path теперь
+  ignored. Root dump utilities перенесены в `scripts/analysis/`, а старый
+  Ollama/torchrun launcher явно изолирован в `scripts/legacy/` вместо смешения
+  с canonical binary-job path.
 - `scripts/cluster/` — единый binary-job контур: pinned model revision, pinned
   SGLang, проверка ровно 8 H100, TP=8 server, smoke probe, EvolutionLoop,
   durable manifests и terminal monitor. Авторский server clone не используется.
@@ -777,7 +781,8 @@ score-vs-evaluations, token usage, survival rate и wall time. В Git таког
 ### Cloud/cluster tooling
 
 - Генератор и восемь job notebooks: AWTF, circle и шесть CO-Bench tasks.
-- `scripts/cluster_job.py`: rank-0-only launcher для environments, где
+- `scripts/legacy/ollama_torchrun_job.py`: сохранённый rank-0-only launcher
+  для historical environments, где
   `torchrun` стартует процесс на каждый GPU. Все nonzero ranks завершаются, а
   один orchestrator получает видимость всех GPU. Это предотвращает N
   конкурирующих evolution loops и не вводит DDP.
