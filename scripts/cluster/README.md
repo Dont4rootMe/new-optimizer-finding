@@ -30,6 +30,13 @@ node's real driver under its native paths; preferring an older image-bundled
 `compat/libcuda.so` causes CUDA error 803 on newer-driver allocations. Other
 CUDA, NCCL, HPC-X, and scheduler-mounted NVIDIA paths are preserved.
 
+Because the SGLang wheel itself retains its PyPI-default
+`Requires-Dist: cuda-python>=13`, a plain `pip check` reports exactly that one
+metadata mismatch against the intentionally installed `cuda-python 12.x`.
+This is expected for the audited CUDA-12 dependency view; installing CUDA 13
+to silence it breaks portability to R560 nodes. Runtime acceptance is the
+version/native-import/live-CUDA gate plus the persisted package freeze.
+
 ## Submit
 
 Run through the environment bridge documented in

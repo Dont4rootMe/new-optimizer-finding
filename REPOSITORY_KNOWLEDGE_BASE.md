@@ -688,6 +688,17 @@ fallback. Exact concrete override по-прежнему имеет приори�
   mismatch causes CUDA Error 803. Native CUDA/NCCL/HPC-X/NVIDIA paths remain
   intact, and the sanitized environment is recorded in both run and SGLang
   launch manifests.
+- The canonical regional runtime is now published at
+  `/home/jovyan/evolutionloop-deepseek-v4/runtime/sglang-0.5.16-cu126`.
+  Its live H100 gate records Python `3.11.14`, Torch `2.11.0+cu126`, CUDA
+  `12.6`, `cuda-python 12.9.7`, SGLang `0.5.16`, SGLang kernel
+  `0.4.5+cu129`, DeepGEMM `0.1.4.post1+cu129`, and FlashInfer `0.6.14`;
+  `.runtime-freeze.txt` contains 206 distributions. The canonical bootstrap
+  reuse gate passed after the atomic promotion. SGLang's installed wheel
+  metadata still declares its PyPI default `cuda-python>=13`; `pip check`
+  therefore reports that one expected mismatch even though the audited
+  CUDA-12 dependency view is intentional. Do not "fix" it by installing
+  CUDA 13 on the heterogeneous SR008 pool.
 - H100 constraint: use stock official FP4 checkpoint and explicitly pin
   SGLang's Hopper W4A16/Marlin runner. Do not force `flashinfer_mxfp4` or other
   Blackwell-only FP4 kernels. BF16 compressed state reduces KV-state memory;
@@ -991,6 +1002,10 @@ CUDA heterogeneity probe:
 | `lm-mpi-job-227b2d27-71af-4892-bed5-b794bfaa2559` | First cu126 bootstrap reached Python packaging, then failed because the CUDA-12 SGLang Dockerfile's historical `sglang-kernel` cu124 URL is no longer a published GitHub asset. No runtime was promoted. The audited resolver now uses the release's published cu129 SM90 wheel. |
 | `lm-mpi-job-cf2b9e16-dd7f-4e70-93b7-884c9f6cefff` | Built the complete SGLang 0.5.16 stack (`torch 2.11.0+cu126`, CUDA-12 FlashInfer, cu129 Hopper kernels), but the final live-CUDA gate failed with Error 803. The incomplete environment was intentionally preserved at `/home/jovyan/evolutionloop-deepseek-v4/runtime/sglang-0.5.16-cu126.building.20260804T031427Z.120`. |
 | `lm-mpi-job-b280fbee-e4fa-4f94-9607-7edc10bae6b9` | Controlled libcuda experiment on driver `580.105.08`: original path selected `/usr/local/cuda-12.6/compat/libcuda.so.560.35.05` and `torch.cuda.is_available()` was false with Error 803; removing only the `compat` path made the same cu126 runtime immediately detect one H100. Prepending `/usr/lib/x86_64-linux-gnu` also worked but is unnecessarily cluster-specific, so canonical code uses the minimal removal. |
+| `lm-mpi-job-92775f0b-26a4-462a-b7c2-c634f8306b19` | Clean post-fix rebuild sanitized `LD_LIBRARY_PATH` correctly but its second `uv` transaction made no filesystem progress and was explicitly stopped after read-only proof; it never published a runtime. |
+| `lm-mpi-job-6d3a60e0-657f-481f-8ca1-b0a7a740e914` | Three read-only NFS snapshots over 90 seconds showed the new build fixed at 6,574,684,777 bytes / 21,907 files, while the preserved complete environment was 10,224,077,977 bytes / 65,686 files; about 54 GB remained free. This distinguished an `uv` hang from slow copying or ENOSPC. |
+| `lm-mpi-job-04c1ec31-22e7-471e-9bb0-ca92b01846f1` | First promotion gate stopped before mutation because plain `pip check` sees SGLang's deliberate CUDA-13 metadata edge versus the installed audited CUDA-12 dependency. No other inconsistency was reported. |
+| `lm-mpi-job-23c7357b-f551-4d32-bdda-271b42e85593` | Strict promotion accepted only that one known metadata override, checked exact CUDA-12/Hopper package versions and native imports, initialized one H100, wrote ready/freeze artifacts, atomically promoted the preserved complete environment, then passed the canonical bootstrap reuse gate. Scheduler `Completed`. |
 
 Bootstrap smoke `lm-mpi-job-3c02e882-bc28-434f-9ed2-1a3841b66c2a` failed
 before workers became READY and emitted no user-code output. Its only new
