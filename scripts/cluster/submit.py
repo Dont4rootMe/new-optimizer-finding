@@ -20,6 +20,7 @@ from scripts.cluster.common import (
     SGLANG_CUDA_VARIANT,
     SGLANG_RUNTIME_ID,
     SGLANG_VERSION,
+    TVM_FFI_CACHE_ID,
     atomic_write_json,
     build_git_bootstrap_command,
     require_absolute_safe_path,
@@ -72,6 +73,7 @@ def build_job_kwargs(
         "SGLANG_DG_CACHE_DIR": str(
             runtime_shared_root / "kernel_cache" / f"deep_gemm-sm90-{DEEPGEMM_TOOLCHAIN_ID}"
         ),
+        "TVM_FFI_CACHE_DIR": str(runtime_shared_root / "kernel_cache" / TVM_FFI_CACHE_ID),
         "HF_HOME": str(runtime_shared_root / "model_cache" / "huggingface"),
         "SGLANG_VERSION": SGLANG_VERSION,
         "SGLANG_CUDA_VARIANT": SGLANG_CUDA_VARIANT,

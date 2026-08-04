@@ -29,6 +29,8 @@ from scripts.cluster.common import (
     SGLANG_RUNTIME_ID,
     SGLANG_VERSION,
     SERVED_MODEL_NAME,
+    TVM_FFI_CACHE_ID,
+    TVM_FFI_VERSION,
     atomic_write_json,
     build_evolution_command,
     build_sglang_command,
@@ -227,6 +229,13 @@ def main() -> int:
         ),
         label="SGLANG_DG_CACHE_DIR",
     )
+    tvm_ffi_cache_dir = require_absolute_safe_path(
+        os.environ.get(
+            "TVM_FFI_CACHE_DIR",
+            str(project_root.parent / ".inference_kernel_cache" / TVM_FFI_CACHE_ID),
+        ),
+        label="TVM_FFI_CACHE_DIR",
+    )
     hf_home = require_absolute_safe_path(
         os.environ.get("HF_HOME", str(project_root.parent / ".model_cache" / "huggingface")),
         label="HF_HOME",
@@ -261,6 +270,8 @@ def main() -> int:
             "nvcc_version": DEEPGEMM_NVCC_VERSION,
             "path": str(toolchain_dir),
             "kernel_cache": str(deep_gemm_cache_dir),
+            "tvm_ffi_version": TVM_FFI_VERSION,
+            "tvm_ffi_cache": str(tvm_ffi_cache_dir),
         },
         "cuda_driver_environment": {
             "ld_library_path": os.environ.get("LD_LIBRARY_PATH", ""),
@@ -280,6 +291,7 @@ def main() -> int:
     atomic_write_json(manifest_path, manifest)
 
     environment = os.environ.copy()
+    toolchain_cuda_library_dir = toolchain_dir / "targets" / "x86_64-linux" / "lib"
     environment.update(
         {
             "DEEPSEEK_ENV_DIR": str(env_dir),
@@ -293,6 +305,15 @@ def main() -> int:
             "DG_JIT_NVCC_COMPILER": str(toolchain_dir / "bin" / "nvcc"),
             "DG_JIT_PRINT_COMPILER_COMMAND": "1",
             "SGLANG_DG_CACHE_DIR": str(deep_gemm_cache_dir),
+            "CUDA_HOME": str(toolchain_dir),
+            "LIBRARY_PATH": str(toolchain_cuda_library_dir)
+            + (
+                os.pathsep + environment["LIBRARY_PATH"]
+                if environment.get("LIBRARY_PATH")
+                else ""
+            ),
+            "TVM_FFI_CACHE_DIR": str(tvm_ffi_cache_dir),
+            "TVM_FFI_CUDA_ARCH_LIST": "9.0a",
             "PYTHONUNBUFFERED": "1",
             "PYTHONPATH": str(project_root)
             + (os.pathsep + environment["PYTHONPATH"] if environment.get("PYTHONPATH") else ""),
@@ -336,6 +357,7 @@ def main() -> int:
         env_python = str(env_dir / "bin" / "python")
         environment["PATH"] = str(env_dir / "bin") + os.pathsep + environment.get("PATH", "")
         deep_gemm_cache_dir.mkdir(parents=True, exist_ok=True)
+        tvm_ffi_cache_dir.mkdir(parents=True, exist_ok=True)
         _run_checked(
             [
                 env_python,
@@ -349,6 +371,27 @@ def main() -> int:
                 DEEPGEMM_NVCC_VERSION,
                 "--output",
                 str(run_dir / "deepgemm_toolchain_smoke.json"),
+            ],
+            cwd=project_root,
+            env=environment,
+        )
+        _run_checked(
+            [
+                env_python,
+                "-m",
+                "scripts.cluster.smoke_sglang_jit_toolchain",
+                "--cuda-home",
+                str(toolchain_dir),
+                "--cache-dir",
+                str(tvm_ffi_cache_dir),
+                "--expected-nvcc-version",
+                DEEPGEMM_NVCC_VERSION,
+                "--expected-tvm-ffi-version",
+                TVM_FFI_VERSION,
+                "--world-size",
+                "8",
+                "--output",
+                str(run_dir / "sglang_jit_toolchain_smoke.json"),
             ],
             cwd=project_root,
             env=environment,
@@ -388,6 +431,10 @@ def main() -> int:
                 "DG_JIT_NVCC_COMPILER": environment["DG_JIT_NVCC_COMPILER"],
                 "DG_JIT_PRINT_COMPILER_COMMAND": environment["DG_JIT_PRINT_COMPILER_COMMAND"],
                 "SGLANG_DG_CACHE_DIR": environment["SGLANG_DG_CACHE_DIR"],
+                "CUDA_HOME": environment["CUDA_HOME"],
+                "LIBRARY_PATH": environment["LIBRARY_PATH"],
+                "TVM_FFI_CACHE_DIR": environment["TVM_FFI_CACHE_DIR"],
+                "TVM_FFI_CUDA_ARCH_LIST": environment["TVM_FFI_CUDA_ARCH_LIST"],
                 "HF_HOME": str(hf_home),
                 "LD_LIBRARY_PATH": environment.get("LD_LIBRARY_PATH", ""),
             }},

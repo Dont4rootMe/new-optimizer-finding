@@ -716,9 +716,32 @@ fallback. Exact concrete override по-прежнему имеет приори�
   the persistent `kernel_cache/deep_gemm-sm90-cuda-nvcc-12.9.86` namespace.
   This design follows DeepGEMM's own `>=12.9` performance recommendation and
   SGLang's NVCC default; the NVRTC alternative remains disabled because
-  upstream explicitly warns that it can reduce performance. Cluster validation
-  of this fix is in progress and must replace this sentence with the job ID and
-  measured outcome.
+  upstream explicitly warns that it can reduce performance. Exact-SHA H100
+  acceptance `lm-mpi-job-87266755-ce54-4fe5-bce0-d3a5f732f7e0` completed:
+  it reused the published compiler prefix, built the standalone SM90a cubin,
+  compiled and executed the real MHC prenorm kernel, and persisted a passing
+  numerical artifact. The full TP=8 model-start acceptance remains required;
+  this 1-GPU gate proves the compiler/kernel boundary, not endpoint readiness.
+- SGLang's NVLink custom-all-reduce JIT is a second consumer of the isolated
+  compiler. Its TVM-FFI build selects `nvcc` through `CUDA_HOME` and links
+  `-lcudart`; the conda prefix exposes that library under
+  `targets/x86_64-linux/lib`, so only compile-time `LIBRARY_PATH` includes it.
+  `LD_LIBRARY_PATH` remains cu126. Probe
+  `lm-mpi-job-489ebb68-ffb3-4a26-83bd-5ede37433c41` showed that 12.9 compiles
+  past the exact const-tuple error seen with 12.6 and fails only without the
+  link directory. Follow-up
+  `lm-mpi-job-c6fe2cc8-5253-453c-b953-1a9f1ddd0b25` completed and compiled all
+  three live-H100 modules: CUDA IPC, communicator, and BF16 TP=8 custom
+  all-reduce. Canonical startup now precompiles them once into
+  `kernel_cache/tvm-ffi-sm90-cuda-nvcc-12.9.86-tvmffi-0.1.11` and records
+  `sglang_jit_toolchain_smoke.json`, preventing both a fallback to NCCL and an
+  eight-rank first-start JIT race.
+- The checkpoint intentionally has `chat_template: null`. This is not a broken
+  tokenizer contract for this server: SGLang 0.5.16 recognizes either the
+  `DeepseekV4` architecture or `tool_call_parser=deepseekv4` and selects its
+  dedicated Python DSV4 chat encoder. The generic Hugging Face warning may be
+  logged; endpoint smoke, not the presence of a Jinja template, is the serving
+  acceptance gate.
 - H100 constraint: use stock official FP4 checkpoint and explicitly pin
   SGLang's Hopper W4A16/Marlin runner. Do not force `flashinfer_mxfp4` or other
   Blackwell-only FP4 kernels. BF16 compressed state reduces KV-state memory;
@@ -737,6 +760,7 @@ fallback. Exact concrete override по-прежнему имеет приори�
   остаётся на persistent regional NFS; terminal artifacts возвращаются через
   `scripts.cluster.transfer`.
 - Run artifacts: `gpu_inventory.json`, `model_snapshot.json`,
+  `deepgemm_toolchain_smoke.json`, `sglang_jit_toolchain_smoke.json`,
   `sglang_launch.json`, `sglang.log`, `smoke.json`, `evolution_launch.json`,
   `run_manifest.json`, population artifacts, token summary и monitor history/
   completion event. Повторный job с тем же run directory использует canonical
@@ -1028,6 +1052,9 @@ CUDA heterogeneity probe:
 | `lm-mpi-job-23c7357b-f551-4d32-bdda-271b42e85593` | Strict promotion accepted only that one known metadata override, checked exact CUDA-12/Hopper package versions and native imports, initialized one H100, wrote ready/freeze artifacts, atomically promoted the preserved complete environment, then passed the canonical bootstrap reuse gate. Scheduler `Completed`. |
 | `lm-mpi-job-efb3aefc-03e7-4d8a-b484-c24aeab08001` | Read-only 1×H100 toolchain probe: Ubuntu 22.04 job image exposes conda at `/home/user/conda/bin/conda` and system `nvcc 12.6.85`. This independently reproduced the compiler version implicated by the 8×H100 MHC failure and established the bootstrap mechanism for the isolated 12.9 prefix. |
 | `lm-mpi-job-13ebba1b-f56c-440c-9f95-5c3c5a085337` | First exact-SHA 1×H100 acceptance built and published `cuda-nvcc-12.9.86`, passed the standalone SM90a `st.shared.b128` cubin check, then compiled and executed the exact `tf32_hc_prenorm_gemm` DeepGEMM path. Its normalized difference was `2.632596940443932e-08`; the job was marked failed only because the initial smoke copied upstream's overly brittle `<1e-8` assertion. Production acceptance now uses finite-output checks plus a still-strict `1e-6` tolerance. Compiler/JIT validation itself succeeded. |
+| `lm-mpi-job-87266755-ce54-4fe5-bce0-d3a5f732f7e0` | Exact `3b7c38640a9d4ce54220dd84975517d38c92b956` 1×H100 acceptance reused the published CUDA 12.9.86 prefix and cu126 serving runtime, passed both the standalone SM90a cubin and real numerical `tf32_hc_prenorm_gemm` checks, persisted `deepgemm_toolchain_smoke.json`, and scheduler-completed. This closes the DeepGEMM compiler acceptance; TP=8 server acceptance is separate. |
+| `lm-mpi-job-489ebb68-ffb3-4a26-83bd-5ede37433c41` | Focused SGLang TVM-FFI probe with `CUDA_HOME=cuda-nvcc-12.9.86` compiled past the const-tuple failure produced by 12.6. It reached link and failed only because the conda prefix's `libcudart.so` is under `targets/x86_64-linux/lib`, while upstream adds `-L$CUDA_HOME/lib64`. This isolated the remaining requirement to compile-time library search. |
+| `lm-mpi-job-c6fe2cc8-5253-453c-b953-1a9f1ddd0b25` | Follow-up live-H100 probe added only the conda CUDA target directory to `LIBRARY_PATH` and scheduler-completed. With Torch `2.11.0+cu126`, TVM-FFI `0.1.11`, and `nvcc 12.9.86`, it compiled CUDA IPC, communicator, and BF16 world-size-8 custom-all-reduce `.so` modules. This validates the optimized custom-all-reduce JIT path without contaminating runtime `LD_LIBRARY_PATH`. |
 | `lm-mpi-job-9025f0bf-80f1-4cb6-a32d-2b2fbbeecd1c` | Exact `2456f094ec57bc33845d04f87ebdb83ef30964d5` production retry sanitized the driver path, reused the validated cu126 runtime/model cache, initialized NCCL ranks 0–7, and loaded all 48 DeepSeek shards. It then failed before server readiness when `nvcc 12.6.85` rejected DeepGEMM's 128-bit PTX constraint during the 21-bucket MHC prenorm prewarm on every TP rank. No EvolutionLoop state or LLM usage exists. |
 
 Bootstrap smoke `lm-mpi-job-3c02e882-bc28-434f-9ed2-1a3841b66c2a` failed

@@ -11,6 +11,8 @@ from scripts.cluster.common import (
     DEEPGEMM_NVCC_VERSION,
     DEEPGEMM_TOOLCHAIN_ID,
     SGLANG_RUNTIME_ID,
+    TVM_FFI_CACHE_ID,
+    TVM_FFI_VERSION,
     build_evolution_command,
     build_git_bootstrap_command,
     build_sglang_command,
@@ -82,12 +84,14 @@ def test_submit_contract_uses_one_binary_worker(tmp_path: Path) -> None:
         DEEPGEMM_TOOLCHAIN_ID
     )
     assert DEEPGEMM_TOOLCHAIN_ID in kwargs["env_variables"]["SGLANG_DG_CACHE_DIR"]
+    assert kwargs["env_variables"]["TVM_FFI_CACHE_DIR"].endswith(TVM_FFI_CACHE_ID)
     assert "queue_name" not in kwargs
 
 
 def test_deepgemm_compiler_contract_is_exact_and_parseable() -> None:
     assert DEEPGEMM_NVCC_VERSION == "12.9.86"
     assert MHC_DIFFERENCE_TOLERANCE == 1e-6
+    assert TVM_FFI_VERSION == "0.1.11"
     output = "Cuda compilation tools, release 12.9, V12.9.86\n"
     assert parse_nvcc_version(output) == DEEPGEMM_NVCC_VERSION
     helper = ROOT / "scripts" / "cluster" / "bootstrap_cuda_toolchain.sh"

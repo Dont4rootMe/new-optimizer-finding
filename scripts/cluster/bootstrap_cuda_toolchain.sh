@@ -30,6 +30,7 @@ nvcc_path="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/bin/nvcc"
 ready_marker="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/.toolchain-ready.json"
 validate_toolchain() {
   [[ -x "$nvcc_path" && -f "$ready_marker" ]] || return 1
+  [[ -f "${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/targets/x86_64-linux/lib/libcudart.so" ]] || return 1
   "$nvcc_path" --version | grep -F "V${DEEPGEMM_NVCC_VERSION}" >/dev/null
 }
 
@@ -87,6 +88,7 @@ export CONDA_PKGS_DIRS="$package_cache"
   "cuda-nvcc=${DEEPGEMM_NVCC_VERSION}"
 
 "$nvcc_path" --version | grep -F "V${DEEPGEMM_NVCC_VERSION}" >/dev/null
+test -f "${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/targets/x86_64-linux/lib/libcudart.so"
 smoke_dir="$(mktemp -d /tmp/evolutionloop-nvcc-smoke.XXXXXX)"
 cleanup_smoke() {
   rm -rf -- "$smoke_dir"

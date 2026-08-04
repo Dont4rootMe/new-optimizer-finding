@@ -34,6 +34,16 @@ path is exported through `DG_JIT_NVCC_COMPILER`; its libraries are never added
 to `LD_LIBRARY_PATH`, so PyTorch remains on the portable cu126 runtime. The
 persistent `SGLANG_DG_CACHE_DIR` reuses compiled kernels across job retries.
 
+SGLang's TP=8 NVLink custom-all-reduce path also JIT-compiles three TVM-FFI
+modules (`cuda_ipc`, `communicator`, and BF16 world-size-8 custom all-reduce).
+The same isolated 12.9 prefix is exposed as `CUDA_HOME`; its
+`targets/x86_64-linux/lib` directory is added only to compile-time
+`LIBRARY_PATH`, because TVM-FFI links `-lcudart`. It is deliberately absent
+from runtime `LD_LIBRARY_PATH`. Before the eight server ranks start,
+`smoke_sglang_jit_toolchain.py` compiles all three modules once and validates
+their content-addressed artifacts in the persistent `TVM_FFI_CACHE_DIR`. This
+avoids both the CUDA-12.6 template error and an eight-rank first-start JIT race.
+
 Before any GPU Python process starts, `cuda_driver_env.sh` removes CUDA
 forward-compatibility directories from `LD_LIBRARY_PATH`. ML Space mounts the
 node's real driver under its native paths; preferring an older image-bundled
@@ -95,3 +105,6 @@ bash "$MLS_ENV" "$MLS_PY" -m scripts.cluster.transfer \
 
 Each model call is logged to `population/llm_usage.jsonl`. A completed job also
 writes `token_usage_summary.json`, grouped by route, stage, and generation.
+Startup acceptance artifacts include `deepgemm_toolchain_smoke.json` and
+`sglang_jit_toolchain_smoke.json`; the latter records the exact compiler,
+TVM-FFI version, GPU/compute capability, cache namespace, and compiled modules.

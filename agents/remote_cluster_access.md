@@ -80,6 +80,7 @@ Runtime layout:
   runtime/sglang-0.5.16-cu126/
   toolchains/cuda-nvcc-12.9.86/
   kernel_cache/deep_gemm-sm90-cuda-nvcc-12.9.86/
+  kernel_cache/tvm-ffi-sm90-cuda-nvcc-12.9.86-tvmffi-0.1.11/
   model_cache/huggingface/
   runs/<run-id>/
 ```
@@ -90,7 +91,11 @@ driver pool. The cu126 runtime must pass its ready-marker/live-CUDA gate with
 CUDA `compat` paths removed as documented in `scripts/cluster/README.md`.
 DeepGEMM's JIT is compiled separately with pinned `nvcc 12.9.86`; do not add
 that compiler prefix to `LD_LIBRARY_PATH` or replace the portable cu126 serving
-runtime with its libraries.
+runtime with its libraries. SGLang TVM-FFI compilation uses the same prefix as
+`CUDA_HOME` and its `targets/x86_64-linux/lib` only through compile-time
+`LIBRARY_PATH`. The job precompiles and persists the TP=8 IPC, communicator,
+and BF16 custom-all-reduce modules before server startup. Never add the 12.9
+prefix to runtime `LD_LIBRARY_PATH` merely to make `-lcudart` link.
 
 The submitter uses the verified job-compatible image
 `cr.ai.cloud.ru/2754eb6e-ae19-4123-87ce-06ec3cc96500/job-latentdiffusion:flash-clear`,
