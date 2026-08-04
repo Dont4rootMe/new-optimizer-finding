@@ -136,6 +136,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--repository-url", default=REPOSITORY_URL)
     parser.add_argument("--source-commit", help="full commit id; defaults to project-root HEAD")
     parser.add_argument(
+        "--entrypoint",
+        default="scripts/cluster/run_deepseek_v4_circle.sh",
+        help="safe repository-relative job entrypoint (production default shown)",
+    )
+    parser.add_argument(
         "--direct-shared-path", action="store_true",
         help="skip the SR008 git bootstrap only when project-root is proven job-visible",
     )
@@ -174,7 +179,10 @@ def main() -> None:
         job_project_root = job_root / "source" / commit
         job_run_dir = job_root / "runs" / args.run_id
         job_script = build_git_bootstrap_command(
-            repository_url=args.repository_url, commit=commit, job_root=job_root,
+            repository_url=args.repository_url,
+            commit=commit,
+            job_root=job_root,
+            entrypoint=args.entrypoint,
         )
         staged_kwargs = {
             "job_project_root": job_project_root,

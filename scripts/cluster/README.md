@@ -90,6 +90,20 @@ Use `--dry-run` first when changing any scheduler property. The submitter writes
 `submission_request.json`, then `submission.json` with the exact source commit,
 regional paths, and stable job name.
 
+Hardware/runtime acceptance uses the same submit path with a smaller SKU and
+the checked-in diagnostic entrypoint:
+
+```bash
+bash "$MLS_ENV" "$MLS_PY" -m scripts.cluster.submit \
+  --project-root /absolute/nfs/path/to/this-branch-clone \
+  --run-id deepseek-toolchain-acceptance-<sha> \
+  --instance-type a100plus.1gpu.80vG.12C.182G \
+  --entrypoint scripts/cluster/run_deepgemm_toolchain_smoke.sh
+```
+
+`--entrypoint` is validated as repository-relative and traversal-free. Omit it
+for production; the default remains `run_deepseek_v4_circle.sh`.
+
 ## Observe and resume
 
 ```bash

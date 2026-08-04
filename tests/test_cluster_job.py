@@ -191,6 +191,13 @@ def test_git_bootstrap_can_select_safe_diagnostic_entrypoint() -> None:
         raise AssertionError("unsafe diagnostic entrypoints must be rejected")
 
 
+def test_submit_cli_exposes_canonical_and_diagnostic_entrypoints() -> None:
+    submitter = (ROOT / "scripts" / "cluster" / "submit.py").read_text(encoding="utf-8")
+    assert '"--entrypoint"' in submitter
+    assert 'default="scripts/cluster/run_deepseek_v4_circle.sh"' in submitter
+    assert "entrypoint=args.entrypoint" in submitter
+
+
 def test_binary_entrypoint_nonzero_rank_exits_before_shared_state_access() -> None:
     environment = os.environ.copy()
     environment.update({"OMPI_COMM_WORLD_RANK": "7", "PROJECT_ROOT": "/does/not/exist"})
