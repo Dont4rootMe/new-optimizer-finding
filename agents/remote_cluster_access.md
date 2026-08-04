@@ -60,19 +60,24 @@ smaller H100 allocations were free. A queued job may therefore stay Pending.
 ## Canonical submit path
 
 Synchronize this finalization branch into a separate NFS clone. Do not switch
-or edit the author's existing checkout. From that clone:
+or edit the author's existing checkout. SR008 jobs have verified visibility
+under `/home/jovyan/echimbulatov/...`; deeper
+`fork_afedorov/constant_repos/...` paths are visible from Jupyter but were not
+mounted into the H100 job container. From the job-visible clone:
 
 ```bash
 bash "$MLS_ENV" "$MLS_PY" -m scripts.cluster.submit \
-  --project-root /absolute/nfs/path/new-optimizer-finding-finalize \
+  --project-root /home/jovyan/echimbulatov/new-optimizer-finding-finalize \
   --run-id deepseek-v4-flash-0731-circle-300
 ```
 
 The submitter uses the verified job-compatible image
 `cr.ai.cloud.ru/2754eb6e-ae19-4123-87ce-06ec3cc96500/job-latentdiffusion:flash-clear`,
 region SR008, one 8-GPU worker, `type="binary"`, detached mode, Internet access,
-and large shared memory. One binary worker is required because EvolutionLoop is
-a single coordinator. `pytorch2`/torchrun would start duplicate coordinators.
+and large shared memory. On the observed allocation even `binary` invokes the
+shell once per GPU; the canonical entrypoint exits every nonzero MPI rank and
+restores all eight visible devices on rank 0. This guard is mandatory because
+EvolutionLoop itself is one coordinator.
 
 Old team notebooks used `queue_name="diff"` and
 `priority_class="high"`. They are not defaulted because that policy was for an

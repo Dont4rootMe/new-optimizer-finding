@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import os
+import subprocess
 
 from scripts.cluster.common import build_evolution_command, build_sglang_command
 from scripts.cluster.monitor import collect_progress, monitor, normalize_scheduler_status
 from scripts.cluster.submit import build_job_kwargs
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_sglang_command_is_tp8_dspark_and_hopper_safe() -> None:
@@ -55,6 +59,21 @@ def test_submit_contract_uses_one_binary_worker(tmp_path: Path) -> None:
     assert kwargs["detached"] is True
     assert kwargs["env_variables"]["MAX_GENERATIONS"] == "300"
     assert "queue_name" not in kwargs
+
+
+def test_binary_entrypoint_nonzero_rank_exits_before_shared_state_access() -> None:
+    environment = os.environ.copy()
+    environment.update({"OMPI_COMM_WORLD_RANK": "7", "PROJECT_ROOT": "/does/not/exist"})
+    completed = subprocess.run(
+        ["bash", str(ROOT / "scripts" / "cluster" / "run_deepseek_v4_circle.sh")],
+        cwd=str(ROOT),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0
+    assert "owned by rank 0" in completed.stdout
 
 
 def test_monitor_emits_terminal_event_only_after_both_layers_complete(tmp_path: Path) -> None:

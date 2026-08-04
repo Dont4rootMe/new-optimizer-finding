@@ -3,8 +3,9 @@
 This directory is the canonical non-interactive path for the single-process
 EvolutionLoop on Cloud.ru ML Space. The scheduler job is `type="binary"` with
 one 8×H100 worker: one coordinator owns a tensor-parallel SGLang server and all
-task evaluators. Do not use a `pytorch2` job because that launches duplicate
-coordinators.
+task evaluators. This ML Space allocation still invokes a binary command once
+per GPU, so the shell entrypoint exits nonzero ranks and assigns all GPUs to
+rank 0. Do not remove that guard or use an unguarded `pytorch2` job.
 
 The production profile serves the exact
 `deepseek-ai/DeepSeek-V4-Flash-0731@7872f01b1d1fe23eabc4c98b48bffcef5a386062`

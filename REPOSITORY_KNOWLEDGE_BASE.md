@@ -894,12 +894,22 @@ remote storage и не защищены Git history.
 | Code | `finalize/evolutionloop-deepseek-v4@b3f6383f780794922cbb2d5589ecdf0f46815351` |
 | Scheduler job | `lm-mpi-job-34dd8b84-8165-4c05-8674-88448517035e` |
 | Submitted | 2026-08-04 01:23 UTC |
-| Initial state | `Pending` (обе 8×H100 SKU имели 0 free workers) |
+| Terminal state | `Failed` at 01:35:57 UTC before Python/model start |
 | Preset | `config_circle_packing_shinka`, seed 42 |
 | Backbone | только `deepseek-ai/DeepSeek-V4-Flash-0731@7872f01…6062` |
 | Budget | generation 0 + EvolutionLoop through generation 300; 6 offspring/generation; max 8 concurrent organisms |
 | Run root | `/home/jovyan/echimbulatov/fork_afedorov/constant_repos/optimizer_cluster_runs/deepseek-v4-flash-0731-circle-300-b3f6383` |
 | Monitor | detached PID recorded in `monitor.pid`; `monitor_status.json`, append-only history, terminal `completion_event.json` |
+
+Diagnostic result: SR008 did allocate the requested worker, but the job-visible
+NFS namespace did not contain the deep
+`/home/jovyan/echimbulatov/fork_afedorov/constant_repos/...` clone. Logs also
+proved that this allocation invokes a `binary` command on eight MPI ranks
+(`[1,0]`…`[1,7]`). No model/evolution compute ran. Remediation is covered by a
+regression test: clone under verified job-visible
+`/home/jovyan/echimbulatov/...`, exit nonzero ranks before shared-state access,
+and restore devices 0–7 for the sole rank-0 TP server. The next submission must
+use a new run ID and code commit; do not relabel this failed probe as a run.
 
 Acceptance before calling it debugged: inventory proves exactly eight H100;
 SGLang model revision and concurrent smoke response are persisted; scheduler is
