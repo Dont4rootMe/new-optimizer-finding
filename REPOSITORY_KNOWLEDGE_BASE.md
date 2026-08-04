@@ -911,6 +911,17 @@ regression test: clone under verified job-visible
 and restore devices 0–7 for the sole rank-0 TP server. The next submission must
 use a new run ID and code commit; do not relabel this failed probe as a run.
 
+Remediated submission (active):
+
+| Поле | Значение |
+|---|---|
+| Code | `3990b5f3e0a589658f5ec7032437e282dff03a79` |
+| Scheduler job | `lm-mpi-job-62223f05-33f0-432d-a951-3aa9274db98d` |
+| Submitted/state | 2026-08-04 01:41 UTC; initially `Pending` |
+| Job-visible clone | `/home/jovyan/echimbulatov/new-optimizer-finding-finalize` |
+| Run root | `/home/jovyan/echimbulatov/optimizer_cluster_runs/deepseek-v4-flash-0731-circle-300-3990b5f` |
+| Monitor | detached, 60-second scheduler/population snapshots |
+
 Acceptance before calling it debugged: inventory proves exactly eight H100;
 SGLang model revision and concurrent smoke response are persisted; scheduler is
 Running; `population_state.json` advances and `llm_usage.jsonl` contains real
