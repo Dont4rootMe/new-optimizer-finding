@@ -109,6 +109,8 @@ def test_deepgemm_compiler_contract_is_exact_and_parseable() -> None:
     helper_text = helper.read_text(encoding="utf-8")
     assert 'CUDA_CURAND_VERSION:-10.3.10.19' in helper_text
     assert 'libcurand-dev=${CUDA_CURAND_VERSION}' in helper_text
+    assert 'targets/x86_64-linux' in helper_text
+    assert "finishing complete unpublished prefix" in helper_text
     assert "#include <curand_kernel.h>" in helper_text
 
 

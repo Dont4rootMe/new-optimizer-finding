@@ -33,14 +33,19 @@ fi
 
 nvcc_path="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/bin/nvcc"
 ready_marker="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/.toolchain-ready.json"
-curand_header="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/include/curand.h"
-curand_kernel_header="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/include/curand_kernel.h"
-validate_toolchain() {
-  [[ -x "$nvcc_path" && -f "$ready_marker" ]] || return 1
+cuda_target_dir="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/targets/x86_64-linux"
+curand_header="${cuda_target_dir}/include/curand.h"
+curand_kernel_header="${cuda_target_dir}/include/curand_kernel.h"
+validate_packages() {
+  [[ -x "$nvcc_path" ]] || return 1
   [[ -f "${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/targets/x86_64-linux/lib/libcudart.so" ]] || return 1
   [[ -f "$curand_header" && -f "$curand_kernel_header" ]] || return 1
-  grep -F '"sm90a_curand_cubin_smoke": "passed"' "$ready_marker" >/dev/null || return 1
   "$nvcc_path" --version | grep -F "V${DEEPGEMM_NVCC_VERSION}" >/dev/null
+}
+validate_toolchain() {
+  validate_packages || return 1
+  [[ -f "$ready_marker" ]] || return 1
+  grep -F '"sm90a_curand_cubin_smoke": "passed"' "$ready_marker" >/dev/null || return 1
 }
 
 if validate_toolchain; then
@@ -69,7 +74,7 @@ cleanup_lock() {
 }
 trap cleanup_lock EXIT INT TERM
 
-if [[ -e "$DEEPGEMM_CUDA_TOOLCHAIN_DIR" ]]; then
+if [[ -e "$DEEPGEMM_CUDA_TOOLCHAIN_DIR" ]] && ! validate_packages; then
   displaced_dir="${DEEPGEMM_CUDA_TOOLCHAIN_DIR}.incomplete.$(date -u +%Y%m%dT%H%M%SZ)"
   echo "[cuda-toolchain] preserving incomplete prefix at ${displaced_dir}"
   mv "$DEEPGEMM_CUDA_TOOLCHAIN_DIR" "$displaced_dir"
@@ -86,19 +91,23 @@ else
   exit 1
 fi
 
-package_cache="${CUDA_TOOLCHAIN_CONDA_PKGS_DIR:-${parent_dir}/.conda-pkgs}"
-mkdir -p "$package_cache"
-export CONDA_PKGS_DIRS="$package_cache"
-"$conda_executable" create --yes \
-  --prefix "$DEEPGEMM_CUDA_TOOLCHAIN_DIR" \
-  --override-channels \
-  --channel nvidia \
-  --channel conda-forge \
-  "cuda-nvcc=${DEEPGEMM_NVCC_VERSION}" \
-  "libcurand-dev=${CUDA_CURAND_VERSION}"
+if validate_packages; then
+  echo "[cuda-toolchain] finishing complete unpublished prefix ${DEEPGEMM_CUDA_TOOLCHAIN_DIR}"
+else
+  package_cache="${CUDA_TOOLCHAIN_CONDA_PKGS_DIR:-${parent_dir}/.conda-pkgs}"
+  mkdir -p "$package_cache"
+  export CONDA_PKGS_DIRS="$package_cache"
+  "$conda_executable" create --yes \
+    --prefix "$DEEPGEMM_CUDA_TOOLCHAIN_DIR" \
+    --override-channels \
+    --channel nvidia \
+    --channel conda-forge \
+    "cuda-nvcc=${DEEPGEMM_NVCC_VERSION}" \
+    "libcurand-dev=${CUDA_CURAND_VERSION}"
+fi
 
 "$nvcc_path" --version | grep -F "V${DEEPGEMM_NVCC_VERSION}" >/dev/null
-test -f "${DEEPGEMM_CUDA_TOOLCHAIN_DIR}/targets/x86_64-linux/lib/libcudart.so"
+test -f "${cuda_target_dir}/lib/libcudart.so"
 test -f "$curand_header"
 test -f "$curand_kernel_header"
 smoke_dir="$(mktemp -d /tmp/evolutionloop-nvcc-smoke.XXXXXX)"
