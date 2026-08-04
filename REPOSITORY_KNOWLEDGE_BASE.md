@@ -879,6 +879,31 @@ Shinka baseline cells остались неисполненными; на сер
 best-organism directories надо архивировать. Сейчас они существуют только на
 remote storage и не защищены Git history.
 
+### Active finalization run: DeepSeek-only circle packing
+
+Это operational state, **ещё не результат** до terminal success и проверки
+артефактов:
+
+| Поле | Значение |
+|---|---|
+| Code | `finalize/evolutionloop-deepseek-v4@b3f6383f780794922cbb2d5589ecdf0f46815351` |
+| Scheduler job | `lm-mpi-job-34dd8b84-8165-4c05-8674-88448517035e` |
+| Submitted | 2026-08-04 01:23 UTC |
+| Initial state | `Pending` (обе 8×H100 SKU имели 0 free workers) |
+| Preset | `config_circle_packing_shinka`, seed 42 |
+| Backbone | только `deepseek-ai/DeepSeek-V4-Flash-0731@7872f01…6062` |
+| Budget | generation 0 + EvolutionLoop through generation 300; 6 offspring/generation; max 8 concurrent organisms |
+| Run root | `/home/jovyan/echimbulatov/fork_afedorov/constant_repos/optimizer_cluster_runs/deepseek-v4-flash-0731-circle-300-b3f6383` |
+| Monitor | detached PID recorded in `monitor.pid`; `monitor_status.json`, append-only history, terminal `completion_event.json` |
+
+Acceptance before calling it debugged: inventory proves exactly eight H100;
+SGLang model revision and concurrent smoke response are persisted; scheduler is
+Running; `population_state.json` advances and `llm_usage.jsonl` contains real
+DeepSeek calls. Acceptance before calling it complete: scheduler+run manifests
+both completed, finalized generation=300, no inflight transaction, token report
+parses cleanly, scores/organism survival are audited and this section is
+replaced with final measurements.
+
 ### Исторические AWTF post-mortems
 
 | Run / наблюдение | Подтверждённый вывод | Что после этого сделали |
@@ -918,16 +943,17 @@ remote storage и не защищены Git history.
 
 ### Критичные
 
-1. **Committed credential.** В active AWTF/circle configs и CO-Bench branch
-   находится plain-text Comet API key. Его надо revoke, удалить из history где
-   уместно и заменить env interpolation. Не копировать значение в issues,
-   логи или документацию.
+1. **Historical committed credential.** В author refs/generated notebooks был
+   plain-text Comet API key. Finalization live удаляет notebooks и использует
+   только env interpolation с `COMET_ENABLED=false` по умолчанию. Сам секрет
+   всё равно надо revoke вне Git; его значение нигде не повторять.
 2. **Remote results не защищены и baseline отсутствует.** Четыре population
    roots и лучшие organisms существуют только на Cloud.ru NFS; в Git нет
    manifests/archive. Shinka jobs не запускались, поэтому head-to-head
    comparison отсутствует.
-3. **Документация утверждает удалённое поведение.** `FRAMEWORK.md` и README
-   описывают compatibility validator, LLM seed operators и biased island
+3. **Historical documentation drift.** README finalization live переписан под
+   текущие contracts, но `FRAMEWORK.md` всё ещё местами описывает compatibility
+   validator, LLM seed operators и biased island
    prompts; live master этого не делает.
 
 ### Поведенческий/config drift
