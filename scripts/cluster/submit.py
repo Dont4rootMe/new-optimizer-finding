@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +13,13 @@ from scripts.cluster.common import (
     INSTANCE_TYPE,
     MODEL_REVISION,
     REGION,
+    REGIONAL_JOB_ROOT,
+    REPOSITORY_URL,
     SGLANG_VERSION,
     atomic_write_json,
+    build_git_bootstrap_command,
     require_absolute_safe_path,
+    require_regional_job_path,
     utc_now,
 )
 
@@ -30,6 +34,11 @@ def build_job_kwargs(
     max_generations: int,
     max_parallel_organisms: int,
     hydra_overrides: list[str],
+    job_project_root: Path | None = None,
+    job_run_dir: Path | None = None,
+    job_root: Path | None = None,
+    source_commit: str | None = None,
+    job_script: str | None = None,
     base_image: str = BASE_IMAGE,
     instance_type: str = INSTANCE_TYPE,
     region: str = REGION,
@@ -42,13 +51,17 @@ def build_job_kwargs(
     not been proven for SR008. Callers can opt in explicitly after checking.
     """
 
-    shared_root = project_root.parent
+    runtime_project_root = job_project_root or project_root
+    runtime_run_dir = job_run_dir or run_dir
+    runtime_entrypoint = runtime_project_root / "scripts" / "cluster" / "run_deepseek_v4_circle.sh"
+    runtime_shared_root = job_root or runtime_project_root.parent
     environment = {
-        "PROJECT_ROOT": str(project_root),
+        "PROJECT_ROOT": str(runtime_project_root),
         "RUN_ID": run_id,
-        "RUN_DIR": str(run_dir),
-        "DEEPSEEK_ENV_DIR": str(shared_root / ".inference_runtime" / f"sglang-{SGLANG_VERSION}"),
-        "HF_HOME": str(shared_root / ".model_cache" / "huggingface"),
+        "RUN_DIR": str(runtime_run_dir),
+        "JOB_ROOT": str(runtime_shared_root),
+        "DEEPSEEK_ENV_DIR": str(runtime_shared_root / "runtime" / f"sglang-{SGLANG_VERSION}"),
+        "HF_HOME": str(runtime_shared_root / "model_cache" / "huggingface"),
         "SGLANG_VERSION": SGLANG_VERSION,
         "MODEL_REVISION": MODEL_REVISION,
         "CONFIG_NAME": config_name,
@@ -60,12 +73,17 @@ def build_job_kwargs(
         "PYTHONNOUSERSITE": "1",
         "PIP_USER": "no",
     }
+    if source_commit is not None:
+        environment["SOURCE_COMMIT"] = str(source_commit)
     request: dict[str, Any] = {
         "base_image": base_image,
-        "script": f"bash {project_root}/scripts/cluster/run_deepseek_v4_circle.sh",
+        "script": job_script or f"bash {runtime_entrypoint}",
         "region": region,
         "instance_type": instance_type,
         "n_workers": 1,
+        # One coordinator owns the TP=8 inference server.  Without this ML
+        # Space defaults to one MPI process per GPU even for a binary job.
+        "processes_per_worker": 1,
         "type": "binary",
         "job_desc": f"echimbulatov | {run_id} #ID0137 #rnd",
         "env_variables": environment,
@@ -73,6 +91,7 @@ def build_job_kwargs(
         "shm_size_class": "large",
         "detached": True,
         "preflight_check": True,
+        "checkpoint_dir": str(runtime_run_dir),
     }
     if queue_name:
         request["queue_name"] = queue_name
@@ -96,6 +115,13 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--region", default=REGION)
     parser.add_argument("--queue-name")
     parser.add_argument("--priority-class")
+    parser.add_argument("--job-root", default=str(REGIONAL_JOB_ROOT))
+    parser.add_argument("--repository-url", default=REPOSITORY_URL)
+    parser.add_argument("--source-commit", help="full commit id; defaults to project-root HEAD")
+    parser.add_argument(
+        "--direct-shared-path", action="store_true",
+        help="skip the SR008 git bootstrap only when project-root is proven job-visible",
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -110,6 +136,43 @@ def main() -> None:
     )
     run_dir = run_base / args.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    staged_kwargs: dict[str, Any] = {}
+    source: dict[str, Any] | None = None
+    if not args.direct_shared_path:
+        worktree_status = subprocess.run(
+            ["git", "status", "--porcelain=v1"], cwd=str(project_root), check=True,
+            capture_output=True, text=True,
+        ).stdout.strip()
+        if worktree_status:
+            raise SystemExit(
+                "refusing a git-bootstrap submission from a dirty worktree; commit or isolate changes first"
+            )
+        commit = args.source_commit
+        if not commit:
+            commit = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=str(project_root), check=True,
+                capture_output=True, text=True,
+            ).stdout.strip()
+        job_root = require_regional_job_path(args.job_root, label="regional job root")
+        job_project_root = job_root / "source" / commit
+        job_run_dir = job_root / "runs" / args.run_id
+        job_script = build_git_bootstrap_command(
+            repository_url=args.repository_url, commit=commit, job_root=job_root,
+        )
+        staged_kwargs = {
+            "job_project_root": job_project_root,
+            "job_run_dir": job_run_dir,
+            "job_root": job_root,
+            "source_commit": commit,
+            "job_script": job_script,
+        }
+        source = {
+            "transport": "git_https",
+            "repository_url": args.repository_url,
+            "commit": commit,
+            "regional_project_root": str(job_project_root),
+            "regional_run_dir": str(job_run_dir),
+        }
     kwargs = build_job_kwargs(
         project_root=project_root,
         run_dir=run_dir,
@@ -124,12 +187,15 @@ def main() -> None:
         region=args.region,
         queue_name=args.queue_name,
         priority_class=args.priority_class,
+        **staged_kwargs,
     )
     request_payload = {
         "schema_version": 1,
         "created_at": utc_now(),
         "dry_run": bool(args.dry_run),
         "request": kwargs,
+        "artifact_namespace": "shared" if args.direct_shared_path else "regional_nfs",
+        "source": source,
     }
     atomic_write_json(run_dir / "submission_request.json", request_payload)
     if args.dry_run:

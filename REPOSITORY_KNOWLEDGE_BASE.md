@@ -678,7 +678,15 @@ fallback. Exact concrete override по-прежнему имеет приори�
   ratio 0.1. Values must be changed only after workload measurements.
 - Scheduler: Cloud.ru ML Space (не Slurm), region `SR008`, instance
   `a100plus.8gpu.80vG.96C.1456G`, one worker, `type=binary`, large shared memory,
-  detached. `pytorch2` запрещён для этого path: он размножает coordinator.
+  detached, `processes_per_worker=1`. Без последнего параметра даже `binary`
+  был экспериментально запущен на восьми MPI ranks; rank guard остаётся
+  defense-in-depth. `pytorch2` запрещён для этого path.
+- Jupyter NFS и SR008 regional NFS — разные namespaces. Canonical submit
+  передаёт validation-safe one-line bootstrap, клонирует public Git repository
+  в `/home/jovyan/evolutionloop-deepseek-v4/source/<full-commit>`, fetch/checkout
+  делает строго по SHA и сверяет `HEAD` до исполнения. Runtime/model/run state
+  остаётся на persistent regional NFS; terminal artifacts возвращаются через
+  `scripts.cluster.transfer`.
 - Run artifacts: `gpu_inventory.json`, `model_snapshot.json`,
   `sglang_launch.json`, `sglang.log`, `smoke.json`, `evolution_launch.json`,
   `run_manifest.json`, population artifacts, token summary и monitor history/
@@ -902,14 +910,12 @@ remote storage и не защищены Git history.
 | Monitor | detached PID recorded in `monitor.pid`; `monitor_status.json`, append-only history, terminal `completion_event.json` |
 
 Diagnostic result: SR008 did allocate the requested worker, but the job-visible
-NFS namespace did not contain the deep
-`/home/jovyan/echimbulatov/fork_afedorov/constant_repos/...` clone. Logs also
-proved that this allocation invokes a `binary` command on eight MPI ranks
-(`[1,0]`…`[1,7]`). No model/evolution compute ran. Remediation is covered by a
-regression test: clone under verified job-visible
-`/home/jovyan/echimbulatov/...`, exit nonzero ranks before shared-state access,
-and restore devices 0–7 for the sole rank-0 TP server. The next submission must
-use a new run ID and code commit; do not relabel this failed probe as a run.
+NFS namespace did not contain the Jupyter-side checkout. Logs also proved that
+omitting `processes_per_worker=1` invokes a `binary` command on eight MPI ranks
+(`[1,0]`…`[1,7]`). No model/evolution compute ran. Remediation is covered by
+regression tests: exact-commit HTTPS bootstrap into regional NFS, one scheduler
+process per worker, nonzero-rank defense before shared state, and devices 0–7
+for the sole rank-0 TP server. Do not relabel this failed probe as a run.
 
 Remediated submission (active):
 
@@ -917,10 +923,30 @@ Remediated submission (active):
 |---|---|
 | Code | `3990b5f3e0a589658f5ec7032437e282dff03a79` |
 | Scheduler job | `lm-mpi-job-62223f05-33f0-432d-a951-3aa9274db98d` |
-| Submitted/state | 2026-08-04 01:41 UTC; initially `Pending` |
-| Job-visible clone | `/home/jovyan/echimbulatov/new-optimizer-finding-finalize` |
+| Submitted/state | 2026-08-04 01:41 UTC; `Failed` at 01:43 UTC before workers became READY |
+| Requested clone | `/home/jovyan/echimbulatov/new-optimizer-finding-finalize`; not observed by user code |
 | Run root | `/home/jovyan/echimbulatov/optimizer_cluster_runs/deepseek-v4-flash-0731-circle-300-3990b5f` |
 | Monitor | detached, 60-second scheduler/population snapshots |
+
+The second scheduler allocation reached node assignment but never reached
+`All workers are READY` and emitted no user-script line. This is an
+infrastructure/startup failure, so it neither validates nor invalidates that
+specific top-level path. A subsequent 1×H100 namespace probe
+`lm-mpi-job-ac92b7b8-6577-4dff-b322-8518b036075e` completed and settled the
+question: inside SR008 only `/home/jovyan` existed; every tested
+`/home/jovyan/echimbulatov/...` path was absent.
+
+Bootstrap probes on 2026-08-04:
+
+| Job | Outcome / finding |
+|---|---|
+| `lm-mpi-job-e7ce9b6a-8ffc-4d67-897f-98fdfaf4dbdd` | Data Transfer destination appeared as a directory but no copied object/object-log was available; inbound Data Transfer is not the source-code path. |
+| `lm-mpi-job-4c5533eb-d518-4710-bb16-d2d50da60ab5` | One-line Internet git bootstrap was accepted and scheduler-completed with `processes_per_worker=1`; exact-commit checkout path is on regional NFS. |
+| `lm-mpi-job-27f29ff0-b863-4bef-8145-1c283b941663` | Cross-allocation persistence verification submitted; still `Pending` at the last observation. |
+
+The next 8×H100 submission must use the git-bootstrap commit containing this
+remediation and a new run ID. The two failed jobs above remain diagnostics, not
+experiment results.
 
 Acceptance before calling it debugged: inventory proves exactly eight H100;
 SGLang model revision and concurrent smoke response are persisted; scheduler is

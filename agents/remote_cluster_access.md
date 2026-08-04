@@ -59,25 +59,36 @@ smaller H100 allocations were free. A queued job may therefore stay Pending.
 
 ## Canonical submit path
 
-Synchronize this finalization branch into a separate NFS clone. Do not switch
-or edit the author's existing checkout. SR008 jobs have verified visibility
-under `/home/jovyan/echimbulatov/...`; deeper
-`fork_afedorov/constant_repos/...` paths are visible from Jupyter but were not
-mounted into the H100 job container. From the job-visible clone:
+Use the separate finalization checkout on the Jupyter control plane; do not
+switch or edit the author's checkout. A 2026-08-04 probe proved that an SR008
+job sees its own `/home/jovyan` but **none** of the Jupyter paths below
+`/home/jovyan/echimbulatov`. The submitter therefore sends a one-line,
+base64-wrapped stdlib bootstrap which clones and verifies the exact source
+commit in persistent regional NFS:
 
 ```bash
 bash "$MLS_ENV" "$MLS_PY" -m scripts.cluster.submit \
-  --project-root /home/jovyan/echimbulatov/new-optimizer-finding-finalize \
+  --project-root /home/jovyan/echimbulatov/fork_afedorov/constant_repos/new-optimizer-finding/runs/finalize-evolutionloop-deepseek-v4 \
   --run-id deepseek-v4-flash-0731-circle-300
+```
+
+Runtime layout:
+
+```text
+/home/jovyan/evolutionloop-deepseek-v4/
+  source/<full-git-commit>/
+  runtime/sglang-0.5.16/
+  model_cache/huggingface/
+  runs/<run-id>/
 ```
 
 The submitter uses the verified job-compatible image
 `cr.ai.cloud.ru/2754eb6e-ae19-4123-87ce-06ec3cc96500/job-latentdiffusion:flash-clear`,
 region SR008, one 8-GPU worker, `type="binary"`, detached mode, Internet access,
-and large shared memory. On the observed allocation even `binary` invokes the
-shell once per GPU; the canonical entrypoint exits every nonzero MPI rank and
-restores all eight visible devices on rank 0. This guard is mandatory because
-EvolutionLoop itself is one coordinator.
+large shared memory, and `processes_per_worker=1`. Omitting that last field was
+experimentally shown to launch eight MPI ranks. The canonical entrypoint also
+exits any unexpected nonzero rank and restores devices 0–7 for the sole TP=8
+server. EvolutionLoop itself remains one coordinator.
 
 Old team notebooks used `queue_name="diff"` and
 `priority_class="high"`. They are not defaulted because that policy was for an
@@ -103,9 +114,13 @@ bash "$MLS_ENV" "$MLS_PY" -m scripts.cluster.monitor \
   --job-name "$JOB" --run-dir /absolute/nfs/path/to/run
 ```
 
-It writes scheduler/run progress and a terminal `completion_event.json`.
+It writes scheduler progress and a terminal `completion_event.json`; live
+generation/token progress is emitted as `EVOLUTIONLOOP_EVENT` JSON in job logs.
 Typical states are Pending, Inqueue, Starting, Running, Completed, Failed,
 Cancelled/Deleted. Save `submission.json`; its job name is the stable handle.
+
+After completion, use `python -m scripts.cluster.transfer` as documented in
+`scripts/cluster/README.md` to copy the regional run into workspace NFS.
 
 Official references:
 

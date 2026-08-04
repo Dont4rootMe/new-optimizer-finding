@@ -7,8 +7,10 @@ testable without an ML Space session.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
+import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +27,8 @@ BASE_IMAGE = (
     "cr.ai.cloud.ru/2754eb6e-ae19-4123-87ce-06ec3cc96500/"
     "job-latentdiffusion:flash-clear"
 )
+REPOSITORY_URL = "https://github.com/Dont4rootMe/new-optimizer-finding.git"
+REGIONAL_JOB_ROOT = Path("/home/jovyan/evolutionloop-deepseek-v4")
 
 
 def utc_now() -> str:
@@ -41,6 +45,22 @@ def require_absolute_safe_path(value: str | os.PathLike[str], *, label: str) -> 
     if resolved in {Path("/"), Path("/home"), Path("/home/jovyan")}:
         raise ValueError(f"refusing unsafe {label}: {resolved}")
     return resolved
+
+
+def require_regional_job_path(value: str | os.PathLike[str], *, label: str) -> Path:
+    """Validate a logical SR008 NFS path without resolving host symlinks.
+
+    macOS resolves ``/home`` through ``/System/Volumes/Data`` even when merely
+    constructing a remote path.  Regional paths must retain their literal
+    ``/home/jovyan/...`` spelling in scheduler requests.
+    """
+
+    path = Path(os.path.abspath(os.path.expanduser(os.fspath(value))))
+    if path in {Path("/"), Path("/home"), Path("/home/jovyan")}:
+        raise ValueError(f"refusing unsafe {label}: {path}")
+    if not str(path).startswith("/home/jovyan/"):
+        raise ValueError(f"{label} must be below /home/jovyan: {path}")
+    return path
 
 
 def atomic_write_json(path: str | Path, payload: dict[str, Any]) -> Path:
@@ -73,6 +93,61 @@ def read_json_if_present(path: str | Path) -> dict[str, Any] | None:
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def build_git_bootstrap_command(*, repository_url: str, commit: str, job_root: Path) -> str:
+    """Build a validation-safe one-line job command that checks out one commit.
+
+    SR008 does not mount the submitting Jupyter server's NFS namespace.  The
+    binary job therefore bootstraps its immutable source into regional NFS.
+    A base64-encoded stdlib Python payload avoids shell interpolation of URLs,
+    paths, or scheduler environment values.
+    """
+
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError(f"source commit must be a full lowercase SHA-1: {commit!r}")
+    root = require_regional_job_path(job_root, label="regional job root")
+    if not repository_url.startswith("https://"):
+        raise ValueError("cluster bootstrap repository URL must use HTTPS")
+
+    payload = f'''import os
+import pathlib
+import subprocess
+
+rank_text = os.environ.get("OMPI_COMM_WORLD_RANK", os.environ.get("PMI_RANK", "0"))
+try:
+    rank = int(rank_text)
+except ValueError:
+    rank = 0
+if rank != 0:
+    print(f"[git-bootstrap] rank {{rank}}: coordinator owned by rank 0; exiting", flush=True)
+    raise SystemExit(0)
+
+job_root = pathlib.Path({str(root)!r})
+commit = {commit!r}
+project_root = job_root / "source" / commit
+project_root.parent.mkdir(parents=True, exist_ok=True)
+if not (project_root / ".git").is_dir():
+    if project_root.exists():
+        raise RuntimeError(f"incomplete source path preserved for diagnosis: {{project_root}}")
+    subprocess.run([
+        "git", "clone", "--filter=blob:none", "--no-checkout", "--no-tags",
+        {repository_url!r}, str(project_root),
+    ], check=True)
+subprocess.run(["git", "-C", str(project_root), "fetch", "--depth=1", "origin", commit], check=True)
+subprocess.run(["git", "-C", str(project_root), "checkout", "--detach", commit], check=True)
+head = subprocess.run(
+    ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+    check=True, capture_output=True, text=True,
+).stdout.strip()
+if head != commit:
+    raise RuntimeError(f"source verification failed: expected {{commit}}, got {{head}}")
+os.environ["PROJECT_ROOT"] = str(project_root)
+print(f"[git-bootstrap] verified commit={{commit}} project_root={{project_root}}", flush=True)
+os.execv("/bin/bash", ["bash", str(project_root / "scripts" / "cluster" / "run_deepseek_v4_circle.sh")])
+'''
+    encoded = base64.b64encode(payload.encode("utf-8")).decode("ascii")
+    return f"python3 -c 'import base64;exec(base64.b64decode(\"{encoded}\"))'"
 
 
 def build_sglang_command(

@@ -41,6 +41,16 @@ def _log(message: str) -> None:
     print(f"[deepseek-job] {utc_now()} {message}", flush=True)
 
 
+def _event(kind: str, payload: dict[str, Any]) -> None:
+    """Emit a single parseable scheduler-log record for remote monitoring."""
+
+    print(
+        "EVOLUTIONLOOP_EVENT "
+        + json.dumps({"event": kind, "observed_at": utc_now(), **payload}, sort_keys=True),
+        flush=True,
+    )
+
+
 def _run_checked(argv: list[str], *, cwd: Path, env: dict[str, str]) -> None:
     _log("exec: " + " ".join(argv))
     subprocess.run(argv, cwd=str(cwd), env=env, check=True)
@@ -54,8 +64,11 @@ def _git_provenance(project_root: Path) -> dict[str, Any]:
         return completed.stdout.strip()
 
     status = run("status", "--porcelain=v1")
+    discovered_commit = run("rev-parse", "HEAD")
+    source_commit = os.environ.get("SOURCE_COMMIT", "")
     return {
-        "commit": run("rev-parse", "HEAD"),
+        "commit": source_commit or discovered_commit,
+        "runtime_git_commit": discovered_commit,
         "branch": run("branch", "--show-current"),
         "describe": run("describe", "--always", "--dirty", "--broken"),
         "dirty": bool(status),
@@ -162,6 +175,16 @@ def _population_progress(population_root: Path) -> dict[str, Any]:
     }
 
 
+def _report_progress_until_stopped(
+    population_root: Path,
+    stop: threading.Event,
+    *,
+    interval_sec: float,
+) -> None:
+    while not stop.wait(max(10.0, interval_sec)):
+        _event("evolution_progress", _population_progress(population_root))
+
+
 def main() -> int:
     project_root = require_absolute_safe_path(
         os.environ.get("PROJECT_ROOT", str(Path(__file__).resolve().parents[2])),
@@ -231,6 +254,8 @@ def main() -> int:
 
     server: subprocess.Popen[str] | None = None
     tee_thread: threading.Thread | None = None
+    progress_thread: threading.Thread | None = None
+    progress_stop = threading.Event()
     server_log: IO[str] | None = None
     stop_requested = False
 
@@ -345,9 +370,20 @@ def main() -> int:
         manifest.update(status="running_evolution", evolution_started_at=utc_now())
         atomic_write_json(manifest_path, manifest)
         _log("starting canonical EvolutionLoop")
+        _event("evolution_started", _population_progress(population_root))
+        progress_thread = threading.Thread(
+            target=_report_progress_until_stopped,
+            args=(population_root, progress_stop),
+            kwargs={"interval_sec": float(os.environ.get("PROGRESS_LOG_INTERVAL_SEC", "60"))},
+            name="evolution-progress-reporter",
+            daemon=True,
+        )
+        progress_thread.start()
         evolution_return_code = subprocess.run(
             evolution_command, cwd=str(project_root), env=environment, check=False
         ).returncode
+        progress_stop.set()
+        progress_thread.join(timeout=10)
         manifest["evolution_return_code"] = evolution_return_code
         manifest["progress"] = _population_progress(population_root)
         if evolution_return_code != 0:
@@ -369,6 +405,11 @@ def main() -> int:
             )
         manifest.update(status="completed", completed_at=utc_now(), progress=_population_progress(population_root))
         atomic_write_json(manifest_path, manifest)
+        token_summary = read_json_if_present(run_dir / "token_usage_summary.json") or {}
+        _event(
+            "run_completed",
+            {"run_id": run_id, "progress": manifest["progress"], "token_usage": token_summary},
+        )
         _log("job completed")
         return 0
     except BaseException as exc:  # noqa: BLE001
@@ -379,9 +420,16 @@ def main() -> int:
             progress=_population_progress(population_root),
         )
         atomic_write_json(manifest_path, manifest)
+        _event(
+            "run_failed",
+            {"run_id": run_id, "error": manifest["error"], "progress": manifest["progress"]},
+        )
         _log(f"job failed: {type(exc).__name__}: {exc}")
         return 130 if stop_requested else 1
     finally:
+        progress_stop.set()
+        if progress_thread is not None:
+            progress_thread.join(timeout=10)
         _terminate_process(server)
         if tee_thread is not None:
             tee_thread.join(timeout=10)

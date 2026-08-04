@@ -143,8 +143,11 @@ factory covers mock, Ollama, OpenAI-compatible, and existing provider backends.
 ## Cluster job: DeepSeek-V4-Flash-0731 on 8×H100
 
 The production job path is documented in `scripts/cluster/README.md` and
-`agents/remote_cluster_access.md`. It uses one `type="binary"` worker and one
-coordinator; never use a multi-rank `pytorch2` launcher for EvolutionLoop.
+`agents/remote_cluster_access.md`. It uses one `type="binary"` worker with
+`processes_per_worker=1` and one coordinator; never use a multi-rank
+`pytorch2` launcher for EvolutionLoop. Because SR008 and Jupyter use distinct
+NFS namespaces, each job clones and verifies the exact commit into persistent
+regional NFS before it starts or resumes.
 
 The job pins the model revision and SGLang version, validates all eight GPUs,
 starts TP=8 SGLang with the checkpoint-bundled DSpark head, smoke-tests the

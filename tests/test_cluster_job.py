@@ -7,9 +7,14 @@ from pathlib import Path
 import os
 import subprocess
 
-from scripts.cluster.common import build_evolution_command, build_sglang_command
+from scripts.cluster.common import (
+    build_evolution_command,
+    build_git_bootstrap_command,
+    build_sglang_command,
+)
 from scripts.cluster.monitor import collect_progress, monitor, normalize_scheduler_status
 from scripts.cluster.submit import build_job_kwargs
+from scripts.cluster.transfer import connector_path, wait_for_transfer
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,9 +61,44 @@ def test_submit_contract_uses_one_binary_worker(tmp_path: Path) -> None:
     )
     assert kwargs["type"] == "binary"
     assert kwargs["n_workers"] == 1
+    assert kwargs["processes_per_worker"] == 1
     assert kwargs["detached"] is True
+    assert kwargs["checkpoint_dir"] == str(tmp_path / "runs" / "one")
     assert kwargs["env_variables"]["MAX_GENERATIONS"] == "300"
     assert "queue_name" not in kwargs
+
+
+def test_submit_contract_can_target_isolated_regional_nfs(tmp_path: Path) -> None:
+    job_root = Path("/home/jovyan/evolutionloop-deepseek-v4")
+    commit = "a" * 40
+    bootstrap = build_git_bootstrap_command(
+        repository_url="https://github.com/example/project.git", commit=commit, job_root=job_root
+    )
+    kwargs = build_job_kwargs(
+        project_root=tmp_path / "control-project",
+        run_dir=tmp_path / "control-runs" / "one",
+        run_id="one",
+        config_name="config_circle_packing_shinka",
+        backbone="deepseek_v4_flash_0731",
+        max_generations=300,
+        max_parallel_organisms=8,
+        hydra_overrides=[],
+        job_project_root=job_root / "source" / commit,
+        job_run_dir=job_root / "runs" / "one",
+        job_root=job_root,
+        source_commit=commit,
+        job_script=bootstrap,
+    )
+    assert kwargs["script"].startswith("python3 -c ")
+    assert kwargs["env_variables"]["SOURCE_COMMIT"] == commit
+    assert kwargs["env_variables"]["RUN_DIR"] == str(job_root / "runs" / "one")
+    environment = os.environ.copy()
+    environment["OMPI_COMM_WORLD_RANK"] = "7"
+    completed = subprocess.run(
+        ["bash", "-c", bootstrap], env=environment, check=False, capture_output=True, text=True,
+    )
+    assert completed.returncode == 0
+    assert "owned by rank 0" in completed.stdout
 
 
 def test_binary_entrypoint_nonzero_rank_exits_before_shared_state_access() -> None:
@@ -74,6 +114,21 @@ def test_binary_entrypoint_nonzero_rank_exits_before_shared_state_access() -> No
     )
     assert completed.returncode == 0
     assert "owned by rank 0" in completed.stdout
+
+
+def test_data_transfer_paths_and_terminal_logs() -> None:
+    assert connector_path(Path("/home/jovyan/team/repo.tar.gz")) == "/team/repo.tar.gz"
+    try:
+        connector_path(Path("/tmp/outside"))
+    except ValueError as exc:
+        assert "below /home/jovyan" in str(exc)
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("outside paths must be rejected")
+
+    calls = iter([[], [{"status": "completed", "path": "source.tar.gz"}]])
+    assert wait_for_transfer(
+        "transfer", log_reader=lambda _transfer_id: next(calls), timeout_sec=1, interval_sec=0
+    )[0]["status"] == "completed"
 
 
 def test_monitor_emits_terminal_event_only_after_both_layers_complete(tmp_path: Path) -> None:
@@ -98,3 +153,24 @@ def test_monitor_emits_terminal_event_only_after_both_layers_complete(tmp_path: 
     ) == 0
     event = json.loads((run_dir / "completion_event.json").read_text(encoding="utf-8"))
     assert event["success"] is True
+
+
+def test_monitor_accepts_completed_staged_job_before_artifact_export(tmp_path: Path) -> None:
+    run_dir = tmp_path / "control-run"
+    run_dir.mkdir()
+    (run_dir / "submission.json").write_text(
+        json.dumps(
+            {
+                "artifact_namespace": "regional_nfs",
+                "request": {"env_variables": {"RUN_DIR": "/home/jovyan/regional/run"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert monitor(
+        job_name="job", run_dir=run_dir, status_reader=lambda _name: "Job status=Completed",
+        interval_sec=10, once=True,
+    ) == 0
+    event = json.loads((run_dir / "completion_event.json").read_text(encoding="utf-8"))
+    assert event["success"] is True
+    assert event["regional_run_dir"] == "/home/jovyan/regional/run"

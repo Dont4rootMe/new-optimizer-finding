@@ -19,6 +19,8 @@ TERMINAL_FAILURE = {
     "deleted",
     "killed",
     "terminated",
+    "stopped",
+    "aborted",
 }
 
 
@@ -41,6 +43,14 @@ def collect_progress(run_dir: Path, *, scheduler_status: object) -> dict[str, An
     population_root = run_dir / "population"
     population_state = read_json_if_present(population_root / "population_state.json") or {}
     run_manifest = read_json_if_present(run_dir / "run_manifest.json") or {}
+    submission = read_json_if_present(run_dir / "submission.json") or read_json_if_present(
+        run_dir / "submission_request.json"
+    ) or {}
+    request = submission.get("request") if isinstance(submission.get("request"), dict) else {}
+    request_environment = (
+        request.get("env_variables") if isinstance(request.get("env_variables"), dict) else {}
+    )
+    regional_artifacts = submission.get("artifact_namespace") == "regional_nfs"
     active = population_state.get("active_organisms")
     return {
         "observed_at": utc_now(),
@@ -53,6 +63,8 @@ def collect_progress(run_dir: Path, *, scheduler_status: object) -> dict[str, An
         "inflight_generation": isinstance(population_state.get("inflight_generation"), dict),
         "usage_events": _count_nonempty_lines(population_root / "llm_usage.jsonl"),
         "run_manifest": run_manifest,
+        "regional_artifacts": regional_artifacts,
+        "regional_run_dir": request_environment.get("RUN_DIR"),
     }
 
 
@@ -84,7 +96,13 @@ def monitor(
 
         scheduler_status = snapshot["scheduler_status"]
         run_status = str(snapshot["run_status"]).lower()
-        success = scheduler_status in TERMINAL_SUCCESS and run_status == "completed"
+        # For regional SR008 jobs the control-plane NFS cannot see the regional
+        # run manifest until a post-run Data Transfer.  A scheduler Completed
+        # state still means the job command returned zero; run_job only returns
+        # zero after writing its completed manifest.
+        success = scheduler_status in TERMINAL_SUCCESS and (
+            run_status == "completed" or (snapshot["regional_artifacts"] and run_status == "not_started")
+        )
         failure = scheduler_status in TERMINAL_FAILURE or run_status in {"failed", "interrupted"}
         if success or failure:
             event = {**snapshot, "event": "cluster_run_terminal", "success": success}
