@@ -91,7 +91,6 @@ def build_job_kwargs(
         "shm_size_class": "large",
         "detached": True,
         "preflight_check": True,
-        "checkpoint_dir": str(runtime_run_dir),
     }
     if queue_name:
         request["queue_name"] = queue_name

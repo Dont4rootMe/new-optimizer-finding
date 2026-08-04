@@ -942,11 +942,31 @@ Bootstrap probes on 2026-08-04:
 |---|---|
 | `lm-mpi-job-e7ce9b6a-8ffc-4d67-897f-98fdfaf4dbdd` | Data Transfer destination appeared as a directory but no copied object/object-log was available; inbound Data Transfer is not the source-code path. |
 | `lm-mpi-job-4c5533eb-d518-4710-bb16-d2d50da60ab5` | One-line Internet git bootstrap was accepted and scheduler-completed with `processes_per_worker=1`; exact-commit checkout path is on regional NFS. |
-| `lm-mpi-job-27f29ff0-b863-4bef-8145-1c283b941663` | Cross-allocation persistence verification submitted; still `Pending` at the last observation. |
+| `lm-mpi-job-27f29ff0-b863-4bef-8145-1c283b941663` | Cross-allocation persistence verified: a later worker read exact `HEAD=7beb67474dd8e6855baaf1f04e0cdbfb461ee836` from the earlier job's regional checkout. |
 
-The next 8×H100 submission must use the git-bootstrap commit containing this
-remediation and a new run ID. The two failed jobs above remain diagnostics, not
-experiment results.
+Current production submission:
+
+| Поле | Значение |
+|---|---|
+| Code | `6b7ae1e24e8fb26afb45acf417e481403db1851d` |
+| Scheduler job | `lm-mpi-job-1024dcb2-e505-4e8a-a255-3805acee66e7` |
+| Submitted/state | 2026-08-04 02:30:48 UTC; `Pending` at last observation |
+| Regional source | `/home/jovyan/evolutionloop-deepseek-v4/source/6b7ae1e24e8fb26afb45acf417e481403db1851d` |
+| Regional run | `/home/jovyan/evolutionloop-deepseek-v4/runs/deepseek-v4-flash-0731-circle-300-6b7ae1e` |
+| Scheduler contract | one `a100plus.8gpu.80vG.96C.1456G` worker, `processes_per_worker=1`; run state lives directly on regional NFS |
+| Control monitor | PID `22377`; 60-second snapshots and terminal completion event under Jupyter-side `runs/optimizer_cluster_runs/...` |
+
+The pinned request is generation 0 plus generations 1–300, DeepSeek-only,
+max eight concurrent organism creations. This remains operational state, not
+an experiment result, until the acceptance checks below pass. The two failed
+full-size jobs above remain diagnostics and must never be aggregated as model
+runs.
+
+Bootstrap smoke `lm-mpi-job-3c02e882-bc28-434f-9ed2-1a3841b66c2a` failed
+before workers became READY and emitted no user-code output. Its only new
+pre-start dependency was `checkpoint_dir` pointing at a run path that the
+bootstrap had not created yet; that scheduler field was removed. Resume does
+not depend on it because the explicit regional `RUN_DIR` is persistent.
 
 Acceptance before calling it debugged: inventory proves exactly eight H100;
 SGLang model revision and concurrent smoke response are persisted; scheduler is

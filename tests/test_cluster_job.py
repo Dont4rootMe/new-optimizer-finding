@@ -63,7 +63,7 @@ def test_submit_contract_uses_one_binary_worker(tmp_path: Path) -> None:
     assert kwargs["n_workers"] == 1
     assert kwargs["processes_per_worker"] == 1
     assert kwargs["detached"] is True
-    assert kwargs["checkpoint_dir"] == str(tmp_path / "runs" / "one")
+    assert "checkpoint_dir" not in kwargs
     assert kwargs["env_variables"]["MAX_GENERATIONS"] == "300"
     assert "queue_name" not in kwargs
 
