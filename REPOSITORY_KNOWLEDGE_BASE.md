@@ -699,6 +699,26 @@ fallback. Exact concrete override по-прежнему имеет приори�
   therefore reports that one expected mismatch even though the audited
   CUDA-12 dependency view is intentional. Do not "fix" it by installing
   CUDA 13 on the heterogeneous SR008 pool.
+- DeepGEMM JIT is a separate compiler boundary. The exact production job
+  `lm-mpi-job-9025f0bf-80f1-4cb6-a32d-2b2fbbeecd1c` proved that the cu126
+  serving runtime loads all 48 checkpoint shards on eight H100s, but the base
+  image's `/usr/local/cuda-12.6/bin/nvcc` rejects the `__int128_t` `"q"`
+  operand in `st.shared.b128` while prewarming DeepSeek-V4 MHC prenorm (all
+  eight TP ranks, 21 `n_splits` buckets). SGLang exited before endpoint
+  readiness; EvolutionLoop never started, no population was created, and token
+  usage remained zero. This is a runtime diagnostic, not an experiment result.
+- The corrective path pins an isolated NVIDIA conda compiler prefix
+  `toolchains/cuda-nvcc-12.9.86`, selected only through
+  `DG_JIT_NVCC_COMPILER`; it does not alter PyTorch cu126 or
+  `LD_LIBRARY_PATH`. `bootstrap_cuda_toolchain.sh` requires an SM90a
+  128-bit-store cubin smoke, and the job runs a numerical
+  `tf32_hc_prenorm_gemm` smoke before loading the model. Compiled kernels use
+  the persistent `kernel_cache/deep_gemm-sm90-cuda-nvcc-12.9.86` namespace.
+  This design follows DeepGEMM's own `>=12.9` performance recommendation and
+  SGLang's NVCC default; the NVRTC alternative remains disabled because
+  upstream explicitly warns that it can reduce performance. Cluster validation
+  of this fix is in progress and must replace this sentence with the job ID and
+  measured outcome.
 - H100 constraint: use stock official FP4 checkpoint and explicitly pin
   SGLang's Hopper W4A16/Marlin runner. Do not force `flashinfer_mxfp4` or other
   Blackwell-only FP4 kernels. BF16 compressed state reduces KV-state memory;
@@ -1006,6 +1026,8 @@ CUDA heterogeneity probe:
 | `lm-mpi-job-6d3a60e0-657f-481f-8ca1-b0a7a740e914` | Three read-only NFS snapshots over 90 seconds showed the new build fixed at 6,574,684,777 bytes / 21,907 files, while the preserved complete environment was 10,224,077,977 bytes / 65,686 files; about 54 GB remained free. This distinguished an `uv` hang from slow copying or ENOSPC. |
 | `lm-mpi-job-04c1ec31-22e7-471e-9bb0-ca92b01846f1` | First promotion gate stopped before mutation because plain `pip check` sees SGLang's deliberate CUDA-13 metadata edge versus the installed audited CUDA-12 dependency. No other inconsistency was reported. |
 | `lm-mpi-job-23c7357b-f551-4d32-bdda-271b42e85593` | Strict promotion accepted only that one known metadata override, checked exact CUDA-12/Hopper package versions and native imports, initialized one H100, wrote ready/freeze artifacts, atomically promoted the preserved complete environment, then passed the canonical bootstrap reuse gate. Scheduler `Completed`. |
+| `lm-mpi-job-efb3aefc-03e7-4d8a-b484-c24aeab08001` | Read-only 1×H100 toolchain probe: Ubuntu 22.04 job image exposes conda at `/home/user/conda/bin/conda` and system `nvcc 12.6.85`. This independently reproduced the compiler version implicated by the 8×H100 MHC failure and established the bootstrap mechanism for the isolated 12.9 prefix. |
+| `lm-mpi-job-9025f0bf-80f1-4cb6-a32d-2b2fbbeecd1c` | Exact `2456f094ec57bc33845d04f87ebdb83ef30964d5` production retry sanitized the driver path, reused the validated cu126 runtime/model cache, initialized NCCL ranks 0–7, and loaded all 48 DeepSeek shards. It then failed before server readiness when `nvcc 12.6.85` rejected DeepGEMM's 128-bit PTX constraint during the 21-bucket MHC prenorm prewarm on every TP rank. No EvolutionLoop state or LLM usage exists. |
 
 Bootstrap smoke `lm-mpi-job-3c02e882-bc28-434f-9ed2-1a3841b66c2a` failed
 before workers became READY and emitted no user-code output. Its only new

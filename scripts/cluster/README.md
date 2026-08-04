@@ -24,6 +24,16 @@ kernels; release 0.4.5's actually published SM90 wheel is cu129), verifies that
 CUDA initializes, and only then publishes the runtime ready marker. Never reuse
 the incompatible legacy `sglang-0.5.16` directory.
 
+DeepGEMM is different from the serving runtime: it JIT-compiles Hopper cubins
+when SGLang encounters a new kernel shape. The base image's `nvcc 12.6.85`
+cannot compile the 128-bit shared-memory operand used by DeepSeek-V4's MHC
+prenorm kernel. `bootstrap_cuda_toolchain.sh` therefore creates a separate
+NVIDIA conda prefix, `cuda-nvcc-12.9.86`, and validates both an SM90a cubin and
+the real `tf32_hc_prenorm_gemm` path before model loading. Only the compiler
+path is exported through `DG_JIT_NVCC_COMPILER`; its libraries are never added
+to `LD_LIBRARY_PATH`, so PyTorch remains on the portable cu126 runtime. The
+persistent `SGLANG_DG_CACHE_DIR` reuses compiled kernels across job retries.
+
 Before any GPU Python process starts, `cuda_driver_env.sh` removes CUDA
 forward-compatibility directories from `LD_LIBRARY_PATH`. ML Space mounts the
 node's real driver under its native paths; preferring an older image-bundled

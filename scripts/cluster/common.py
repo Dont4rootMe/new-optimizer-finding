@@ -21,6 +21,8 @@ MODEL_REVISION = "7872f01b1d1fe23eabc4c98b48bffcef5a386062"
 SGLANG_VERSION = "0.5.16"
 SGLANG_CUDA_VARIANT = "cu126"
 SGLANG_RUNTIME_ID = f"sglang-{SGLANG_VERSION}-{SGLANG_CUDA_VARIANT}"
+DEEPGEMM_NVCC_VERSION = "12.9.86"
+DEEPGEMM_TOOLCHAIN_ID = f"cuda-nvcc-{DEEPGEMM_NVCC_VERSION}"
 SERVED_MODEL_NAME = MODEL_ID
 
 REGION = "SR008"
@@ -97,7 +99,13 @@ def read_json_if_present(path: str | Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def build_git_bootstrap_command(*, repository_url: str, commit: str, job_root: Path) -> str:
+def build_git_bootstrap_command(
+    *,
+    repository_url: str,
+    commit: str,
+    job_root: Path,
+    entrypoint: str = "scripts/cluster/run_deepseek_v4_circle.sh",
+) -> str:
     """Build a validation-safe one-line job command that checks out one commit.
 
     SR008 does not mount the submitting Jupyter server's NFS namespace.  The
@@ -111,6 +119,9 @@ def build_git_bootstrap_command(*, repository_url: str, commit: str, job_root: P
     root = require_regional_job_path(job_root, label="regional job root")
     if not repository_url.startswith("https://"):
         raise ValueError("cluster bootstrap repository URL must use HTTPS")
+    entrypoint_path = Path(entrypoint)
+    if entrypoint_path.is_absolute() or ".." in entrypoint_path.parts:
+        raise ValueError(f"cluster entrypoint must be a safe repository-relative path: {entrypoint}")
 
     payload = f'''import os
 import pathlib
@@ -127,6 +138,7 @@ if rank != 0:
 
 job_root = pathlib.Path({str(root)!r})
 commit = {commit!r}
+entrypoint = {entrypoint!r}
 project_root = job_root / "source" / commit
 project_root.parent.mkdir(parents=True, exist_ok=True)
 if not (project_root / ".git").is_dir():
@@ -146,7 +158,10 @@ if head != commit:
     raise RuntimeError(f"source verification failed: expected {{commit}}, got {{head}}")
 os.environ["PROJECT_ROOT"] = str(project_root)
 print(f"[git-bootstrap] verified commit={{commit}} project_root={{project_root}}", flush=True)
-os.execv("/bin/bash", ["bash", str(project_root / "scripts" / "cluster" / "run_deepseek_v4_circle.sh")])
+runtime_entrypoint = project_root / entrypoint
+if not runtime_entrypoint.is_file():
+    raise RuntimeError(f"cluster entrypoint does not exist: {{runtime_entrypoint}}")
+os.execv("/bin/bash", ["bash", str(runtime_entrypoint)])
 '''
     encoded = base64.b64encode(payload.encode("utf-8")).decode("ascii")
     return f"python3 -c 'import base64;exec(base64.b64decode(\"{encoded}\"))'"

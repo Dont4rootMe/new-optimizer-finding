@@ -21,6 +21,8 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 from scripts.cluster.common import (
+    DEEPGEMM_NVCC_VERSION,
+    DEEPGEMM_TOOLCHAIN_ID,
     MODEL_ID,
     MODEL_REVISION,
     SGLANG_CUDA_VARIANT,
@@ -211,6 +213,20 @@ def main() -> int:
         ),
         label="DEEPSEEK_ENV_DIR",
     )
+    toolchain_dir = require_absolute_safe_path(
+        os.environ.get(
+            "DEEPGEMM_CUDA_TOOLCHAIN_DIR",
+            str(project_root.parent / ".inference_toolchains" / DEEPGEMM_TOOLCHAIN_ID),
+        ),
+        label="DEEPGEMM_CUDA_TOOLCHAIN_DIR",
+    )
+    deep_gemm_cache_dir = require_absolute_safe_path(
+        os.environ.get(
+            "SGLANG_DG_CACHE_DIR",
+            str(project_root.parent / ".inference_kernel_cache" / DEEPGEMM_TOOLCHAIN_ID),
+        ),
+        label="SGLANG_DG_CACHE_DIR",
+    )
     hf_home = require_absolute_safe_path(
         os.environ.get("HF_HOME", str(project_root.parent / ".model_cache" / "huggingface")),
         label="HF_HOME",
@@ -240,6 +256,12 @@ def main() -> int:
         "model": {"id": MODEL_ID, "revision": MODEL_REVISION},
         "sglang_version": SGLANG_VERSION,
         "sglang_cuda_variant": SGLANG_CUDA_VARIANT,
+        "deep_gemm_toolchain": {
+            "id": DEEPGEMM_TOOLCHAIN_ID,
+            "nvcc_version": DEEPGEMM_NVCC_VERSION,
+            "path": str(toolchain_dir),
+            "kernel_cache": str(deep_gemm_cache_dir),
+        },
         "cuda_driver_environment": {
             "ld_library_path": os.environ.get("LD_LIBRARY_PATH", ""),
             "compat_path_present": any(
@@ -266,6 +288,11 @@ def main() -> int:
             "HF_HOME": str(hf_home),
             "HF_XET_HIGH_PERFORMANCE": "1",
             "SGLANG_DSV4_COMPRESS_STATE_DTYPE": "bf16",
+            "DEEPGEMM_CUDA_TOOLCHAIN_DIR": str(toolchain_dir),
+            "DEEPGEMM_NVCC_VERSION": DEEPGEMM_NVCC_VERSION,
+            "DG_JIT_NVCC_COMPILER": str(toolchain_dir / "bin" / "nvcc"),
+            "DG_JIT_PRINT_COMPILER_COMMAND": "1",
+            "SGLANG_DG_CACHE_DIR": str(deep_gemm_cache_dir),
             "PYTHONUNBUFFERED": "1",
             "PYTHONPATH": str(project_root)
             + (os.pathsep + environment["PYTHONPATH"] if environment.get("PYTHONPATH") else ""),
@@ -297,12 +324,35 @@ def main() -> int:
         atomic_write_json(manifest_path, manifest)
 
         _run_checked(
+            ["bash", str(project_root / "scripts" / "cluster" / "bootstrap_cuda_toolchain.sh")],
+            cwd=project_root,
+            env=environment,
+        )
+        _run_checked(
             ["bash", str(project_root / "scripts" / "cluster" / "bootstrap_deepseek_env.sh")],
             cwd=project_root,
             env=environment,
         )
         env_python = str(env_dir / "bin" / "python")
         environment["PATH"] = str(env_dir / "bin") + os.pathsep + environment.get("PATH", "")
+        deep_gemm_cache_dir.mkdir(parents=True, exist_ok=True)
+        _run_checked(
+            [
+                env_python,
+                "-m",
+                "scripts.cluster.smoke_deepgemm_toolchain",
+                "--compiler",
+                environment["DG_JIT_NVCC_COMPILER"],
+                "--cache-dir",
+                str(deep_gemm_cache_dir),
+                "--expected-version",
+                DEEPGEMM_NVCC_VERSION,
+                "--output",
+                str(run_dir / "deepgemm_toolchain_smoke.json"),
+            ],
+            cwd=project_root,
+            env=environment,
+        )
 
         model_manifest_path = run_dir / "model_snapshot.json"
         _run_checked(
@@ -335,6 +385,9 @@ def main() -> int:
             run_dir / "sglang_launch.json",
             {"created_at": utc_now(), "argv": server_command, "environment": {
                 "SGLANG_DSV4_COMPRESS_STATE_DTYPE": environment["SGLANG_DSV4_COMPRESS_STATE_DTYPE"],
+                "DG_JIT_NVCC_COMPILER": environment["DG_JIT_NVCC_COMPILER"],
+                "DG_JIT_PRINT_COMPILER_COMMAND": environment["DG_JIT_PRINT_COMPILER_COMMAND"],
+                "SGLANG_DG_CACHE_DIR": environment["SGLANG_DG_CACHE_DIR"],
                 "HF_HOME": str(hf_home),
                 "LD_LIBRARY_PATH": environment.get("LD_LIBRARY_PATH", ""),
             }},

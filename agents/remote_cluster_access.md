@@ -78,6 +78,8 @@ Runtime layout:
 /home/jovyan/evolutionloop-deepseek-v4/
   source/<full-git-commit>/
   runtime/sglang-0.5.16-cu126/
+  toolchains/cuda-nvcc-12.9.86/
+  kernel_cache/deep_gemm-sm90-cuda-nvcc-12.9.86/
   model_cache/huggingface/
   runs/<run-id>/
 ```
@@ -86,6 +88,9 @@ The runtime name is a compatibility boundary, not decoration. Never reuse the
 legacy `runtime/sglang-0.5.16/` CUDA-13 environment on the heterogeneous SR008
 driver pool. The cu126 runtime must pass its ready-marker/live-CUDA gate with
 CUDA `compat` paths removed as documented in `scripts/cluster/README.md`.
+DeepGEMM's JIT is compiled separately with pinned `nvcc 12.9.86`; do not add
+that compiler prefix to `LD_LIBRARY_PATH` or replace the portable cu126 serving
+runtime with its libraries.
 
 The submitter uses the verified job-compatible image
 `cr.ai.cloud.ru/2754eb6e-ae19-4123-87ce-06ec3cc96500/job-latentdiffusion:flash-clear`,

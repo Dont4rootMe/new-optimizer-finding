@@ -10,6 +10,8 @@ from typing import Any
 
 from scripts.cluster.common import (
     BASE_IMAGE,
+    DEEPGEMM_NVCC_VERSION,
+    DEEPGEMM_TOOLCHAIN_ID,
     INSTANCE_TYPE,
     MODEL_REVISION,
     REGION,
@@ -63,6 +65,13 @@ def build_job_kwargs(
         "RUN_DIR": str(runtime_run_dir),
         "JOB_ROOT": str(runtime_shared_root),
         "DEEPSEEK_ENV_DIR": str(runtime_shared_root / "runtime" / SGLANG_RUNTIME_ID),
+        "DEEPGEMM_CUDA_TOOLCHAIN_DIR": str(
+            runtime_shared_root / "toolchains" / DEEPGEMM_TOOLCHAIN_ID
+        ),
+        "DEEPGEMM_NVCC_VERSION": DEEPGEMM_NVCC_VERSION,
+        "SGLANG_DG_CACHE_DIR": str(
+            runtime_shared_root / "kernel_cache" / f"deep_gemm-sm90-{DEEPGEMM_TOOLCHAIN_ID}"
+        ),
         "HF_HOME": str(runtime_shared_root / "model_cache" / "huggingface"),
         "SGLANG_VERSION": SGLANG_VERSION,
         "SGLANG_CUDA_VARIANT": SGLANG_CUDA_VARIANT,

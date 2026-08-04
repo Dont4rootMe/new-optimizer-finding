@@ -8,6 +8,8 @@ import os
 import subprocess
 
 from scripts.cluster.common import (
+    DEEPGEMM_NVCC_VERSION,
+    DEEPGEMM_TOOLCHAIN_ID,
     SGLANG_RUNTIME_ID,
     build_evolution_command,
     build_git_bootstrap_command,
@@ -16,6 +18,7 @@ from scripts.cluster.common import (
 from scripts.cluster.sglang_runtime import cuda126_requirements
 from scripts.cluster.monitor import collect_progress, monitor, normalize_scheduler_status
 from scripts.cluster.submit import build_job_kwargs
+from scripts.cluster.smoke_deepgemm_toolchain import parse_nvcc_version
 from scripts.cluster.transfer import connector_path, wait_for_transfer
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,7 +74,21 @@ def test_submit_contract_uses_one_binary_worker(tmp_path: Path) -> None:
     assert kwargs["env_variables"]["MAX_GENERATIONS"] == "300"
     assert kwargs["env_variables"]["SGLANG_CUDA_VARIANT"] == "cu126"
     assert kwargs["env_variables"]["DEEPSEEK_ENV_DIR"].endswith(SGLANG_RUNTIME_ID)
+    assert kwargs["env_variables"]["DEEPGEMM_NVCC_VERSION"] == "12.9.86"
+    assert kwargs["env_variables"]["DEEPGEMM_CUDA_TOOLCHAIN_DIR"].endswith(
+        DEEPGEMM_TOOLCHAIN_ID
+    )
+    assert DEEPGEMM_TOOLCHAIN_ID in kwargs["env_variables"]["SGLANG_DG_CACHE_DIR"]
     assert "queue_name" not in kwargs
+
+
+def test_deepgemm_compiler_contract_is_exact_and_parseable() -> None:
+    assert DEEPGEMM_NVCC_VERSION == "12.9.86"
+    output = "Cuda compilation tools, release 12.9, V12.9.86\n"
+    assert parse_nvcc_version(output) == DEEPGEMM_NVCC_VERSION
+    helper = ROOT / "scripts" / "cluster" / "bootstrap_cuda_toolchain.sh"
+    assert helper.is_file()
+    assert 'DEEPGEMM_NVCC_VERSION:-12.9.86' in helper.read_text(encoding="utf-8")
 
 
 def test_sglang_runtime_rewrites_cuda13_metadata_to_audited_cuda126_wheels() -> None:
@@ -130,6 +147,27 @@ def test_submit_contract_can_target_isolated_regional_nfs(tmp_path: Path) -> Non
     )
     assert completed.returncode == 0
     assert "owned by rank 0" in completed.stdout
+
+
+def test_git_bootstrap_can_select_safe_diagnostic_entrypoint() -> None:
+    bootstrap = build_git_bootstrap_command(
+        repository_url="https://github.com/example/project.git",
+        commit="b" * 40,
+        job_root=Path("/home/jovyan/evolutionloop-deepseek-v4"),
+        entrypoint="scripts/cluster/run_deepgemm_toolchain_smoke.sh",
+    )
+    assert "run_deepseek_v4_circle.sh" not in bootstrap
+    try:
+        build_git_bootstrap_command(
+            repository_url="https://github.com/example/project.git",
+            commit="b" * 40,
+            job_root=Path("/home/jovyan/evolutionloop-deepseek-v4"),
+            entrypoint="../outside.sh",
+        )
+    except ValueError as exc:
+        assert "safe repository-relative" in str(exc)
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("unsafe diagnostic entrypoints must be rejected")
 
 
 def test_binary_entrypoint_nonzero_rank_exits_before_shared_state_access() -> None:
