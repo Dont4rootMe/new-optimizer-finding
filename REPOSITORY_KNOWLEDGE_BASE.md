@@ -756,6 +756,16 @@ fallback. Exact concrete override по-прежнему имеет приори�
   detached, `processes_per_worker=1`. Без последнего параметра даже `binary`
   был экспериментально запущен на восьми MPI ranks; rank guard остаётся
   defense-in-depth. `pytorch2` запрещён для этого path.
+- Naming protocol (prospective from 2026-08-04): `scripts.cluster.submit`
+  deliberately has no default `--run-id`. The human operator must approve and
+  supply every run label; agents may not invent one. The value becomes both the
+  scheduler-visible `job_desc` label and durable artifact namespace, while
+  Cloud.ru independently assigns `lm-mpi-job-<uuid>`. Human-selected labels
+  must be model/provider/revision-neutral and truthfully describe the workload;
+  names of unrelated projects are not aliases. Historical paths and job
+  identifiers below are retained verbatim for audit and are not retroactively
+  renamed. The already running generation-300 job is not restarted for this
+  metadata-only policy.
 - Jupyter NFS и SR008 regional NFS — разные namespaces. Canonical submit
   передаёт validation-safe one-line bootstrap, клонирует public Git repository
   в `/home/jovyan/evolutionloop-deepseek-v4/source/<full-commit>`, fetch/checkout
@@ -1273,6 +1283,11 @@ git diff --stat origin/master...origin/<branch>
 
 ## Change log этой базы
 
+- **2026-08-04, cluster naming protocol:** future submissions now require an
+  explicit human-approved `--run-id`; agents may neither invent a label nor use
+  a default. Scheduler-visible labels are provider/model/revision-neutral but
+  must remain truthful. Historical and active identifiers are preserved
+  verbatim, and the accepted production run was not restarted.
 - **2026-08-04, TP=8 cold-start post-mortem:** production job
   `lm-mpi-job-e28269e2-eaf1-4d42-8c67-cac66c0cedb3` proved the optimized
   DeepGEMM/MHC and custom-all-reduce paths, then found missing `curand.h` in the

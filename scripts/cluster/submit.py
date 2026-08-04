@@ -121,7 +121,14 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", required=True, help="absolute NFS path to this branch clone")
     parser.add_argument("--run-base", help="absolute directory for durable run folders")
-    parser.add_argument("--run-id", default="deepseek-v4-flash-0731-circle-300")
+    parser.add_argument(
+        "--run-id",
+        required=True,
+        help=(
+            "human-approved run label; used in the scheduler-visible description "
+            "and durable artifact namespace (there is intentionally no default)"
+        ),
+    )
     parser.add_argument("--config-name", default="config_circle_packing_shinka")
     parser.add_argument("--backbone", default="deepseek_v4_flash_0731")
     parser.add_argument("--max-generations", type=int, default=300)

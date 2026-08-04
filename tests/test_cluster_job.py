@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -198,6 +199,26 @@ def test_submit_cli_exposes_canonical_and_diagnostic_entrypoints() -> None:
     assert '"--entrypoint"' in submitter
     assert 'default="scripts/cluster/run_deepseek_v4_circle.sh"' in submitter
     assert "entrypoint=args.entrypoint" in submitter
+
+
+def test_submit_cli_requires_a_human_selected_run_id() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.cluster.submit",
+            "--project-root",
+            "/tmp/project",
+            "--dry-run",
+        ],
+        cwd=str(ROOT),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 2
+    assert "--run-id" in completed.stderr
+    assert "required" in completed.stderr
 
 
 def test_binary_entrypoint_nonzero_rank_exits_before_shared_state_access() -> None:

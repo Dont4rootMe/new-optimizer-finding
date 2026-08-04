@@ -76,8 +76,15 @@ Run through the environment bridge documented in
 ```bash
 bash "$MLS_ENV" "$MLS_PY" -m scripts.cluster.submit \
   --project-root /absolute/nfs/path/to/this-branch-clone \
-  --run-id deepseek-v4-flash-0731-circle-300
+  --run-id '<human-approved-run-id>'
 ```
+
+`--run-id` deliberately has no default. The human operator must choose it
+before every submission; agents must not infer or generate one. It becomes the
+scheduler-visible `job_desc` label and the durable artifact namespace. Cloud.ru
+still assigns the separate immutable technical identifier
+`lm-mpi-job-<uuid>`. Do not put a backbone provider/model/revision name in the
+chosen label, and do not describe the run as an unrelated workload.
 
 SR008 does **not** mount the Jupyter server's NFS tree into a job. By default
 the submitter embeds a stdlib-only bootstrap that clones the public repository
@@ -97,7 +104,7 @@ the checked-in diagnostic entrypoint:
 ```bash
 bash "$MLS_ENV" "$MLS_PY" -m scripts.cluster.submit \
   --project-root /absolute/nfs/path/to/this-branch-clone \
-  --run-id deepseek-toolchain-acceptance-<sha> \
+  --run-id '<human-approved-acceptance-run-id>' \
   --instance-type a100plus.1gpu.80vG.12C.182G \
   --entrypoint scripts/cluster/run_deepgemm_toolchain_smoke.sh
 ```
@@ -110,7 +117,7 @@ for production; the default remains `run_deepseek_v4_circle.sh`.
 ```bash
 bash "$MLS_ENV" "$MLS_PY" -m scripts.cluster.monitor \
   --job-name lm-mpi-job-... \
-  --run-dir /absolute/nfs/path/optimizer_cluster_runs/deepseek-v4-flash-0731-circle-300
+  --run-dir /absolute/nfs/path/optimizer_cluster_runs/<human-approved-run-id>
 ```
 
 The monitor writes `monitor_status.json`, append-only `monitor_history.jsonl`,

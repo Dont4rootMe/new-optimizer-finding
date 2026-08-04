@@ -18,6 +18,23 @@ those areas is incomplete without the corresponding database update. Record
 the audit date and relevant commit/ref, distinguish verified facts from
 hypotheses, and never copy credentials or secrets into the database.
 
+# CLUSTER JOB NAMES — HUMAN-SELECTED, NEVER AGENT-INVENTED
+
+The human operator must explicitly choose every cluster `run_id`. An agent must
+never invent, infer, auto-generate, or silently accept a default run/job label.
+If the operator has not supplied the name, stop before submission and ask for
+it. Pass the exact approved value through `scripts.cluster.submit --run-id`;
+that value is used in the scheduler-visible job description and as the durable
+artifact namespace. Cloud.ru separately assigns the immutable technical ID
+`lm-mpi-job-<uuid>`, which is not user-selectable.
+
+User-chosen scheduler-visible labels must not contain backbone provider, model,
+or revision names such as `deepseek`, `qwen`, or `gemma`. Keep labels accurate
+to the actual workload; this naming rule does not authorize presenting a job as
+an unrelated project. Never rename or restart an active job merely to apply a
+new label: record its historical identifier verbatim and apply this protocol to
+the next submission.
+
 For a historical deep walkthrough of the evolutionary pipeline and the 426-,
 1516-, and 491-organism atcoder post-mortems, also read `FRAMEWORK.md`. It is a
 valuable post-mortem but contains behavior that has since been superseded; use
