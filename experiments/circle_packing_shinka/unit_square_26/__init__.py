@@ -44,7 +44,7 @@ class UnitSquare26CirclePackingExperiment:
             num_circles=expected_num_circles,
         )
 
-        validate_circle_packing(
+        actual_sum = validate_circle_packing(
             centers=centers,
             radii=radii,
             reported_sum=reported_sum,
@@ -63,12 +63,15 @@ class UnitSquare26CirclePackingExperiment:
 
         return {
             "status": "ok",
-            "score": float(reported_sum),
+            # Score the evaluator-computed objective, never a candidate-owned
+            # self-report (the latter is retained only as a diagnostic).
+            "score": float(actual_sum),
             "objective_name": "sum_of_radii",
             "objective_direction": "max",
-            "objective_last": float(reported_sum),
+            "objective_last": float(actual_sum),
             "num_circles": int(centers.shape[0]),
             "reported_sum_of_radii": float(reported_sum),
+            "actual_sum_of_radii": float(actual_sum),
             "centers_str": format_centers_string(centers),
             "candidate_module_path": str(module_path),
             "extra_npz_path": extra_path,

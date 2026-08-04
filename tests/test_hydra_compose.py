@@ -227,7 +227,8 @@ def test_circle_packing_shinka_config_composes() -> None:
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 20
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
-    assert cfg.evolver.max_generations == 150
+    # Commit 2b0f9e9 intentionally extended the canonical long run to 700.
+    assert cfg.evolver.max_generations == 700
     assert cfg.evolver.max_organism_creations is False
     # Optional per-model token-budget stop: present and disabled by default.
     assert set(cfg.evolver.max_tokens_per_model.keys()) == {
@@ -323,7 +324,8 @@ def test_awtf2025_heuristic_config_composes() -> None:
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 25
     assert cfg.paths.ollama_cache_root == "./ollama_cache"
-    assert cfg.evolver.max_generations == 150
+    # Commit 2b0f9e9 intentionally extended the canonical long run to 700.
+    assert cfg.evolver.max_generations == 700
     # Optional per-model token-budget stop: present and disabled by default.
     assert set(cfg.evolver.max_tokens_per_model.keys()) == {
         "ollama_gemma4_31b",
@@ -439,6 +441,33 @@ def test_co_bench_config_defaults_to_tsp() -> None:
     assert str(cfg.evolver.prompts.project_context).endswith(
         "co-bench/prompts/tsp/project_context.txt"
     )
+
+
+def test_circle_packing_can_swap_to_deepseek_v4_with_one_backbone_override() -> None:
+    conf_dir = ROOT / "conf"
+    with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
+        cfg = compose(
+            config_name="config_circle_packing_shinka",
+            overrides=["backbone=deepseek_v4_flash_0731"],
+        )
+
+    assert cfg.backbone.id == "deepseek_v4_flash_0731"
+    assert set(cfg.api_platforms) == {"deepseek_v4_flash_0731"}
+    assert set(cfg.evolver.max_tokens_per_model) == {"deepseek_v4_flash_0731"}
+    assert set(cfg.evolver.llm.route_weights) == {"deepseek_v4_flash_0731"}
+    assert [pipeline.id for pipeline in cfg.evolver.llm.pipelines] == [
+        "deepseek_v4_flash_only"
+    ]
+    assert set(cfg.evolver.llm.pipelines[0].stages.values()) == {
+        "deepseek_v4_flash_0731"
+    }
+    route = instantiate(cfg.api_platforms.deepseek_v4_flash_0731, _recursive_=False)
+    assert route.backend == "openai_compatible"
+    assert route.provider_model_id == "deepseek-ai/DeepSeek-V4-Flash-0731"
+    assert route.gpu_ranks == list(range(8))
+    assert route.max_concurrency == 8
+    assert route.stage_options["rationalization"]["reasoning_effort"] == "high"
+    assert route.stage_options["implementation"]["reasoning_effort"] == "low"
 
 
 @pytest.mark.parametrize("identifier", sorted(CO_BENCH_TASKS))

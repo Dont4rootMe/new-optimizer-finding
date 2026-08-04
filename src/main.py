@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import hydra
 from omegaconf import DictConfig
 
@@ -29,4 +31,12 @@ def main(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
+    if not any(
+        arg == "--config-name" or arg.startswith("--config-name=")
+        for arg in sys.argv[1:]
+    ):
+        raise SystemExit(
+            "Error: src.main requires an explicit Hydra preset via "
+            "--config-name <preset>."
+        )
     main()

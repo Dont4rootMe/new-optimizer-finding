@@ -1,0 +1,71 @@
+# @package _global_
+# One DeepSeek-V4-Flash-0731 server is the sole backbone for every LLM stage.
+# The server itself is launched by scripts/cluster/run_deepseek_v4_circle.sh.
+
+backbone:
+  id: deepseek_v4_flash_0731
+  description: DeepSeek-V4-Flash-0731 via an OpenAI-compatible SGLang endpoint
+  serving_engine: sglang
+
+api_platforms:
+  deepseek_v4_flash_0731:
+    _target_: api_platforms.route.build_platform
+    route_id: deepseek_v4_flash_0731
+    provider: deepseek
+    provider_model_id: deepseek-ai/DeepSeek-V4-Flash-0731
+    backend: openai_compatible
+    base_url: ${oc.env:DEEPSEEK_V4_BASE_URL,http://127.0.0.1:30000/v1}
+    api_key_env: null
+    gpu_ranks: [0, 1, 2, 3, 4, 5, 6, 7]
+    max_concurrency: 8
+    timeout_sec: 3600
+    max_retries: 2
+    temperature: 1.0
+    top_p: 0.95
+    top_k: null
+    max_output_tokens: 32768
+    reasoning_effort: high
+    request_options: {}
+    stage_options:
+      rationalization:
+        reasoning_effort: high
+        max_output_tokens: 32768
+      design:
+        reasoning_effort: high
+        max_output_tokens: 32768
+      implementation:
+        reasoning_effort: low
+        max_output_tokens: 16384
+      novelty:
+        reasoning_effort: low
+        max_output_tokens: 8192
+      repair:
+        reasoning_effort: high
+        max_output_tokens: 16384
+
+evolver:
+  max_tokens_per_model:
+    deepseek_v4_flash_0731: false
+  llm:
+    route_weights:
+      deepseek_v4_flash_0731: 1.0
+    pipelines:
+      - id: deepseek_v4_flash_only
+        stages:
+          rationalization: deepseek_v4_flash_0731
+          design: deepseek_v4_flash_0731
+          implementation: deepseek_v4_flash_0731
+          novelty: deepseek_v4_flash_0731
+          repair: deepseek_v4_flash_0731
+    pipeline_sampling:
+      strategy: weighted_static
+      weights:
+        deepseek_v4_flash_only: 1.0
+      bandit:
+        algorithm: discounted_thompson
+        discount: 0.97
+        prior_alpha: 1.0
+        prior_beta: 1.0
+        reward_mode: score_quantile
+        reward_window: 50
+        survival_weight: 0.3

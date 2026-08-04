@@ -1,0 +1,65 @@
+# @package _global_
+# Legacy two-model backbone, centralized as one swappable profile.
+defaults:
+  - /api_platforms@api_platforms.ollama_gemma4_31b: ollama_gemma4_31b
+  - /api_platforms@api_platforms.ollama_qwen35_122b: ollama_qwen35_122b
+  - _self_
+
+backbone:
+  id: ollama_qwen122_gemma31
+  description: Qwen 3.5 122B for creative stages; Gemma 4 31B for checks and repair
+  serving_engine: ollama
+
+api_platforms:
+  ollama_gemma4_31b:
+    base_url: ${oc.env:OLLAMA_GEMMA4_31B_BASE_URL,http://127.0.0.1:12454/api}
+    gpu_ranks:
+      - [6]
+      - [7]
+    max_concurrency: 3
+    stage_options:
+      design:
+        think: false
+        max_output_tokens: 9000
+      implementation:
+        think: false
+        max_output_tokens: 9000
+      repair:
+        think: false
+        max_output_tokens: 9000
+      novelty_check:
+        think: false
+        max_output_tokens: 9000
+
+  ollama_qwen35_122b:
+    base_url: ${oc.env:OLLAMA_QWEN35_122B_BASE_URL,http://127.0.0.1:12422/api}
+    gpu_ranks:
+      - [0, 1, 2]
+      - [3, 4, 5]
+    max_concurrency: 4
+
+evolver:
+  max_tokens_per_model:
+    ollama_gemma4_31b: false
+    ollama_qwen35_122b: false
+  llm:
+    route_weights:
+      ollama_gemma4_31b: 1.0
+    pipelines:
+      - id: qwen_creative_gemma_check
+        stages:
+          rationalization: ollama_qwen35_122b
+          design: ollama_qwen35_122b
+          implementation: ollama_qwen35_122b
+          novelty: ollama_gemma4_31b
+          repair: ollama_gemma4_31b
+    pipeline_sampling:
+      strategy: bandit
+      bandit:
+        algorithm: discounted_thompson
+        discount: 0.97
+        prior_alpha: 1.0
+        prior_beta: 1.0
+        reward_mode: score_quantile
+        reward_window: 50
+        survival_weight: 0.3

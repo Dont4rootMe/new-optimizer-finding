@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
@@ -32,7 +33,7 @@ def mean_score(
                 parsed_score = float(score) if score is not None else None
             except (TypeError, ValueError):
                 parsed_score = None
-            if parsed_score is not None and parsed_score != parsed_score:
+            if parsed_score is not None and not math.isfinite(parsed_score):
                 parsed_score = None
             if status not in {"ok", "failed", "partial", "timeout", "skipped", "interrupted"}:
                 status = "failed"

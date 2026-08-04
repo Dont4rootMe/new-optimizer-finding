@@ -1,0 +1,17 @@
+# @package _global_
+defaults:
+  - /api_platforms@api_platforms.mock: mock
+  - _self_
+
+backbone:
+  id: mock
+  description: Deterministic no-network route for tests and smoke runs
+  serving_engine: in_process_mock
+
+evolver:
+  max_tokens_per_model:
+    mock: false
+  llm:
+    route_weights:
+      mock: 1.0
+    pipelines: []

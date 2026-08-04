@@ -90,7 +90,8 @@ def test_circle_packing_config_composes() -> None:
     assert cfg.evolver.phases.great_filter.enabled is False
     assert cfg.resources.evaluation.gpu_ranks == []
     assert cfg.resources.evaluation.cpu_parallel_jobs == 20
-    assert cfg.evolver.max_generations == 150
+    # Commit 2b0f9e9 intentionally extended the canonical long run to 700.
+    assert cfg.evolver.max_generations == 700
     assert cfg.evolver.max_organism_creations is False
     # Optional per-model token-budget stop: present and disabled (false) by
     # default for every route.
@@ -127,6 +128,19 @@ def test_circle_packing_evaluator_accepts_valid_candidate(tmp_path: Path) -> Non
     assert report["score"] == pytest.approx(1.04)
     assert report["num_circles"] == 26
     assert Path(report["extra_npz_path"]).exists()
+
+
+def test_circle_packing_rejects_relative_tolerance_score_inflation(tmp_path: Path) -> None:
+    cfg = _compose_circle_cfg(tmp_path)
+    experiment = instantiate(cfg.experiments.unit_square_26, _recursive_=False)
+    inflated_code = VALID_CODE.replace(
+        "reported_sum = float(np.sum(radii))",
+        "reported_sum = float(np.sum(radii)) + 5.0e-6",
+    )
+    organism_dir = _write_organism_dir(tmp_path, inflated_code)
+
+    with pytest.raises(ValueError, match="does not match reported_sum"):
+        experiment.evaluate_organism(str(organism_dir), cfg.experiments.unit_square_26)
 
 
 @pytest.mark.parametrize(

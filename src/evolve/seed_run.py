@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from pathlib import Path
 
 import hydra
@@ -22,6 +23,9 @@ def run_seed_population(cfg: DictConfig) -> dict:
 
     population_root = Path(str(cfg.paths.population_root)).expanduser().resolve()
     _ensure_file_logging(population_root, "seed_run.log")
+    from src.evolve.token_usage import ensure_usage_jsonl_logging
+
+    ensure_usage_jsonl_logging(population_root)
 
     from src.evolve.evolution_loop import EvolutionLoop
 
@@ -97,4 +101,12 @@ def main(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
+    if not any(
+        arg == "--config-name" or arg.startswith("--config-name=")
+        for arg in sys.argv[1:]
+    ):
+        raise SystemExit(
+            "Error: src.evolve.seed_run requires an explicit Hydra preset via "
+            "--config-name <preset>."
+        )
     main()

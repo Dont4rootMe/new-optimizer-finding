@@ -57,7 +57,7 @@ for arg in "$@"; do
 done
 
 has_config_name=0
-for arg in "${forward_args[@]}"; do
+for arg in ${forward_args[@]+"${forward_args[@]}"}; do
   case "$arg" in
     --config-name|--config-name=*)
       has_config_name=1
@@ -72,11 +72,11 @@ if [[ "$has_config_name" -ne 1 ]]; then
   exit 2
 fi
 
-arm_ollama_cleanup_trap "$ROOT_DIR" "${forward_args[@]}"
-kill_ollama_runtime "$ROOT_DIR" "${forward_args[@]}"
+arm_ollama_cleanup_trap "$ROOT_DIR" ${forward_args[@]+"${forward_args[@]}"}
+kill_ollama_runtime "$ROOT_DIR" ${forward_args[@]+"${forward_args[@]}"}
 
 inspect_population_state() {
-  "${PYTHON_BIN}" - "$ROOT_DIR" "__codex_inspect_population__" "${forward_args[@]}" <<'PY'
+  "${PYTHON_BIN}" - "$ROOT_DIR" "__codex_inspect_population__" ${forward_args[@]+"${forward_args[@]}"} <<'PY'
 from __future__ import annotations
 
 import json
@@ -178,7 +178,10 @@ prompt_seed_now() {
 }
 
 if [[ "$auto_seed" -eq 1 ]]; then
-  mapfile -t seed_inspect < <(inspect_population_state)
+  seed_inspect=()
+  while IFS= read -r inspect_line; do
+    seed_inspect+=("$inspect_line")
+  done < <(inspect_population_state)
   population_root="${seed_inspect[0]}"
   population_status="${seed_inspect[1]:-ready}"
   population_message="${seed_inspect[2]:-}"
@@ -188,11 +191,11 @@ if [[ "$auto_seed" -eq 1 ]]; then
       ;;
     missing_state)
       echo "Generation 0 population is missing in ${population_root}; running seed_population.sh first."
-      "${SCRIPT_DIR}/seed_population.sh" "${forward_args[@]}"
+      "${SCRIPT_DIR}/seed_population.sh" ${forward_args[@]+"${forward_args[@]}"}
       ;;
     inflight_seed)
       echo "${population_message}"
-      "${SCRIPT_DIR}/seed_population.sh" "${forward_args[@]}"
+      "${SCRIPT_DIR}/seed_population.sh" ${forward_args[@]+"${forward_args[@]}"}
       ;;
     empty_population|stale_missing_state)
       echo "${population_message}"
@@ -204,7 +207,7 @@ if [[ "$auto_seed" -eq 1 ]]; then
         echo "Backing up stale population root to ${backup_root} before reseeding."
         mv "${population_root}" "${backup_root}"
       fi
-      "${SCRIPT_DIR}/seed_population.sh" "${forward_args[@]}"
+      "${SCRIPT_DIR}/seed_population.sh" ${forward_args[@]+"${forward_args[@]}"}
       ;;
     *)
       echo "Unexpected seed inspection status '${population_status}' for ${population_root}." >&2
@@ -212,7 +215,10 @@ if [[ "$auto_seed" -eq 1 ]]; then
       ;;
   esac
 
-  mapfile -t post_seed_inspect < <(inspect_population_state)
+  post_seed_inspect=()
+  while IFS= read -r inspect_line; do
+    post_seed_inspect+=("$inspect_line")
+  done < <(inspect_population_state)
   post_seed_status="${post_seed_inspect[1]:-ready}"
   post_seed_message="${post_seed_inspect[2]:-}"
   if [[ "$post_seed_status" != "ready" ]]; then
@@ -225,6 +231,6 @@ if [[ "$auto_seed" -eq 1 ]]; then
   fi
 fi
 
-ensure_ollama_runtime "$ROOT_DIR" "${forward_args[@]}"
+ensure_ollama_runtime "$ROOT_DIR" ${forward_args[@]+"${forward_args[@]}"}
 
-"${PYTHON_BIN}" -m src.main "${forward_args[@]}" mode=evolve
+"${PYTHON_BIN}" -m src.main ${forward_args[@]+"${forward_args[@]}"} mode=evolve

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -673,7 +674,7 @@ def _append_experiment_score(
         score = float(exp_payload.get("score"))
     except (TypeError, ValueError):
         return
-    if score != score:
+    if not math.isfinite(score):
         return
     output[exp_name].append(score)
     if len(output[exp_name]) > history_window:

@@ -98,25 +98,31 @@ class CoBenchExperimentEvaluator:
         # 7. Map CO-Bench feedback to the host report shape.
         dev_score = feedback.dev_score
         dev_value = None if dev_score is None else float(dev_score)
-        if dev_value is None or math.isnan(dev_value):
+        if dev_value is None or not math.isfinite(dev_value):
             status = "failed"
             score = None
         else:
             status = "ok"
             score = dev_value
 
-        test_score = feedback.test_score
-        test_value = None if test_score is None else float(test_score)
-
-        return {
+        report = {
             "status": status,
             "score": score,
             "objective_name": "cobench_dev_score",
             "objective_direction": "max",
             "objective_last": score,
-            "test_score": test_value,
             "co_bench_task": self.co_bench_task,
             "dev_feedback": _truncate(feedback.dev_feedback),
-            "test_feedback": _truncate(feedback.test_feedback),
             "candidate_module_path": str(module_path),
         }
+        # Keep the benchmark test split private during evolution. It is an
+        # opt-in final-evaluation diagnostic, never an input to selection or
+        # repair. This prevents accidental test-set feedback leakage.
+        if bool(cfg.get("expose_test_metrics", False)):
+            test_score = feedback.test_score
+            test_value = None if test_score is None else float(test_score)
+            report["test_score"] = (
+                test_value if test_value is not None and math.isfinite(test_value) else None
+            )
+            report["test_feedback"] = _truncate(feedback.test_feedback)
+        return report

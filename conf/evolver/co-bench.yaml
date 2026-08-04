@@ -7,10 +7,6 @@ max_generations: 300
 max_organism_creations: false
 max_retries_per_eval: 0
 
-max_tokens_per_model:
-  ollama_gemma4_31b: false
-  ollama_qwen35_122b: false
-
 creation:
   max_attempts_to_create_organism: 1
   max_attempts_to_repair_organism_after_error: 2
@@ -126,9 +122,6 @@ llm:
   selection_strategy: random
   seed: 123
 
-  route_weights:
-    ollama_gemma4_31b: 1.0
-
   route_sampling:
     strategy: bandit
     bandit:
@@ -140,25 +133,5 @@ llm:
       reward_window: 50
       survival_weight: 0.3
 
-  # Mirrors the atcoder (awtf2025_heuristic) setup: qwen 3.5 122B runs the
-  # creative stages (rationalization, design, implementation); gemma 4 31B
-  # runs the cheap validator stages (novelty, repair).
-  pipelines:
-    - id: qwen_creative_gemma_check
-      stages:
-        rationalization: ollama_qwen35_122b
-        design: ollama_qwen35_122b
-        implementation: ollama_qwen35_122b
-        novelty: ollama_gemma4_31b
-        repair: ollama_gemma4_31b
-
-  pipeline_sampling:
-    strategy: bandit
-    bandit:
-      algorithm: discounted_thompson
-      discount: 0.97
-      prior_alpha: 1.0
-      prior_beta: 1.0
-      reward_mode: score_quantile
-      reward_window: 50
-      survival_weight: 0.3
+  # Route identities, token caps, stage pipelines, and pipeline sampling live
+  # in conf/backbone/*.yaml so a task can change LLMs with one Hydra override.

@@ -504,8 +504,30 @@ def _drop_none_entries(value: Any) -> Any:
     return value
 
 
-def _ollama_stage_effective_config(route_cfg: ApiRouteConfig, stage: str) -> dict[str, Any]:
-    stage_cfg = route_cfg.stage_options.get(stage, {})
+_CANONICAL_STAGE_ALIASES: dict[str, str] = {
+    "design_rationalization": "rationalization",
+    "design_attempt": "design",
+    "implementation_attempt": "implementation",
+    "implementation_template": "implementation",
+    "novelty_check": "novelty",
+    "repair_attempt": "repair",
+}
+
+
+def _stage_effective_config(route_cfg: ApiRouteConfig, stage: str) -> dict[str, Any]:
+    """Resolve provider-neutral generation options for one concrete stage.
+
+    An exact concrete-stage override wins.  Otherwise we fall back to the same
+    canonical stage taxonomy used by named pipelines.  This makes
+    ``rationalization`` apply to ``design_rationalization`` and ``novelty`` to
+    ``novelty_check`` without forcing every backbone profile to know internal
+    call-site labels.
+    """
+
+    canonical_stage = _CANONICAL_STAGE_ALIASES.get(stage, stage)
+    stage_cfg = route_cfg.stage_options.get(stage)
+    if not isinstance(stage_cfg, dict):
+        stage_cfg = route_cfg.stage_options.get(canonical_stage, {})
     if not isinstance(stage_cfg, dict):
         stage_cfg = {}
 
@@ -516,11 +538,12 @@ def _ollama_stage_effective_config(route_cfg: ApiRouteConfig, stage: str) -> dic
     request_options = dict(route_cfg.request_options)
     override_request_options = stage_cfg.get("request_options", {})
     if isinstance(override_request_options, dict):
-        request_options.update({key: value for key, value in override_request_options.items()})
+        request_options.update(override_request_options)
 
     return {
         "temperature": _stage_override("temperature", route_cfg.temperature),
         "max_output_tokens": _stage_override("max_output_tokens", route_cfg.max_output_tokens),
+        "reasoning_effort": _stage_override("reasoning_effort", route_cfg.reasoning_effort),
         "top_p": _stage_override("top_p", route_cfg.top_p),
         "top_k": _stage_override("top_k", route_cfg.top_k),
         "think": _stage_override("think", route_cfg.think),
@@ -531,6 +554,179 @@ def _ollama_stage_effective_config(route_cfg: ApiRouteConfig, stage: str) -> dic
         "top_logprobs": _stage_override("top_logprobs", route_cfg.top_logprobs),
         "request_options": request_options,
     }
+
+
+def _ollama_stage_effective_config(route_cfg: ApiRouteConfig, stage: str) -> dict[str, Any]:
+    return _stage_effective_config(route_cfg, stage)
+
+
+def _openai_chat_url(base_url: str | None) -> str:
+    normalized = str(base_url or "http://127.0.0.1:30000/v1").rstrip("/")
+    if normalized.endswith("/chat/completions"):
+        return normalized
+    if normalized.endswith("/v1"):
+        return normalized + "/chat/completions"
+    return normalized + "/v1/chat/completions"
+
+
+def _openai_chat_response_text(response_payload: dict[str, Any]) -> tuple[str, str, str]:
+    choices = response_payload.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return "", "", ""
+    choice = choices[0]
+    message = choice.get("message")
+    if not isinstance(message, dict):
+        message = {}
+    content = message.get("content")
+    if isinstance(content, list):
+        content_text = "".join(
+            str(item.get("text", ""))
+            for item in content
+            if isinstance(item, dict) and item.get("type") in {"text", "output_text"}
+        ).strip()
+    else:
+        content_text = str(content or "").strip()
+    reasoning_text = str(
+        message.get("reasoning_content")
+        or message.get("reasoning")
+        or ""
+    ).strip()
+    return content_text, reasoning_text, str(choice.get("finish_reason") or "").strip()
+
+
+def _openai_compatible_request_payload(
+    route_cfg: ApiRouteConfig,
+    request: LlmRequest,
+) -> dict[str, Any]:
+    effective = _stage_effective_config(route_cfg, request.stage)
+    payload: dict[str, Any] = {
+        "model": route_cfg.provider_model_id,
+        "messages": [
+            {"role": "system", "content": request.system_prompt},
+            {"role": "user", "content": request.user_prompt},
+        ],
+        "stream": False,
+        "temperature": float(effective["temperature"]),
+        "max_tokens": int(effective["max_output_tokens"]),
+        "seed": int(request.seed),
+    }
+    if effective["top_p"] is not None:
+        payload["top_p"] = float(effective["top_p"])
+    if effective["top_k"] is not None:
+        payload["top_k"] = int(effective["top_k"])
+
+    request_options = dict(effective["request_options"])
+    payload.update(request_options)
+
+    reasoning_effort = effective["reasoning_effort"]
+    think = effective["think"]
+    if reasoning_effort is not None or think is not None:
+        template_kwargs = payload.get("chat_template_kwargs")
+        if not isinstance(template_kwargs, dict):
+            template_kwargs = {}
+        else:
+            template_kwargs = dict(template_kwargs)
+        if think is not None:
+            template_kwargs.setdefault("thinking", bool(think))
+        if reasoning_effort is not None:
+            template_kwargs.setdefault("thinking", True)
+            template_kwargs.setdefault("reasoning_effort", str(reasoning_effort))
+        payload["chat_template_kwargs"] = template_kwargs
+    return _drop_none_entries(payload)
+
+
+def _generate_openai_compatible(route_cfg: ApiRouteConfig, request: LlmRequest) -> LlmResponse:
+    """Call a local or remote OpenAI-compatible Chat Completions endpoint."""
+
+    import json
+
+    started_at = _utc_now_iso()
+    request_payload = _openai_compatible_request_payload(route_cfg, request)
+    request_url = _openai_chat_url(route_cfg.base_url)
+    headers = {"Content-Type": "application/json"}
+    api_key_env = str(route_cfg.api_key_env or "").strip()
+    if api_key_env:
+        api_key = os.getenv(api_key_env)
+        if not api_key:
+            raise RuntimeError(f"{api_key_env} is not set for route '{route_cfg.route_id}'.")
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    organism_id = str(request.metadata.get("organism_id", ""))
+    attempts = max(1, int(route_cfg.max_retries) + 1)
+    last_error: Exception | None = None
+    response_payload: dict[str, Any] | None = None
+    for attempt in range(1, attempts + 1):
+        http_request = urllib_request.Request(
+            request_url,
+            data=json.dumps(request_payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib_request.urlopen(http_request, timeout=float(route_cfg.timeout_sec)) as response:
+                raw_response = response.read().decode("utf-8")
+            parsed = json.loads(raw_response)
+            if not isinstance(parsed, dict):
+                raise RuntimeError("OpenAI-compatible response must be a JSON object.")
+            response_payload = parsed
+            break
+        except urllib_error.HTTPError as exc:
+            body = _single_line(exc.read(512).decode("utf-8", errors="replace"), limit=512)
+            last_error = RuntimeError(
+                f"OpenAI-compatible HTTP {exc.code} route='{route_cfg.route_id}' "
+                f"stage={request.stage!r} organism_id={organism_id!r}: {body}"
+            )
+            if exc.code < 500 and exc.code != 429:
+                break
+        except (urllib_error.URLError, TimeoutError, json.JSONDecodeError, RuntimeError) as exc:
+            last_error = exc
+        if attempt < attempts:
+            time.sleep(min(2.0 ** (attempt - 1), 8.0))
+
+    if response_payload is None:
+        assert last_error is not None
+        raise RuntimeError(
+            f"OpenAI-compatible request failed after {attempts} attempt(s) "
+            f"for route '{route_cfg.route_id}': {last_error}"
+        ) from last_error
+
+    content_text, reasoning_text, finish_reason = _openai_chat_response_text(response_payload)
+    if not content_text and reasoning_text and finish_reason == "length":
+        raise RuntimeError(
+            "OpenAI-compatible response exhausted its output budget during reasoning "
+            f"(route='{route_cfg.route_id}', stage={request.stage!r}, "
+            f"organism_id={organism_id!r})."
+        )
+    text = content_text or reasoning_text
+    if not text:
+        raise RuntimeError(
+            "OpenAI-compatible response did not contain usable message.content or reasoning_content."
+        )
+
+    usage = _usage_dict(response_payload.get("usage"))
+    finished_at = _utc_now_iso()
+    LOGGER.info(
+        "OpenAI-compatible response route=%s stage=%s organism_id=%s finish_reason=%s "
+        "content_chars=%d reasoning_chars=%d usage=%s",
+        route_cfg.route_id,
+        request.stage,
+        organism_id or "<missing>",
+        finish_reason or "<missing>",
+        len(content_text),
+        len(reasoning_text),
+        json.dumps(usage, sort_keys=True, separators=(",", ":")),
+    )
+    return LlmResponse(
+        text=text,
+        route_id=route_cfg.route_id,
+        provider=route_cfg.provider,
+        provider_model_id=route_cfg.provider_model_id,
+        raw_request=request_payload,
+        raw_response=response_payload,
+        usage=usage,
+        started_at=started_at,
+        finished_at=finished_at,
+    )
 
 
 def _ollama_request_payload(route_cfg: ApiRouteConfig, request: LlmRequest) -> dict[str, Any]:
@@ -681,6 +877,9 @@ def generate_direct(route_cfg: ApiRouteConfig, request: LlmRequest) -> LlmRespon
             started_at=started_at,
             finished_at=finished_at,
         )
+
+    if route_cfg.backend == "openai_compatible":
+        return _generate_openai_compatible(route_cfg, request)
 
     if route_cfg.backend == "ollama":
         import json

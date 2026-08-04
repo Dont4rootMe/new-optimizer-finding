@@ -1,6 +1,6 @@
 defaults:
   - evolver: optimization_survey
-  - api_platforms@api_platforms.mock: mock
+  - backbone: mock
   - experiments@experiments.cifar_convnet: optimization_survey/cifar_convnet
   - experiments@experiments.audio_transformer: optimization_survey/audio_transformer
   - experiments@experiments.minigpt_wikitext2: optimization_survey/minigpt_wikitext2

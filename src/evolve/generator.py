@@ -34,6 +34,7 @@ from src.evolve.llm_generator_base import BaseLlmGenerator
 from src.evolve.prompt_utils import load_prompt_bundle
 from src.evolve.storage import read_json, sha1_text, utc_now_iso, write_json, write_organism_meta
 from src.evolve.template_parser import parse_llm_response
+from src.evolve.token_usage import emit_usage_event, normalize_token_usage
 from src.evolve.types import CreationStageResult, Island, OrganismMeta
 from src.organisms.implementation_patch import (
     ImplementationCompilationPlan,
@@ -116,41 +117,9 @@ def _response_summary(*, text: str, raw_response: object, usage: object | None =
 
 
 def _normalize_token_usage(usage: object) -> dict[str, int]:
-    """Map a provider-specific ``usage`` blob to canonical token counts.
+    """Backward-compatible import surface for focused tests and callers."""
 
-    Different providers expose token counts under different keys:
-      * Ollama   -> ``prompt_eval_count`` / ``eval_count``
-      * OpenAI   -> ``prompt_tokens`` / ``completion_tokens`` / ``total_tokens``
-      * Anthropic-> ``input_tokens`` / ``output_tokens``
-      * mock     -> ``{}`` (no counts)
-
-    Returns ``{"prompt_tokens", "completion_tokens", "total_tokens"}`` with
-    ``total_tokens`` backfilled from prompt+completion when the provider does
-    not report a total. All-zero results are returned as-is; the caller skips
-    recording them so empty mock usage never pollutes the accounting.
-    """
-
-    payload = usage if isinstance(usage, dict) else {}
-
-    def _coerce(*keys: str) -> int:
-        for key in keys:
-            value = payload.get(key)
-            if isinstance(value, bool):
-                continue
-            if isinstance(value, (int, float)):
-                return int(value)
-        return 0
-
-    prompt = _coerce("prompt_tokens", "prompt_eval_count", "input_tokens")
-    completion = _coerce("completion_tokens", "eval_count", "output_tokens")
-    total = _coerce("total_tokens")
-    if total <= 0:
-        total = prompt + completion
-    return {
-        "prompt_tokens": prompt,
-        "completion_tokens": completion,
-        "total_tokens": total,
-    }
+    return normalize_token_usage(usage)
 
 
 def _structured_response_text(response: object) -> _StructuredResponseText:
@@ -422,6 +391,21 @@ class CandidateGenerator(BaseLlmGenerator):
                 usage=response.usage,
             ),
         )
+        emit_usage_event(
+            route_id=route_id,
+            provider=response.provider,
+            provider_model_id=response.provider_model_id,
+            organism_id=organism_id,
+            generation=generation,
+            stage=stage,
+            elapsed_sec=elapsed_sec,
+            system_prompt_chars=len(system_prompt),
+            user_prompt_chars=len(user_prompt),
+            response_chars=len(response.text),
+            started_at=response.started_at,
+            finished_at=response.finished_at,
+            usage=response.usage,
+        )
         self._record_token_usage(organism_id=organism_id, route_id=route_id, usage=response.usage)
         return response
 
@@ -439,9 +423,8 @@ class CandidateGenerator(BaseLlmGenerator):
                 route_id,
                 {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
             )
-            route_bucket["prompt_tokens"] += normalized["prompt_tokens"]
-            route_bucket["completion_tokens"] += normalized["completion_tokens"]
-            route_bucket["total_tokens"] += normalized["total_tokens"]
+            for metric, value in normalized.items():
+                route_bucket[metric] = int(route_bucket.get(metric, 0)) + int(value)
             route_bucket["calls"] += 1
 
     def pop_token_usage(self, organism_id: str) -> dict[str, dict[str, int]]:

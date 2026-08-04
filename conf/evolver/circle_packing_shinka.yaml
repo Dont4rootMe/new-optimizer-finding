@@ -5,16 +5,6 @@ max_generations: 700
 max_organism_creations: false
 max_retries_per_eval: 0
 
-# Optional per-model token-budget stop (additional to the generation/organism
-# caps above, not a replacement). Maps route_id -> token cap. ``false`` (the
-# default for every model) means no cap on that model; an integer caps the
-# cumulative LLM tokens that route may spend. When any capped route reaches its
-# budget, evolution stops at the next generation boundary. Tokens are summed
-# from each organism's persisted ``token_usage`` so the tally is resume-safe.
-max_tokens_per_model:
-  ollama_gemma4_31b: false
-  ollama_qwen35_122b: false
-
 creation:
   # PHASE A retry tightening (mirrors awtf2025_heuristic): retries cut to 1,
   # validator-retries to 0. The repair budget for explicit evaluator errors
@@ -152,9 +142,6 @@ llm:
   selection_strategy: random
   seed: 123
 
-  route_weights:
-    ollama_gemma4_31b: 1.0
-
   # Adaptive LLM-route sampling. See conf/evolver/awtf2025_heuristic.yaml
   # for the full description. When `pipelines` (below) is defined and
   # non-empty this route path is bypassed for organism stages — the
@@ -170,28 +157,5 @@ llm:
       reward_window: 50
       survival_weight: 0.3
 
-  # Pipeline configurations. See conf/evolver/awtf2025_heuristic.yaml for
-  # the full description of the canonical-stage taxonomy. Two pipelines
-  # are defined here as a starting point: one all-gemma, one all-qwen.
-  # Adding a "creative_qwen / validator_gemma" pipeline once a heavier
-  # qwen model is brought up is straightforward — just append a new
-  # entry below.
-  pipelines:
-    - id: qwen_creative_gemma_check
-      stages:
-        rationalization: ollama_qwen35_122b
-        design: ollama_qwen35_122b
-        implementation: ollama_qwen35_122b
-        novelty: ollama_gemma4_31b
-        repair: ollama_gemma4_31b
-
-  pipeline_sampling:
-    strategy: bandit                   # uniform | weighted_static | bandit
-    bandit:
-      algorithm: discounted_thompson
-      discount: 0.97
-      prior_alpha: 1.0
-      prior_beta: 1.0
-      reward_mode: score_quantile
-      reward_window: 50
-      survival_weight: 0.3
+  # Route identities, token caps, stage pipelines, and pipeline sampling live
+  # in conf/backbone/*.yaml so a task can change LLMs with one Hydra override.

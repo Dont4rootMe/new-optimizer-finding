@@ -19,9 +19,11 @@ otherwise it skips.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from hydra import compose, initialize_config_dir
+from omegaconf import OmegaConf
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -141,6 +143,106 @@ def test_load_solve_accepts_and_rejects(tmp_path: Path) -> None:
     positional_only.mkdir()
     with pytest.raises(TypeError):
         load_solve(_write_module(positional_only, "def solve(x, /):\n    return {}\n"))
+
+
+def test_cobench_report_uses_finite_dev_only_and_hides_test_split(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from experiments.co_bench._runtime import runner as runner_module
+
+    organism_dir = tmp_path / "organism"
+    organism_dir.mkdir()
+    implementation_path = Path(
+        _write_module(organism_dir, "def solve(**kwargs):\n    return {}\n")
+    )
+    data_root = tmp_path / "data"
+    task_name = "Travelling salesman problem"
+    task_dir = data_root / task_name
+    task_dir.mkdir(parents=True)
+    (task_dir / "config.py").write_text("# fixture\n", encoding="utf-8")
+    observed: dict[str, object] = {}
+
+    class FakeEvaluator:
+        def __init__(self, data, *, timeout, cpu_num, feedback_length):
+            observed.update(
+                data=data,
+                timeout=timeout,
+                cpu_num=cpu_num,
+                feedback_length=feedback_length,
+            )
+
+        def evaluate(self, code):
+            observed["code"] = code
+            return SimpleNamespace(
+                dev_score=0.75,
+                test_score=0.99,
+                dev_feedback="dev details",
+                test_feedback="private test details",
+            )
+
+    fake_evaluation = SimpleNamespace(
+        get_data=lambda task, src_dir: {"task": task, "src_dir": src_dir},
+        Evaluator=FakeEvaluator,
+    )
+    monkeypatch.setattr(runner_module, "import_cobench", lambda: fake_evaluation)
+
+    cfg = _compose_task("TSP").experiments.co_bench
+    OmegaConf.set_struct(cfg, False)
+    cfg.paths = {"data_root": str(tmp_path)}
+    cfg.data.cobench_src_dir = str(data_root)
+    evaluator = runner_module.CoBenchExperimentEvaluator(task_name)
+    report = evaluator.evaluate_organism(str(organism_dir), cfg)
+
+    assert report["score"] == pytest.approx(0.75)
+    assert "test_score" not in report
+    assert "test_feedback" not in report
+    assert observed["cpu_num"] == 4
+    assert report["candidate_module_path"] == str(implementation_path.resolve())
+
+
+def test_cobench_rejects_nonfinite_dev_score(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from experiments.co_bench._runtime import runner as runner_module
+
+    organism_dir = tmp_path / "organism"
+    organism_dir.mkdir()
+    _write_module(organism_dir, "def solve(**kwargs):\n    return {}\n")
+    data_root = tmp_path / "data"
+    task_name = "Travelling salesman problem"
+    task_dir = data_root / task_name
+    task_dir.mkdir(parents=True)
+    (task_dir / "config.py").write_text("# fixture\n", encoding="utf-8")
+
+    class FakeEvaluator:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def evaluate(self, code):
+            return SimpleNamespace(
+                dev_score=float("inf"),
+                test_score=None,
+                dev_feedback="bad score",
+                test_feedback="",
+            )
+
+    monkeypatch.setattr(
+        runner_module,
+        "import_cobench",
+        lambda: SimpleNamespace(get_data=lambda *a, **k: {}, Evaluator=FakeEvaluator),
+    )
+    cfg = _compose_task("TSP").experiments.co_bench
+    OmegaConf.set_struct(cfg, False)
+    cfg.paths = {"data_root": str(tmp_path)}
+    cfg.data.cobench_src_dir = str(data_root)
+
+    report = runner_module.CoBenchExperimentEvaluator(task_name).evaluate_organism(
+        str(organism_dir), cfg
+    )
+    assert report["status"] == "failed"
+    assert report["score"] is None
 
 
 def _compose_task(identifier: str):

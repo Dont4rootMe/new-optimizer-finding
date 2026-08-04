@@ -532,6 +532,148 @@ def test_ollama_route_applies_stage_specific_generation_overrides(monkeypatch: p
     assert response.raw_request == captured["body"]
 
 
+def test_openai_compatible_route_supports_local_server_and_detailed_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    route_cfg = ApiRouteConfig(
+        route_id="deepseek_v4_flash_0731",
+        provider="sglang",
+        provider_model_id="deepseek-ai/DeepSeek-V4-Flash-0731",
+        backend="openai_compatible",
+        base_url="http://127.0.0.1:30000/v1",
+        temperature=1.0,
+        max_output_tokens=16384,
+        reasoning_effort="high",
+        timeout_sec=1800.0,
+        max_retries=2,
+        top_p=0.95,
+    )
+    request = LlmRequest(
+        route_id=route_cfg.route_id,
+        stage="implementation",
+        system_prompt="system prompt",
+        user_prompt="user prompt",
+        seed=123,
+        metadata={"organism_id": "org001"},
+    )
+    captured: dict[str, object] = {}
+
+    class FakeHttpResponse:
+        def __enter__(self) -> "FakeHttpResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "choices": [
+                        {
+                            "finish_reason": "stop",
+                            "message": {
+                                "content": "final implementation",
+                                "reasoning_content": "private reasoning",
+                            },
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 101,
+                        "completion_tokens": 53,
+                        "total_tokens": 154,
+                        "prompt_tokens_details": {"cached_tokens": 80},
+                        "completion_tokens_details": {"reasoning_tokens": 21},
+                    },
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(http_request, timeout: float):
+        captured["url"] = http_request.full_url
+        captured["timeout"] = timeout
+        captured["headers"] = {key.lower(): value for key, value in http_request.header_items()}
+        captured["body"] = json.loads(http_request.data.decode("utf-8"))
+        return FakeHttpResponse()
+
+    monkeypatch.setattr(provider_backends.urllib_request, "urlopen", fake_urlopen)
+
+    response = generate_direct(route_cfg, request)
+
+    assert captured["url"] == "http://127.0.0.1:30000/v1/chat/completions"
+    assert captured["timeout"] == 1800.0
+    assert captured["headers"] == {"content-type": "application/json"}
+    assert captured["body"] == {
+        "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+        "messages": [
+            {"role": "system", "content": "system prompt"},
+            {"role": "user", "content": "user prompt"},
+        ],
+        "stream": False,
+        "temperature": 1.0,
+        "max_tokens": 16384,
+        "seed": 123,
+        "top_p": 0.95,
+        "chat_template_kwargs": {"thinking": True, "reasoning_effort": "high"},
+    }
+    assert response.text == "final implementation"
+    assert response.usage["prompt_tokens_details"] == {"cached_tokens": 80}
+    assert response.usage["completion_tokens_details"] == {"reasoning_tokens": 21}
+
+
+def test_stage_options_fall_back_from_concrete_to_canonical_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    route_cfg = ApiRouteConfig(
+        route_id="deepseek_v4_flash_0731",
+        provider="sglang",
+        provider_model_id="deepseek-ai/DeepSeek-V4-Flash-0731",
+        backend="openai_compatible",
+        base_url="http://127.0.0.1:30000/v1",
+        temperature=1.0,
+        max_output_tokens=4096,
+        reasoning_effort="low",
+        stage_options={
+            "rationalization": {
+                "max_output_tokens": 8192,
+                "reasoning_effort": "max",
+            }
+        },
+    )
+    request = LlmRequest(
+        route_id=route_cfg.route_id,
+        stage="design_rationalization",
+        system_prompt="system prompt",
+        user_prompt="user prompt",
+        seed=42,
+        metadata={"organism_id": "org002"},
+    )
+    captured: dict[str, object] = {}
+
+    class FakeHttpResponse:
+        def __enter__(self) -> "FakeHttpResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {"choices": [{"finish_reason": "stop", "message": {"content": "plan"}}]}
+            ).encode("utf-8")
+
+    def fake_urlopen(http_request, timeout: float):
+        captured["body"] = json.loads(http_request.data.decode("utf-8"))
+        return FakeHttpResponse()
+
+    monkeypatch.setattr(provider_backends.urllib_request, "urlopen", fake_urlopen)
+
+    generate_direct(route_cfg, request)
+
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body["max_tokens"] == 8192
+    assert body["chat_template_kwargs"] == {"thinking": True, "reasoning_effort": "max"}
+
+
 def test_ollama_route_wraps_network_errors_with_request_context(monkeypatch: pytest.MonkeyPatch) -> None:
     route_cfg = ApiRouteConfig(
         route_id="ollama_qwen35_27b",

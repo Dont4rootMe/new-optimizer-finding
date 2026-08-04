@@ -29,8 +29,13 @@ need_cuda: false
 # CO-Bench Evaluator knobs (per-instance solve() timeout sec, parallelism,
 # feedback truncation). See experiments/co_bench/_runtime/runner.py.
 timeout: 10
-cpu_num: null
+# Each evolution generation evaluates several organisms concurrently. Leaving
+# this as null lets every CO-Bench evaluator consume every host CPU and causes
+# severe nested oversubscription in cluster jobs.
+cpu_num: 4
 feedback_length: 64
+# Test metrics are private by default; opt in only for a final held-out report.
+expose_test_metrics: false
 
 data:
   # Parent dir holding per-task CO-Bench folders (bootstrap_cobench.sh downloads here).

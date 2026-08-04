@@ -12,6 +12,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from src.evolve.storage import write_json
+from src.validate.report_contract import validate_evaluation_report
 
 LOGGER = logging.getLogger(__name__)
 
@@ -121,11 +122,10 @@ def main() -> None:
                 f"Experiment '{experiment_name}' must define evaluate_organism(organism_dir, cfg)."
             )
 
-        payload = experiment.evaluate_organism(str(args.organism_dir), exp_cfg)
-        if not isinstance(payload, dict):
-            raise TypeError(f"Experiment '{experiment_name}' returned non-dict payload: {type(payload).__name__}")
-        if "score" not in payload:
-            raise ValueError(f"Experiment '{experiment_name}' report is missing required field 'score'.")
+        payload = validate_evaluation_report(
+            experiment.evaluate_organism(str(args.organism_dir), exp_cfg),
+            experiment_name=experiment_name,
+        )
 
         write_json(out_path, payload)
         sys.exit(0 if str(payload.get("status", "ok")) == "ok" else 1)

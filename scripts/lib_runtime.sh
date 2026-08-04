@@ -13,6 +13,18 @@ else
   PYTHON_BIN=""
 fi
 
+_line_set_contains() {
+  local lines="${1:-}"
+  local needle="$2"
+  local candidate
+  while IFS= read -r candidate; do
+    if [[ "$candidate" == "$needle" ]]; then
+      return 0
+    fi
+  done <<<"$lines"
+  return 1
+}
+
 require_python_bin() {
   if [[ -n "$PYTHON_BIN" ]]; then
     return 0
@@ -392,17 +404,17 @@ _pid_descendants() {
   local root_pid="$1"
   local current_pid child_pid
   local -a queue=("$root_pid")
-  declare -A seen=()
+  local seen=""
 
   while [[ "${#queue[@]}" -gt 0 ]]; do
     current_pid="${queue[0]}"
     queue=("${queue[@]:1}")
     while IFS= read -r child_pid; do
       [[ -n "$child_pid" ]] || continue
-      if [[ -n "${seen[$child_pid]+x}" ]]; then
+      if _line_set_contains "$seen" "$child_pid"; then
         continue
       fi
-      seen["$child_pid"]=1
+      seen="${seen}${seen:+$'\n'}${child_pid}"
       printf '%s\n' "$child_pid"
       queue+=("$child_pid")
     done < <(_child_pids "$current_pid")
@@ -414,7 +426,7 @@ _kill_pid_tree_gracefully() {
   local label="$2"
   local target_pid
   local -a tree_pids=()
-  declare -A seen=()
+  local seen=""
 
   if ! _pid_exists "$root_pid"; then
     return 0
@@ -430,10 +442,10 @@ _kill_pid_tree_gracefully() {
   local -a kill_targets=()
   for deduped_pid in "${tree_pids[@]}"; do
     [[ -n "$deduped_pid" ]] || continue
-    if [[ "$deduped_pid" == "$$" || -n "${seen[$deduped_pid]+x}" ]]; then
+    if [[ "$deduped_pid" == "$$" ]] || _line_set_contains "$seen" "$deduped_pid"; then
       continue
     fi
-    seen["$deduped_pid"]=1
+    seen="${seen}${seen:+$'\n'}${deduped_pid}"
     kill_targets+=("$deduped_pid")
   done
 
@@ -597,7 +609,7 @@ PY
 }
 
 _unique_local_ollama_base_urls() {
-  declare -A seen=()
+  local seen=""
   local route route_id base_url model gpu_ranks_csv max_concurrency num_ctx
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
     IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency num_ctx <<<"$route"
@@ -605,10 +617,10 @@ _unique_local_ollama_base_urls() {
     if ! _ollama_is_local "$base_url"; then
       continue
     fi
-    if [[ -n "${seen[$base_url]+x}" ]]; then
+    if _line_set_contains "$seen" "$base_url"; then
       continue
     fi
-    seen["$base_url"]=1
+    seen="${seen}${seen:+$'\n'}${base_url}"
     printf '%s\n' "$base_url"
   done
 }
@@ -619,16 +631,16 @@ _cleanup_loaded_ollama_servers() {
   fi
 
   local base_url pid_file pid port log_dir
-  declare -A seen_pids=()
+  local seen_pids=""
   log_dir="${OLLAMA_RUNTIME_ROOT}/ollama"
 
   if [[ -d "$log_dir" ]]; then
     while IFS= read -r pid_file; do
       [[ -n "$pid_file" ]] || continue
       pid="$(tr -d '[:space:]' < "$pid_file")"
-      if [[ -n "$pid" && -z "${seen_pids[$pid]+x}" ]]; then
+      if [[ -n "$pid" ]] && ! _line_set_contains "$seen_pids" "$pid"; then
         _kill_pid_tree_gracefully "$pid" "managed runtime"
-        seen_pids["$pid"]=1
+        seen_pids="${seen_pids}${seen_pids:+$'\n'}${pid}"
       fi
       rm -f "$pid_file"
     done < <(find "$log_dir" -maxdepth 1 -type f -name 'serve.*.pid' | sort)
@@ -639,9 +651,9 @@ _cleanup_loaded_ollama_servers() {
     pid_file="$(_ollama_pid_file "$OLLAMA_RUNTIME_ROOT" "$base_url")"
     if [[ -f "$pid_file" ]]; then
       pid="$(tr -d '[:space:]' < "$pid_file")"
-      if [[ -n "$pid" && -z "${seen_pids[$pid]+x}" ]]; then
+      if [[ -n "$pid" ]] && ! _line_set_contains "$seen_pids" "$pid"; then
         _kill_pid_tree_gracefully "$pid" "$base_url"
-        seen_pids["$pid"]=1
+        seen_pids="${seen_pids}${seen_pids:+$'\n'}${pid}"
       fi
       rm -f "$pid_file"
     fi
@@ -652,22 +664,22 @@ _cleanup_loaded_ollama_servers() {
       if [[ "$pid" == "$$" ]]; then
         continue
       fi
-      if [[ -n "${seen_pids[$pid]+x}" ]]; then
+      if _line_set_contains "$seen_pids" "$pid"; then
         continue
       fi
       _kill_pid_tree_gracefully "$pid" "$base_url"
-      seen_pids["$pid"]=1
+      seen_pids="${seen_pids}${seen_pids:+$'\n'}${pid}"
     done < <(_pids_listening_on_port "$port")
   done < <(_unique_local_ollama_base_urls)
 
   if [[ -d "$log_dir" ]]; then
     while IFS= read -r pid; do
       [[ -n "$pid" ]] || continue
-      if [[ "$pid" == "$$" || -n "${seen_pids[$pid]+x}" ]]; then
+      if [[ "$pid" == "$$" ]] || _line_set_contains "$seen_pids" "$pid"; then
         continue
       fi
       _kill_pid_tree_gracefully "$pid" "runtime files in ${log_dir}"
-      seen_pids["$pid"]=1
+      seen_pids="${seen_pids}${seen_pids:+$'\n'}${pid}"
     done < <(_pids_opening_under_path "$log_dir")
 
     local attempt lingering_count
@@ -1092,77 +1104,71 @@ ensure_ollama_runtime() {
     return 1
   fi
 
-  declare -A server_gpu_by_url=()
-  declare -A server_url_by_gpu=()
-  declare -A server_num_parallel_by_url=()
-  declare -A server_context_length_by_url=()
   local route route_id base_url model gpu_ranks_csv gpu_group max_concurrency num_ctx
   local -a gpu_group_ranks=()
-  local rank
+  local rank assignment assigned_rank assigned_url gpu_assignments=""
+  local seen_gpu_group num_parallel context_length candidate_base_url
+
+  # Validate local GPU ownership without associative arrays so the job wrapper
+  # remains usable with macOS' Bash 3.2 as well as cluster Bash 4/5.
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
     IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency num_ctx <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
-    gpu_group="$gpu_ranks_csv"
-    if [[ -z "$max_concurrency" || "$max_concurrency" -lt 1 ]]; then
-      max_concurrency=1
-    fi
-    if ! _ollama_is_local "$base_url"; then
+    if ! _ollama_is_local "$base_url" || [[ -z "$gpu_ranks_csv" ]]; then
       continue
     fi
-    if [[ -n "${server_gpu_by_url[$base_url]+x}" ]]; then
-      if [[ "${server_gpu_by_url[$base_url]}" != "$gpu_group" ]]; then
-        echo "Error: local Ollama base_url ${base_url} is assigned conflicting gpu_ranks (${server_gpu_by_url[$base_url]} vs ${gpu_group})." >&2
-        echo "Use distinct base_url values for routes that must stay on different GPUs." >&2
-        return 1
-      fi
-    else
-      server_gpu_by_url["$base_url"]="$gpu_group"
-    fi
     gpu_group_ranks=()
-    if [[ -n "$gpu_group" ]]; then
-      IFS=',' read -r -a gpu_group_ranks <<<"$gpu_group"
-      for rank in "${gpu_group_ranks[@]}"; do
-        [[ -n "$rank" ]] || continue
-        if [[ -n "${server_url_by_gpu[$rank]+x}" && "${server_url_by_gpu[$rank]}" != "$base_url" ]]; then
-          echo "Error: local Ollama gpu:${rank} is assigned to multiple base_url values (${server_url_by_gpu[$rank]} and ${base_url})." >&2
+    IFS=',' read -r -a gpu_group_ranks <<<"$gpu_ranks_csv"
+    for rank in "${gpu_group_ranks[@]}"; do
+      [[ -n "$rank" ]] || continue
+      while IFS= read -r assignment; do
+        [[ -n "$assignment" ]] || continue
+        IFS='|' read -r assigned_rank assigned_url <<<"$assignment"
+        if [[ "$assigned_rank" == "$rank" && "$assigned_url" != "$base_url" ]]; then
+          echo "Error: local Ollama gpu:${rank} is assigned to multiple base_url values (${assigned_url} and ${base_url})." >&2
           echo "Each local Ollama GPU should correspond to exactly one local service base_url." >&2
           return 1
         fi
-        server_url_by_gpu["$rank"]="$base_url"
-      done
-    fi
-    # Server serves every route mapped to the same base_url simultaneously,
-    # so the number of parallel slots must cover the *sum* of the routes'
-    # broker-side concurrency limits — otherwise ollama starts returning 500
-    # on the (max_concurrency+1)-th request.
-    if [[ -n "${server_num_parallel_by_url[$base_url]+x}" ]]; then
-      server_num_parallel_by_url["$base_url"]=$(( server_num_parallel_by_url[$base_url] + max_concurrency ))
-    else
-      server_num_parallel_by_url["$base_url"]=$max_concurrency
-    fi
-    if [[ "$num_ctx" =~ ^[0-9]+$ ]] && [[ "$num_ctx" -gt 0 ]]; then
-      if [[ -n "${server_context_length_by_url[$base_url]+x}" ]]; then
-        if [[ "$num_ctx" -gt "${server_context_length_by_url[$base_url]}" ]]; then
-          server_context_length_by_url["$base_url"]="$num_ctx"
-        fi
-      else
-        server_context_length_by_url["$base_url"]="$num_ctx"
+      done <<<"$gpu_assignments"
+      if ! _line_set_contains "$gpu_assignments" "${rank}|${base_url}"; then
+        gpu_assignments="${gpu_assignments}${gpu_assignments:+$'\n'}${rank}|${base_url}"
       fi
-    fi
+    done
   done
 
-  declare -A started_base_urls=()
-  local num_parallel context_length
+  # Consolidate all routes sharing one server: GPU assignment must agree,
+  # concurrency is summed, and the largest requested context wins.
+  while IFS= read -r candidate_base_url; do
+    [[ -n "$candidate_base_url" ]] || continue
+    seen_gpu_group=""
+    num_parallel=0
+    context_length=""
+    for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
+      IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency num_ctx <<<"$route"
+      base_url="$(_normalize_ollama_base_url "$base_url")"
+      [[ "$base_url" == "$candidate_base_url" ]] || continue
+      if [[ -n "$seen_gpu_group" && "$seen_gpu_group" != "$gpu_ranks_csv" ]]; then
+        echo "Error: local Ollama base_url ${base_url} is assigned conflicting gpu_ranks (${seen_gpu_group} vs ${gpu_ranks_csv})." >&2
+        echo "Use distinct base_url values for routes that must stay on different GPUs." >&2
+        return 1
+      fi
+      seen_gpu_group="$gpu_ranks_csv"
+      if [[ -z "$max_concurrency" || "$max_concurrency" -lt 1 ]]; then
+        max_concurrency=1
+      fi
+      num_parallel=$((num_parallel + max_concurrency))
+      if [[ "$num_ctx" =~ ^[0-9]+$ ]] && [[ "$num_ctx" -gt 0 ]]; then
+        if [[ -z "$context_length" || "$num_ctx" -gt "$context_length" ]]; then
+          context_length="$num_ctx"
+        fi
+      fi
+    done
+    _ensure_ollama_server "$candidate_base_url" "$OLLAMA_RUNTIME_ROOT" "$seen_gpu_group" "$OLLAMA_MODELS_DIR" "$num_parallel" "$context_length" || return 1
+  done < <(_unique_local_ollama_base_urls)
+
   for route in "${OLLAMA_ROUTE_SPECS[@]}"; do
     IFS='|' read -r route_id base_url model gpu_ranks_csv max_concurrency num_ctx <<<"$route"
     base_url="$(_normalize_ollama_base_url "$base_url")"
-    gpu_group="${server_gpu_by_url[$base_url]-}"
-    num_parallel="${server_num_parallel_by_url[$base_url]-}"
-    context_length="${server_context_length_by_url[$base_url]-}"
-    if [[ -z "${started_base_urls[$base_url]+x}" ]]; then
-      _ensure_ollama_server "$base_url" "$OLLAMA_RUNTIME_ROOT" "$gpu_group" "$OLLAMA_MODELS_DIR" "$num_parallel" "$context_length" || return 1
-      started_base_urls["$base_url"]=1
-    fi
     _ensure_ollama_model "$base_url" "$model" "$OLLAMA_MODELS_DIR" || {
       echo "Error: failed to prepare Ollama model ${model} for route ${route_id}." >&2
       return 1

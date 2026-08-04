@@ -46,7 +46,7 @@ def validate_circle_packing(
     num_circles: int,
     square_size: float,
     atol: float,
-) -> None:
+) -> float:
     """Validate one circle packing instance inside a square."""
 
     validate_circle_count(centers=centers, radii=radii, num_circles=num_circles)
@@ -63,7 +63,10 @@ def validate_circle_packing(
         raise ValueError(f"Negative radii found at indices: {negative_indices}")
 
     radii_sum = float(np.sum(radii))
-    if not np.isclose(radii_sum, reported_sum, atol=atol):
+    # Only the configured absolute validation slack is allowed. NumPy's
+    # default relative tolerance would otherwise let the self-reported score
+    # drift farther as the packing score grows.
+    if not np.isclose(radii_sum, reported_sum, atol=atol, rtol=0.0):
         raise ValueError(
             f"Sum of radii ({radii_sum:.12f}) does not match reported_sum ({reported_sum:.12f})."
         )
@@ -90,6 +93,7 @@ def validate_circle_packing(
                     f"Circles {left} and {right} overlap. Dist={distance:.12f}, "
                     f"sum_radii={float(radii[left] + radii[right]):.12f}."
                 )
+    return radii_sum
 
 
 def format_centers_string(centers: np.ndarray) -> str:

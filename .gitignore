@@ -3,6 +3,7 @@ __pycache__/
 *.so
 .venv/
 venv/
+*.egg-info/
 .env
 .pytest_cache/
 .mypy_cache/
@@ -22,6 +23,10 @@ ollama_cache
 .api_platform_runtime*
 api_platform_runtime*
 .claude
+
+# Local isolated checkouts and inference runtime state.
+.worktrees/
+.inference_runtime/
 
 # CO-Bench: external checkout (cloned by scripts/bootstrap_cobench.sh) and the
 # cpu.lock file CO-Bench writes into the CWD during evaluation. The dataset is

@@ -5,16 +5,6 @@ max_generations: 700
 max_organism_creations: false
 max_retries_per_eval: 0
 
-# Optional per-model token-budget stop (additional to the generation/organism
-# caps above, not a replacement). Maps route_id -> token cap. ``false`` (the
-# default for every model) means no cap on that model; an integer caps the
-# cumulative LLM tokens that route may spend. When any capped route reaches its
-# budget, evolution stops at the next generation boundary. Tokens are summed
-# from each organism's persisted ``token_usage`` so the tally is resume-safe.
-max_tokens_per_model:
-  ollama_gemma4_31b: false
-  ollama_qwen35_122b: false
-
 creation:
   # PHASE A speedup (2026-05-21): retries cut to 1, validator-retries to 0,
   # parallelism dropped from 15 → 8 to match real broker capacity. See
@@ -164,9 +154,6 @@ llm:
   selection_strategy: random
   seed: 123
 
-  route_weights:
-    ollama_gemma4_31b: 1.0
-
   # Adaptive LLM-route sampling. `weighted_static` (default) keeps using
   # the `route_weights` block above unchanged. `bandit` swaps in a
   # discounted Thompson sampler keyed on the same routes; the existing
@@ -187,39 +174,5 @@ llm:
       reward_window: 50
       survival_weight: 0.3
 
-  # Pipeline configurations. Each entry is a named bundle of
-  # `canonical_stage -> route_id` assignments. When this block is
-  # non-empty the bandit sampler switches granularity from individual
-  # routes to whole pipelines: one pipeline is sampled per organism and
-  # *every stage of that organism* uses the pipeline's stage mapping.
-  # Reward (organism simple_score) is fed back to the pipeline arm.
-  #
-  # Canonical stages must each be present (no defaults):
-  #   - rationalization        (Step 1 of two-step design)
-  #   - design                 (Step 2 of two-step design, also retries)
-  #   - implementation         (also implementation_attempt / template)
-  #   - novelty                (novelty_check)
-  #   - repair                 (post-eval repair after evaluator failure)
-  #
-  # To get back to legacy per-stage independent routing, set this to []
-  # (or remove it) and the `route_weights` / `route_sampling` path
-  # above takes over.
-  pipelines:
-    - id: qwen_creative_gemma_check
-      stages:
-        rationalization: ollama_qwen35_122b
-        design: ollama_qwen35_122b
-        implementation: ollama_qwen35_122b
-        novelty: ollama_gemma4_31b
-        repair: ollama_gemma4_31b
-
-  pipeline_sampling:
-    strategy: bandit                   # uniform | weighted_static | bandit
-    bandit:
-      algorithm: discounted_thompson
-      discount: 0.97
-      prior_alpha: 1.0
-      prior_beta: 1.0
-      reward_mode: score_quantile
-      reward_window: 50
-      survival_weight: 0.3
+  # Route identities, token caps, stage pipelines, and pipeline sampling live
+  # in conf/backbone/*.yaml so a task can change LLMs with one Hydra override.
