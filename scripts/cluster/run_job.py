@@ -240,6 +240,14 @@ def main() -> int:
         "model": {"id": MODEL_ID, "revision": MODEL_REVISION},
         "sglang_version": SGLANG_VERSION,
         "sglang_cuda_variant": SGLANG_CUDA_VARIANT,
+        "cuda_driver_environment": {
+            "ld_library_path": os.environ.get("LD_LIBRARY_PATH", ""),
+            "compat_path_present": any(
+                "compat" in Path(component).parts
+                for component in os.environ.get("LD_LIBRARY_PATH", "").split(os.pathsep)
+                if component
+            ),
+        },
         "config_name": config_name,
         "backbone": backbone,
         "max_generations": max_generations,
@@ -328,6 +336,7 @@ def main() -> int:
             {"created_at": utc_now(), "argv": server_command, "environment": {
                 "SGLANG_DSV4_COMPRESS_STATE_DTYPE": environment["SGLANG_DSV4_COMPRESS_STATE_DTYPE"],
                 "HF_HOME": str(hf_home),
+                "LD_LIBRARY_PATH": environment.get("LD_LIBRARY_PATH", ""),
             }},
         )
         server_log = (run_dir / "sglang.log").open("a", encoding="utf-8", buffering=1)

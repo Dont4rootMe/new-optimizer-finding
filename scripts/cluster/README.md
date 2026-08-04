@@ -20,8 +20,15 @@ intentional: SR008 allocations have exposed both R560/CUDA-12.6 and R580
 drivers. SGLang's PyPI metadata defaults to CUDA 13, which fails on the R560
 nodes. `bootstrap_deepseek_env.sh` follows SGLang 0.5.16's upstream CUDA-12
 Docker recipe (cu126 PyTorch, CUDA-12 FlashInfer/CUTLASS dependencies, Hopper
-kernels; release 0.4.5's actually published SM90 wheel is cu129), verifies that CUDA initializes, and only then publishes the runtime
-ready marker. Never reuse the incompatible legacy `sglang-0.5.16` directory.
+kernels; release 0.4.5's actually published SM90 wheel is cu129), verifies that
+CUDA initializes, and only then publishes the runtime ready marker. Never reuse
+the incompatible legacy `sglang-0.5.16` directory.
+
+Before any GPU Python process starts, `cuda_driver_env.sh` removes CUDA
+forward-compatibility directories from `LD_LIBRARY_PATH`. ML Space mounts the
+node's real driver under its native paths; preferring an older image-bundled
+`compat/libcuda.so` causes CUDA error 803 on newer-driver allocations. Other
+CUDA, NCCL, HPC-X, and scheduler-mounted NVIDIA paths are preserved.
 
 ## Submit
 

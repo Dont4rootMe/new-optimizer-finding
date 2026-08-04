@@ -681,6 +681,13 @@ fallback. Exact concrete override по-прежнему имеет приори�
   the incompatible legacy `sglang-0.5.16` environment. Primary references:
   [SGLang v0.5.16 Dockerfile](https://github.com/sgl-project/sglang/blob/v0.5.16/docker/Dockerfile),
   [NVIDIA CUDA compatibility guide](https://docs.nvidia.com/deploy/cuda-compatibility/).
+- Before any GPU Python process starts, `scripts/cluster/cuda_driver_env.sh`
+  removes only `LD_LIBRARY_PATH` components named `compat` (and unsafe empty
+  components). ML Space's base image puts CUDA 12.6 forward-compat
+  `libcuda.so.560.35.05` ahead of the scheduler-mounted R580 driver; that exact
+  mismatch causes CUDA Error 803. Native CUDA/NCCL/HPC-X/NVIDIA paths remain
+  intact, and the sanitized environment is recorded in both run and SGLang
+  launch manifests.
 - H100 constraint: use stock official FP4 checkpoint and explicitly pin
   SGLang's Hopper W4A16/Marlin runner. Do not force `flashinfer_mxfp4` or other
   Blackwell-only FP4 kernels. BF16 compressed state reduces KV-state memory;
@@ -981,6 +988,9 @@ CUDA heterogeneity probe:
 | Job | Outcome / finding |
 |---|---|
 | `lm-mpi-job-5a8a57c5-b24b-493f-aa63-5939eb3ade64` | One 1×H100 allocation completed and reported driver `580.105.08`, H100 compute capability 9.0. Together with the earlier 12.6 API failure this proves allocations cannot assume one driver branch; portable production runtime is cu126. |
+| `lm-mpi-job-227b2d27-71af-4892-bed5-b794bfaa2559` | First cu126 bootstrap reached Python packaging, then failed because the CUDA-12 SGLang Dockerfile's historical `sglang-kernel` cu124 URL is no longer a published GitHub asset. No runtime was promoted. The audited resolver now uses the release's published cu129 SM90 wheel. |
+| `lm-mpi-job-cf2b9e16-dd7f-4e70-93b7-884c9f6cefff` | Built the complete SGLang 0.5.16 stack (`torch 2.11.0+cu126`, CUDA-12 FlashInfer, cu129 Hopper kernels), but the final live-CUDA gate failed with Error 803. The incomplete environment was intentionally preserved at `/home/jovyan/evolutionloop-deepseek-v4/runtime/sglang-0.5.16-cu126.building.20260804T031427Z.120`. |
+| `lm-mpi-job-b280fbee-e4fa-4f94-9607-7edc10bae6b9` | Controlled libcuda experiment on driver `580.105.08`: original path selected `/usr/local/cuda-12.6/compat/libcuda.so.560.35.05` and `torch.cuda.is_available()` was false with Error 803; removing only the `compat` path made the same cu126 runtime immediately detect one H100. Prepending `/usr/lib/x86_64-linux-gnu` also worked but is unnecessarily cluster-specific, so canonical code uses the minimal removal. |
 
 Bootstrap smoke `lm-mpi-job-3c02e882-bc28-434f-9ed2-1a3841b66c2a` failed
 before workers became READY and emitted no user-code output. Its only new

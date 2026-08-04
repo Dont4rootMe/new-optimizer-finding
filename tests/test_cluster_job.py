@@ -147,6 +147,32 @@ def test_binary_entrypoint_nonzero_rank_exits_before_shared_state_access() -> No
     assert "owned by rank 0" in completed.stdout
 
 
+def test_cuda_driver_environment_removes_only_compat_and_empty_paths() -> None:
+    helper = ROOT / "scripts" / "cluster" / "cuda_driver_env.sh"
+    environment = os.environ.copy()
+    environment["LD_LIBRARY_PATH"] = (
+        "/opt/hpcx/ompi/lib:/usr/local/cuda-12.6/compat:"
+        "/usr/local/cuda-12.6/lib64::/vendor/compat/stubs:/usr/local/nvidia/lib64"
+    )
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; sanitize_cuda_driver_path; sanitize_cuda_driver_path; printf "%s" "$LD_LIBRARY_PATH"',
+            "bash",
+            str(helper),
+        ],
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.stdout == (
+        "/opt/hpcx/ompi/lib:/usr/local/cuda-12.6/lib64:/usr/local/nvidia/lib64"
+    )
+    assert completed.stderr.count("using scheduler-mounted libcuda") == 1
+
+
 def test_data_transfer_paths_and_terminal_logs() -> None:
     assert connector_path(Path("/home/jovyan/team/repo.tar.gz")) == "/team/repo.tar.gz"
     try:

@@ -10,6 +10,10 @@ SGLANG_CUDA_VARIANT="${SGLANG_CUDA_VARIANT:-cu126}"
 DEEPSEEK_ENV_DIR="${DEEPSEEK_ENV_DIR:?DEEPSEEK_ENV_DIR must be an explicit absolute path}"
 BOOTSTRAP_PYTHON="${BOOTSTRAP_PYTHON:-python3}"
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${script_dir}/cuda_driver_env.sh"
+sanitize_cuda_driver_path
+
 if [[ "$SGLANG_VERSION" != "0.5.16" || "$SGLANG_CUDA_VARIANT" != "cu126" ]]; then
   echo "Unaudited SGLang runtime: version=${SGLANG_VERSION} cuda=${SGLANG_CUDA_VARIANT}" >&2
   exit 2

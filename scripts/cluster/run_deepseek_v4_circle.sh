@@ -29,4 +29,6 @@ fi
 
 cd "$PROJECT_ROOT"
 export PYTHONPATH="${PROJECT_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+source "${PROJECT_ROOT}/scripts/cluster/cuda_driver_env.sh"
+sanitize_cuda_driver_path
 exec python3 -m scripts.cluster.run_job
