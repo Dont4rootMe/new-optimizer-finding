@@ -1056,6 +1056,32 @@ usage events. The model snapshot remains cached on regional NFS. The terminal
 monitor correctly wrote a failed `completion_event.json` at 02:43:38 UTC.
 This is an infrastructure/runtime diagnostic, never an experiment result.
 
+Latest accepted production submission (active; still **not** a final result):
+
+| Поле | Значение |
+|---|---|
+| Code | `1f92a5165e48a3e6cb185cc1f9b3dccbc1a28be0` |
+| Scheduler job | `lm-mpi-job-d9e66015-5ad8-49dd-8f08-e04b2003228f` |
+| Submitted/state | 2026-08-04 06:38:18 UTC; `Running` |
+| Preset/backbone | `config_circle_packing_shinka`; only `deepseek_v4_flash_0731` |
+| Budget | generation 0 seed + generations 1–300; 6 offspring/generation; max 8 concurrent organisms |
+| Regional run | `/home/jovyan/evolutionloop-deepseek-v4/runs/deepseek-v4-flash-0731-circle-300-1f92a51` |
+| Control monitor | detached PID `27453`; scheduler polling every 60 seconds; terminal trigger `completion_event.json` |
+
+Startup acceptance completed before handing control to the detached monitor:
+exact commit/model revision and all eight H100s were verified; the cuRAND,
+DeepGEMM and TVM-FFI smokes passed; custom NVLink all-reduce reported
+`multicast=True`; all target/DSpark weights loaded; both target and draft CUDA
+graphs captured; endpoint smoke passed. Canonical `EvolutionLoop` copied five
+seed organisms (best seed score `2.028`), completed generation 1 and entered
+generation 2. Detailed telemetry is nonempty and provider-native: one observed
+generation-2 rationalization call recorded 5,027 prompt + 10,906 completion =
+15,933 total tokens, including 9,923 reasoning tokens; all observed events use
+only `deepseek-ai/DeepSeek-V4-Flash-0731`. These are operational acceptance
+facts, not final fitness measurements. Final acceptance remains generation 300,
+no inflight transaction, parse-clean nonzero token summary and audited survivor
+scores.
+
 CUDA heterogeneity probe:
 
 | Job | Outcome / finding |
@@ -1079,6 +1105,7 @@ CUDA heterogeneity probe:
 | `lm-mpi-job-e28269e2-eaf1-4d42-8c67-cac66c0cedb3` | Exact `8f804a1e169b1be93a09493ef21225f167cc8f34` TP=8 production attempt used the isolated `nvcc 12.9.86`, activated NVLink custom all-reduce, loaded all 48 shards, and successfully advanced through DeepSeek-V4's DeepGEMM/MHC prewarm. CUDA-graph capture then exposed the next missing compiler-prefix dependency: FlashInfer sampling and renormalization JIT both stopped on `fatal error: curand.h: No such file or directory`. Scheduler `Failed`; endpoint/EvolutionLoop never started and usage remained zero. The fix pins NVIDIA `libcurand-dev 10.3.10.19`, gives the additive compiler contract a new immutable prefix, preserves the compatible DeepGEMM/TVM caches, and compiles an actual SM90a `curand_kernel.h` cubin before publishing readiness. This is a startup diagnostic, not a fitness result. |
 | `lm-mpi-job-dd050cdf-df57-4662-bb8d-ebdc679f1028` | Exact `11ce5ae4d673600d29c88802ae655a733b6340b8` 1×H100 acceptance successfully resolved NVIDIA `libcurand`/`libcurand-dev 10.3.10.19` and installed the new prefix, then failed silently at the repository's own pre-smoke header-location assertion. Package inspection proved the official conda layout is `targets/x86_64-linux/include/{curand.h,curand_kernel.h}`, not prefix-root `include/`. The corrected bootstrap validates the target layout and resumes a package-complete unpublished prefix instead of rebuilding it. No model or experiment ran. |
 | `lm-mpi-job-f89ee2e4-a5ac-4c99-91e1-f28cae4588d9` | Corrected exact `1a8d1c5b18e986b76f7adb08c7ec68c99cfc7ae7` 1×H100 acceptance scheduler-completed. It resumed the package-complete prefix, compiled the combined SM90a `st.shared.b128` + `curand_kernel.h` cubin, atomically published the ready marker, passed the real numerical DeepGEMM MHC path, and revalidated CUDA IPC, communicator and BF16 TP=8 custom-all-reduce modules. This closes the compile-toolchain regression found by the preceding TP=8 run; endpoint readiness still belongs to production acceptance. |
+| `lm-mpi-job-d9e66015-5ad8-49dd-8f08-e04b2003228f` | Exact `1f92a5165e48a3e6cb185cc1f9b3dccbc1a28be0` production run passed the full TP=8 startup boundary and entered real DeepSeek-only evolution. At monitoring handoff it had completed generation 1, entered generation 2 and emitted nonzero provider token telemetry. Detached monitor PID `27453` now owns terminal detection. Do not call this a result until the strict generation-300 result capsule succeeds. |
 
 Bootstrap smoke `lm-mpi-job-3c02e882-bc28-434f-9ed2-1a3841b66c2a` failed
 before workers became READY and emitted no user-code output. Its only new
