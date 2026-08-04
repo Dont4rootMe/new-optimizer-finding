@@ -18,7 +18,10 @@ from scripts.cluster.common import (
 from scripts.cluster.sglang_runtime import cuda126_requirements
 from scripts.cluster.monitor import collect_progress, monitor, normalize_scheduler_status
 from scripts.cluster.submit import build_job_kwargs
-from scripts.cluster.smoke_deepgemm_toolchain import parse_nvcc_version
+from scripts.cluster.smoke_deepgemm_toolchain import (
+    MHC_DIFFERENCE_TOLERANCE,
+    parse_nvcc_version,
+)
 from scripts.cluster.transfer import connector_path, wait_for_transfer
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,6 +87,7 @@ def test_submit_contract_uses_one_binary_worker(tmp_path: Path) -> None:
 
 def test_deepgemm_compiler_contract_is_exact_and_parseable() -> None:
     assert DEEPGEMM_NVCC_VERSION == "12.9.86"
+    assert MHC_DIFFERENCE_TOLERANCE == 1e-6
     output = "Cuda compilation tools, release 12.9, V12.9.86\n"
     assert parse_nvcc_version(output) == DEEPGEMM_NVCC_VERSION
     helper = ROOT / "scripts" / "cluster" / "bootstrap_cuda_toolchain.sh"

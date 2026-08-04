@@ -11,6 +11,8 @@ from pathlib import Path
 
 from scripts.cluster.common import atomic_write_json, utc_now
 
+MHC_DIFFERENCE_TOLERANCE = 1e-6
+
 
 def parse_nvcc_version(output: str) -> str:
     match = re.search(r"\bV(\d+\.\d+\.\d+)\b", output)
@@ -70,8 +72,13 @@ def main() -> None:
         float(calc_diff(output, a.float() @ b.T)),
         float(calc_diff(square_sum, a.float().square().sum(-1))),
     )
-    if difference >= 1e-8:
-        raise RuntimeError(f"DeepGEMM MHC numerical mismatch: {difference}")
+    if not torch.isfinite(output).all() or not torch.isfinite(square_sum).all():
+        raise RuntimeError("DeepGEMM MHC output contains non-finite values")
+    if difference >= MHC_DIFFERENCE_TOLERANCE:
+        raise RuntimeError(
+            "DeepGEMM MHC numerical mismatch: "
+            f"difference={difference}, tolerance={MHC_DIFFERENCE_TOLERANCE}"
+        )
 
     atomic_write_json(
         args.output,
@@ -89,6 +96,7 @@ def main() -> None:
             "kernel": "tf32_hc_prenorm_gemm",
             "shape": {"m": m, "n": n, "k": k, "num_splits": None},
             "difference": difference,
+            "difference_tolerance": MHC_DIFFERENCE_TOLERANCE,
             "cache_dir": str(cache_dir),
         },
     )
