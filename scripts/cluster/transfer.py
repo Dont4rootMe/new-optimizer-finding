@@ -1,8 +1,11 @@
-"""Export regional Cloud.ru job artifacts back to the workspace NFS.
+"""Legacy regional-NFS export helper for older Cloud.ru control planes.
 
 SR008 jobs and the submitting Jupyter server have distinct NFS namespaces.
 Source code enters a job through the pinned HTTPS git bootstrap in ``submit``;
-completed run artifacts leave through ML Space Data Transfer.
+current Cloud.ru releases require ``mls transfer`` for full artifact export and
+list the client-lib copy functions used here as disabled. This module therefore
+fails closed unless a caller explicitly opts into a separately verified legacy
+control plane.
 """
 
 from __future__ import annotations
@@ -80,11 +83,23 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--destination", required=True)
     parser.add_argument("--region", default=REGION)
     parser.add_argument("--timeout-sec", type=float, default=3600.0)
+    parser.add_argument(
+        "--allow-legacy-client-lib",
+        action="store_true",
+        help="opt into disabled client_lib copy APIs only on a separately verified old control plane",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
+    if not args.allow_legacy_client_lib:
+        raise SystemExit(
+            "Cloud.ru disables client_lib.copy_from_nfs on the current control plane. "
+            "Use cloudru-ml-cli >=0.7.1 (`mls transfer`) with a user-configured "
+            "profile. Pass --allow-legacy-client-lib only on a separately verified "
+            "legacy deployment."
+        )
     regional_run = require_regional_job_path(args.regional_run_dir, label="regional run directory")
     destination = require_absolute_safe_path(args.destination, label="export destination")
     import client_lib  # type: ignore[import-not-found]  # control-plane-only dependency

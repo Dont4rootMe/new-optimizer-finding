@@ -526,12 +526,41 @@ def main() -> int:
                 cwd=project_root,
                 env=environment,
             )
-        manifest.update(status="completed", completed_at=utc_now(), progress=_population_progress(population_root))
+        result_summary_path = run_dir / "result_summary.json"
+        _run_checked(
+            [
+                env_python,
+                "-m",
+                "scripts.cluster.result_summary",
+                "--population-root",
+                str(population_root),
+                "--token-summary",
+                str(run_dir / "token_usage_summary.json"),
+                "--expected-generation",
+                str(max_generations),
+                "--output",
+                str(result_summary_path),
+            ],
+            cwd=project_root,
+            env=environment,
+        )
+        result_summary = read_json_if_present(result_summary_path) or {}
+        manifest.update(
+            status="completed",
+            completed_at=utc_now(),
+            progress=_population_progress(population_root),
+            result_summary=str(result_summary_path),
+        )
         atomic_write_json(manifest_path, manifest)
         token_summary = read_json_if_present(run_dir / "token_usage_summary.json") or {}
         _event(
             "run_completed",
-            {"run_id": run_id, "progress": manifest["progress"], "token_usage": token_summary},
+            {
+                "run_id": run_id,
+                "progress": manifest["progress"],
+                "result_summary": result_summary,
+                "token_usage": token_summary,
+            },
         )
         _log("job completed")
         return 0

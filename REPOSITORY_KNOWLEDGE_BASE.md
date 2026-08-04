@@ -762,9 +762,24 @@ fallback. Exact concrete override по-прежнему имеет приори�
 - Run artifacts: `gpu_inventory.json`, `model_snapshot.json`,
   `deepgemm_toolchain_smoke.json`, `sglang_jit_toolchain_smoke.json`,
   `sglang_launch.json`, `sglang.log`, `smoke.json`, `evolution_launch.json`,
-  `run_manifest.json`, population artifacts, token summary и monitor history/
-  completion event. Повторный job с тем же run directory использует canonical
-  EvolutionLoop resume state.
+  `run_manifest.json`, `result_summary.json`, population artifacts, token
+  summary и monitor history/completion event. `result_summary.json` — строгий
+  terminal capsule: exact requested generation, no inflight transaction,
+  non-empty active population, parse-clean non-zero LLM telemetry, survivor/
+  island scores и organism status/operator counts. Нарушение любого условия
+  переводит job в failed вместо ложного completed. Повторный job с тем же run
+  directory использует canonical EvolutionLoop resume state.
+- Artifact export drift: installed `client_lib 0.6.3` still contains
+  `copy_from_nfs`, but Cloud.ru now lists `copy_from_nfs`/`copy_to_nfs` as
+  disabled. A live call created an inert record while its legacy `/logs`
+  endpoint returned 404 and copied no file. Do not use
+  `scripts.cluster.transfer` on this control plane. Full SR008→workspace NFS
+  export requires supported `cloudru-ml-cli` (`mls transfer`, >=0.7.1) plus a
+  user-configured profile. The current Jupyter session has no such profile, the
+  v2 gateway is unreachable from it, and compute jobs receive no AWS
+  credentials. Never derive/persist a profile from gateway environment values
+  or inject secrets into jobs. Terminal logs plus the durable regional run and
+  `result_summary.json` are the credential-free audit path.
 - На resource check 2026-08-04 обе 8-GPU H100 SKU показывали 0 свободных
   workers; это dynamic capacity, поэтому job допустимо ставить в очередь, но
   факт `Pending` не является подтверждением inference.
@@ -1055,6 +1070,8 @@ CUDA heterogeneity probe:
 | `lm-mpi-job-87266755-ce54-4fe5-bce0-d3a5f732f7e0` | Exact `3b7c38640a9d4ce54220dd84975517d38c92b956` 1×H100 acceptance reused the published CUDA 12.9.86 prefix and cu126 serving runtime, passed both the standalone SM90a cubin and real numerical `tf32_hc_prenorm_gemm` checks, persisted `deepgemm_toolchain_smoke.json`, and scheduler-completed. This closes the DeepGEMM compiler acceptance; TP=8 server acceptance is separate. |
 | `lm-mpi-job-489ebb68-ffb3-4a26-83bd-5ede37433c41` | Focused SGLang TVM-FFI probe with `CUDA_HOME=cuda-nvcc-12.9.86` compiled past the const-tuple failure produced by 12.6. It reached link and failed only because the conda prefix's `libcudart.so` is under `targets/x86_64-linux/lib`, while upstream adds `-L$CUDA_HOME/lib64`. This isolated the remaining requirement to compile-time library search. |
 | `lm-mpi-job-c6fe2cc8-5253-453c-b953-1a9f1ddd0b25` | Follow-up live-H100 probe added only the conda CUDA target directory to `LIBRARY_PATH` and scheduler-completed. With Torch `2.11.0+cu126`, TVM-FFI `0.1.11`, and `nvcc 12.9.86`, it compiled CUDA IPC, communicator, and BF16 world-size-8 custom-all-reduce `.so` modules. This validates the optimized custom-all-reduce JIT path without contaminating runtime `LD_LIBRARY_PATH`. |
+| `lm-mpi-job-43117c55-06be-486d-a398-54674f86fe57` | Integrated exact `114b3110f8c7fb73efec11fbb1f5f2a0ec1103fc` 1×H100 acceptance scheduler-completed. It sanitized the driver path, reused the published cu126 runtime and `nvcc 12.9.86`, passed the numerical DeepGEMM MHC smoke, precompiled/validated all three production TVM-FFI modules, and persisted both smoke JSON artifacts under the dedicated regional run. |
+| `lm-mpi-job-cb856e1b-481b-48ae-bc9b-cfd553b7c79f` | Independent regional-NFS readback scheduler-completed and parsed both `114b311` smoke artifacts: NVIDIA H100 80GB HBM3 (CC 9.0), Torch `2.11.0+cu126`, runtime CUDA 12.6, NVCC `12.9.86`, TVM-FFI `0.1.11`, BF16 world size 8, and cached `cuda_ipc`, `communicator`, `custom_all_reduce_bf16_t_8` shared objects. It also proved compute jobs have neither an AWS credentials file nor AWS credential environment, so secret-free S3 relay is unavailable. |
 | `lm-mpi-job-9025f0bf-80f1-4cb6-a32d-2b2fbbeecd1c` | Exact `2456f094ec57bc33845d04f87ebdb83ef30964d5` production retry sanitized the driver path, reused the validated cu126 runtime/model cache, initialized NCCL ranks 0–7, and loaded all 48 DeepSeek shards. It then failed before server readiness when `nvcc 12.6.85` rejected DeepGEMM's 128-bit PTX constraint during the 21-bucket MHC prenorm prewarm on every TP rank. No EvolutionLoop state or LLM usage exists. |
 
 Bootstrap smoke `lm-mpi-job-3c02e882-bc28-434f-9ed2-1a3841b66c2a` failed

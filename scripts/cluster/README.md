@@ -95,16 +95,39 @@ scheduler logs. Population state and LLM telemetry remain on regional NFS;
 rerunning the same run ID resumes an inflight seed or generation through the
 canonical EvolutionLoop state protocol.
 
-After a terminal job, export the regional run back to workspace NFS:
+The complete run remains durable under regional NFS. The production job writes
+`result_summary.json` and emits it in the terminal `run_completed` event, so
+generation/inflight integrity, survivor scores, organism outcomes, and token
+totals can be audited from scheduler logs even though the Jupyter and SR008 NFS
+namespaces differ. Completion is rejected unless the requested generation is
+reached, both inflight transactions are absent, and real token telemetry parses
+without errors.
+
+Do not use the repository's legacy `scripts.cluster.transfer` command on the
+current control plane: Cloud.ru has disabled the `client_lib.copy_from_nfs` and
+`copy_to_nfs` functions retained by client_lib 0.6.3, and its legacy logs route
+returns 404. For a full workspace-NFS export, configure the supported
+`cloudru-ml-cli` (`mls` >= 0.7.1) with user credentials and create an NFS→NFS
+transfer rule, for example:
 
 ```bash
-bash "$MLS_ENV" "$MLS_PY" -m scripts.cluster.transfer \
-  --regional-run-dir /home/jovyan/evolutionloop-deepseek-v4/runs/<run-id> \
-  --destination /home/jovyan/<workspace-path>/cluster-results/<run-id>
+mls transfer create \
+  --name evolutionloop-export-<run-id> \
+  --connector-id <sr008-nfs-connector> --connector-type nfs \
+  --dst-connector-id <workspace-nfs-connector> --dst-connector-type nfs \
+  --source evolutionloop-deepseek-v4/runs/<run-id> \
+  --destination <workspace-path>/cluster-results/<run-id> \
+  --strategy write_all
 ```
+
+Never synthesize that profile from scheduler gateway variables or pass storage
+credentials into a job environment. Official Cloud.ru documentation lists the
+old client-lib copy functions as disabled and the `mls transfer` command as the
+supported interface.
 
 Each model call is logged to `population/llm_usage.jsonl`. A completed job also
 writes `token_usage_summary.json`, grouped by route, stage, and generation.
 Startup acceptance artifacts include `deepgemm_toolchain_smoke.json` and
 `sglang_jit_toolchain_smoke.json`; the latter records the exact compiler,
 TVM-FFI version, GPU/compute capability, cache namespace, and compiled modules.
+`result_summary.json` is the compact, log-readable terminal results capsule.

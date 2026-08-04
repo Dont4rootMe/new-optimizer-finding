@@ -134,8 +134,14 @@ generation/token progress is emitted as `EVOLUTIONLOOP_EVENT` JSON in job logs.
 Typical states are Pending, Inqueue, Starting, Running, Completed, Failed,
 Cancelled/Deleted. Save `submission.json`; its job name is the stable handle.
 
-After completion, use `python -m scripts.cluster.transfer` as documented in
-`scripts/cluster/README.md` to copy the regional run into workspace NFS.
+After completion, use `result_summary.json` / the `run_completed` event for the
+mandatory terminal audit. The installed `client_lib 0.6.3` still exposes
+`copy_from_nfs`, but Cloud.ru has disabled that API and the legacy logs endpoint
+returns 404. Full export requires a separately configured supported
+`cloudru-ml-cli` (`mls transfer`, version 0.7.1 or newer) and its user-owned
+credentials, as documented in `scripts/cluster/README.md`. Never repurpose the
+Jupyter gateway variables as a saved CLI profile or inject storage credentials
+into the compute job.
 
 Official references:
 

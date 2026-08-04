@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import os
 import subprocess
+from pathlib import Path
+
+import pytest
 
 from scripts.cluster.common import (
     DEEPGEMM_NVCC_VERSION,
@@ -19,6 +21,7 @@ from scripts.cluster.common import (
 )
 from scripts.cluster.sglang_runtime import cuda126_requirements
 from scripts.cluster.monitor import collect_progress, monitor, normalize_scheduler_status
+from scripts.cluster.result_summary import summarize_run
 from scripts.cluster.submit import build_job_kwargs
 from scripts.cluster.smoke_deepgemm_toolchain import (
     MHC_DIFFERENCE_TOLERANCE,
@@ -277,3 +280,99 @@ def test_monitor_accepts_completed_staged_job_before_artifact_export(tmp_path: P
     event = json.loads((run_dir / "completion_event.json").read_text(encoding="utf-8"))
     assert event["success"] is True
     assert event["regional_run_dir"] == "/home/jovyan/regional/run"
+
+
+def test_terminal_result_summary_enforces_and_reports_completion(tmp_path: Path) -> None:
+    population = tmp_path / "population"
+    winner_dir = population / "gen_0300" / "island_a" / "org_winner"
+    other_dir = population / "gen_0300" / "island_b" / "org_other"
+    eliminated_dir = population / "gen_0299" / "island_a" / "org_old"
+    for directory, organism_id, island_id, generation, score, status, operator in (
+        (winner_dir, "winner", "a", 300, 1.25, "evaluated", "mutation"),
+        (other_dir, "other", "b", 300, 0.75, "evaluated", "crossover"),
+        (eliminated_dir, "old", "a", 299, 0.5, "eliminated", "mutation"),
+    ):
+        directory.mkdir(parents=True)
+        (directory / "organism.json").write_text(
+            json.dumps(
+                {
+                    "organism_id": organism_id,
+                    "island_id": island_id,
+                    "generation_created": generation,
+                    "simple_score": score,
+                    "hard_score": score - 0.1,
+                    "status": status,
+                    "operator": operator,
+                }
+            ),
+            encoding="utf-8",
+        )
+    (population / "population_state.json").write_text(
+        json.dumps(
+            {
+                "current_generation": 300,
+                "active_organisms": [
+                    {
+                        "organism_id": "winner",
+                        "island_id": "a",
+                        "organism_dir": str(winner_dir),
+                        "generation_created": 300,
+                        "current_generation_active": 300,
+                        "simple_score": 1.25,
+                        "hard_score": 1.15,
+                    },
+                    {
+                        "organism_id": "other",
+                        "island_id": "b",
+                        "organism_dir": str(other_dir),
+                        "generation_created": 300,
+                        "current_generation_active": 300,
+                        "simple_score": 0.75,
+                        "hard_score": 0.65,
+                    },
+                ],
+                "best_organism_id": "winner",
+                "best_simple_score": 1.25,
+                "inflight_seed": None,
+                "inflight_generation": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+    token_summary = {
+        "parse_errors": [],
+        "totals": {"calls": 42, "prompt_tokens": 100, "completion_tokens": 50},
+        "by_route": {"deepseek": {"calls": 42}},
+        "by_stage": {"design": {"calls": 20}},
+    }
+
+    summary = summarize_run(population, token_summary=token_summary, expected_generation=300)
+
+    assert summary["completion_contract"]["satisfied"] is True
+    assert summary["completion_contract"]["llm_calls"] == 42
+    assert summary["population"]["best_historical_simple"]["organism_id"] == "winner"
+    assert summary["population"]["by_island"]["a"]["best_simple"]["simple_score"] == 1.25
+    assert summary["history"]["status_counts"] == {"eliminated": 1, "evaluated": 2}
+    assert summary["history"]["operator_counts"] == {"crossover": 1, "mutation": 2}
+
+
+def test_terminal_result_summary_rejects_short_or_dirty_run(tmp_path: Path) -> None:
+    population = tmp_path / "population"
+    population.mkdir()
+    (population / "population_state.json").write_text(
+        json.dumps(
+            {
+                "current_generation": 299,
+                "active_organisms": [{"organism_id": "a"}],
+                "inflight_seed": None,
+                "inflight_generation": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="stopped at generation 299"):
+        summarize_run(
+            population,
+            token_summary={"parse_errors": [], "totals": {"calls": 1}},
+            expected_generation=300,
+        )
