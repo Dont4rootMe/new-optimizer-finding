@@ -6,8 +6,14 @@ set -euo pipefail
 # builds are preserved for diagnosis rather than deleted.
 
 SGLANG_VERSION="${SGLANG_VERSION:-0.5.16}"
+SGLANG_CUDA_VARIANT="${SGLANG_CUDA_VARIANT:-cu126}"
 DEEPSEEK_ENV_DIR="${DEEPSEEK_ENV_DIR:?DEEPSEEK_ENV_DIR must be an explicit absolute path}"
 BOOTSTRAP_PYTHON="${BOOTSTRAP_PYTHON:-python3}"
+
+if [[ "$SGLANG_VERSION" != "0.5.16" || "$SGLANG_CUDA_VARIANT" != "cu126" ]]; then
+  echo "Unaudited SGLang runtime: version=${SGLANG_VERSION} cuda=${SGLANG_CUDA_VARIANT}" >&2
+  exit 2
+fi
 
 case "$DEEPSEEK_ENV_DIR" in
   /*) ;;
@@ -20,12 +26,20 @@ fi
 
 ready_marker="${DEEPSEEK_ENV_DIR}/.runtime-ready.json"
 if [[ -x "${DEEPSEEK_ENV_DIR}/bin/python" && -f "$ready_marker" ]]; then
-  if "${DEEPSEEK_ENV_DIR}/bin/python" - "$SGLANG_VERSION" <<'PY'
+  if "${DEEPSEEK_ENV_DIR}/bin/python" - "$SGLANG_VERSION" "$SGLANG_CUDA_VARIANT" <<'PY'
 import importlib.metadata
 import sys
+import torch
 
 expected = sys.argv[1]
-raise SystemExit(0 if importlib.metadata.version("sglang") == expected else 1)
+variant = sys.argv[2]
+valid = (
+    importlib.metadata.version("sglang") == expected
+    and variant == "cu126"
+    and str(torch.version.cuda).startswith("12.6")
+    and torch.cuda.is_available()
+)
+raise SystemExit(0 if valid else 1)
 PY
   then
     echo "[cluster-env] reusing ${DEEPSEEK_ENV_DIR} (sglang=${SGLANG_VERSION})"
@@ -61,11 +75,24 @@ echo "[cluster-env] bootstrap python: ${BOOTSTRAP_PYTHON}"
 "$BOOTSTRAP_PYTHON" -m venv "$build_dir"
 "${build_dir}/bin/python" -m pip install --upgrade pip setuptools wheel uv
 
-# SGLang owns the CUDA/PyTorch serving stack. The evolution runtime itself is
-# deliberately installed as a small dependency set and imported from PROJECT_ROOT
-# via PYTHONPATH, avoiding a second resolver changing SGLang's CUDA wheels.
+# PyPI's SGLang 0.5.16 metadata defaults to CUDA 13.  Reproduce the upstream
+# Dockerfile's explicit CUDA-12 branch: install cu126 PyTorch first, install the
+# SGLang wheel without dependencies, then materialize the audited CUDA-12 view
+# of its dependency metadata.  This keeps current DeepSeek-V4/DSPARK support
+# while matching the R560/CUDA-12.6 cluster driver.
 "${build_dir}/bin/uv" pip install --python "${build_dir}/bin/python" \
-  "sglang==${SGLANG_VERSION}" \
+  --index-url "https://download.pytorch.org/whl/cu126" \
+  "torch==2.11.0" \
+  "torchvision==0.26.0" \
+  "torchaudio==2.11.0"
+"${build_dir}/bin/uv" pip install --python "${build_dir}/bin/python" \
+  --no-deps "sglang==${SGLANG_VERSION}"
+
+requirements_file="${build_dir}/.sglang-cu126-requirements.txt"
+PYTHONPATH="${PROJECT_ROOT:?PROJECT_ROOT must be set}" \
+  "${build_dir}/bin/python" -m scripts.cluster.sglang_runtime --output "$requirements_file"
+"${build_dir}/bin/uv" pip install --python "${build_dir}/bin/python" \
+  --requirements "$requirements_file" \
   "hydra-core==1.3.2" \
   "omegaconf==2.3.0" \
   "numpy>=1.24" \
@@ -91,7 +118,13 @@ payload = {
     "sglang": actual,
     "torch": torch.__version__,
     "cuda": torch.version.cuda,
+    "cuda_available": torch.cuda.is_available(),
+    "cuda_device_count": torch.cuda.device_count(),
 }
+if not str(torch.version.cuda).startswith("12.6"):
+    raise SystemExit(f"expected a CUDA 12.6 torch build, got {torch.version.cuda}")
+if not torch.cuda.is_available():
+    raise SystemExit("the CUDA 12.6 runtime cannot initialize a cluster GPU")
 Path(sys.prefix, ".runtime-ready.json").write_text(
     json.dumps(payload, indent=2, sort_keys=True) + "\n",
     encoding="utf-8",

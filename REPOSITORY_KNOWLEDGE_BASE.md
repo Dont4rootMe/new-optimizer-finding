@@ -667,9 +667,20 @@ fallback. Exact concrete override по-прежнему имеет приори�
 
 - Exact model: `deepseek-ai/DeepSeek-V4-Flash-0731`, pinned Hugging Face
   revision `7872f01b1d1fe23eabc4c98b48bffcef5a386062`.
-- Serving runtime: SGLang `0.5.16`, single node, tensor parallel 8, official
+- Serving runtime: SGLang `0.5.16`, CUDA runtime `cu126`, single node, tensor parallel 8, official
   bundled `DSPARK` draft head, reasoning parser `deepseek-v4`, tool parser
   `deepseekv4`, `temperature=1.0`, `top_p=0.95` in the experiment profile.
+- CUDA packaging is deliberately pinned to the persistent runtime ID
+  `sglang-0.5.16-cu126`. SR008 is heterogeneous: the 8×H100 allocation below
+  exposed CUDA Driver API 12.6, while one later 1×H100 probe exposed driver
+  `580.105.08`. The default SGLang PyPI stack (`torch 2.11.0+cu130`) therefore
+  fails nondeterministically by node. The bootstrap reproduces the official
+  SGLang 0.5.16 CUDA-12 Docker substitutions (`cuda-python<13`,
+  `flashinfer[cu12]`, cu126 PyTorch, cu124 SGLang kernel and cu129 Hopper
+  DeepGEMM wheel), checks real `torch.cuda` initialization, and never reuses
+  the incompatible legacy `sglang-0.5.16` environment. Primary references:
+  [SGLang v0.5.16 Dockerfile](https://github.com/sgl-project/sglang/blob/v0.5.16/docker/Dockerfile),
+  [NVIDIA CUDA compatibility guide](https://docs.nvidia.com/deploy/cuda-compatibility/).
 - H100 constraint: use stock official FP4 checkpoint and SGLang's automatic
   Hopper W4A16/Marlin path. Do not force `flashinfer_mxfp4` or other
   Blackwell-only FP4 kernels. BF16 compressed state reduces KV-state memory;
@@ -950,17 +961,26 @@ Current production submission:
 |---|---|
 | Code | `6b7ae1e24e8fb26afb45acf417e481403db1851d` |
 | Scheduler job | `lm-mpi-job-1024dcb2-e505-4e8a-a255-3805acee66e7` |
-| Submitted/state | 2026-08-04 02:30:48 UTC; `Pending` at last observation |
+| Submitted/state | 2026-08-04 02:30:48 UTC; `Failed` at 02:43:16 UTC before server readiness |
 | Regional source | `/home/jovyan/evolutionloop-deepseek-v4/source/6b7ae1e24e8fb26afb45acf417e481403db1851d` |
 | Regional run | `/home/jovyan/evolutionloop-deepseek-v4/runs/deepseek-v4-flash-0731-circle-300-6b7ae1e` |
 | Scheduler contract | one `a100plus.8gpu.80vG.96C.1456G` worker, `processes_per_worker=1`; run state lives directly on regional NFS |
 | Control monitor | PID `22377`; 60-second snapshots and terminal completion event under Jupyter-side `runs/optimizer_cluster_runs/...` |
 
-The pinned request is generation 0 plus generations 1–300, DeepSeek-only,
-max eight concurrent organism creations. This remains operational state, not
-an experiment result, until the acceptance checks below pass. The two failed
-full-size jobs above remain diagnostics and must never be aggregated as model
-runs.
+The immutable checkout, exactly one coordinator, eight-H100 inventory, runtime
+bootstrap and complete 74-file model snapshot were all validated. The serving
+environment resolved `torch 2.11.0+cu130`; this allocation's driver exposed
+CUDA Driver API `12.6`, so SGLang stopped before readiness with
+`No accelerator ... available`. `EvolutionLoop` never started and emitted zero
+usage events. The model snapshot remains cached on regional NFS. The terminal
+monitor correctly wrote a failed `completion_event.json` at 02:43:38 UTC.
+This is an infrastructure/runtime diagnostic, never an experiment result.
+
+CUDA heterogeneity probe:
+
+| Job | Outcome / finding |
+|---|---|
+| `lm-mpi-job-5a8a57c5-b24b-493f-aa63-5939eb3ade64` | One 1×H100 allocation completed and reported driver `580.105.08`, H100 compute capability 9.0. Together with the earlier 12.6 API failure this proves allocations cannot assume one driver branch; portable production runtime is cu126. |
 
 Bootstrap smoke `lm-mpi-job-3c02e882-bc28-434f-9ed2-1a3841b66c2a` failed
 before workers became READY and emitted no user-code output. Its only new

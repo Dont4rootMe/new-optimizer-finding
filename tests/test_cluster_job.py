@@ -8,10 +8,12 @@ import os
 import subprocess
 
 from scripts.cluster.common import (
+    SGLANG_RUNTIME_ID,
     build_evolution_command,
     build_git_bootstrap_command,
     build_sglang_command,
 )
+from scripts.cluster.sglang_runtime import cuda126_requirements
 from scripts.cluster.monitor import collect_progress, monitor, normalize_scheduler_status
 from scripts.cluster.submit import build_job_kwargs
 from scripts.cluster.transfer import connector_path, wait_for_transfer
@@ -65,7 +67,34 @@ def test_submit_contract_uses_one_binary_worker(tmp_path: Path) -> None:
     assert kwargs["detached"] is True
     assert "checkpoint_dir" not in kwargs
     assert kwargs["env_variables"]["MAX_GENERATIONS"] == "300"
+    assert kwargs["env_variables"]["SGLANG_CUDA_VARIANT"] == "cu126"
+    assert kwargs["env_variables"]["DEEPSEEK_ENV_DIR"].endswith(SGLANG_RUNTIME_ID)
     assert "queue_name" not in kwargs
+
+
+def test_sglang_runtime_rewrites_cuda13_metadata_to_audited_cuda126_wheels() -> None:
+    requirements = cuda126_requirements(
+        [
+            "cuda-python>=13.0",
+            'flashinfer_python[cu13]==0.6.14',
+            "humming-kernels[cu13]==0.1.10",
+            "nvidia-cutlass-dsl[cu13]==4.6.0",
+            "sglang-kernel==0.4.5",
+            "sgl-deep-gemm==0.1.4.post1",
+            "torch==2.11.0",
+            'ray[default]>=2.55.1; extra == "ray"',
+        ],
+        machine="x86_64",
+    )
+    rendered = "\n".join(requirements)
+    assert "cuda-python>=12,<13" in requirements
+    assert "flashinfer_python[cu12]==0.6.14" in requirements
+    assert "humming-kernels==0.1.10" in requirements
+    assert "nvidia-cutlass-dsl==4.6.0" in requirements
+    assert "sglang_kernel-0.4.5+cu124" in rendered
+    assert "sgl_deep_gemm-0.1.4.post1+cu129" in rendered
+    assert "cu13" not in rendered
+    assert "ray" not in rendered
 
 
 def test_submit_contract_can_target_isolated_regional_nfs(tmp_path: Path) -> None:

@@ -23,6 +23,8 @@ from urllib import request as urllib_request
 from scripts.cluster.common import (
     MODEL_ID,
     MODEL_REVISION,
+    SGLANG_CUDA_VARIANT,
+    SGLANG_RUNTIME_ID,
     SGLANG_VERSION,
     SERVED_MODEL_NAME,
     atomic_write_json,
@@ -79,16 +81,23 @@ def _git_provenance(project_root: Path) -> dict[str, Any]:
 def _gpu_inventory() -> dict[str, Any]:
     query = [
         "nvidia-smi",
-        "--query-gpu=index,name,memory.total,uuid",
+        "--query-gpu=index,name,memory.total,uuid,driver_version,compute_cap",
         "--format=csv,noheader,nounits",
     ]
     completed = subprocess.run(query, check=True, capture_output=True, text=True)
     rows = []
     for raw_line in completed.stdout.splitlines():
-        parts = [part.strip() for part in raw_line.split(",", 3)]
-        if len(parts) == 4:
+        parts = [part.strip() for part in raw_line.split(",", 5)]
+        if len(parts) == 6:
             rows.append(
-                {"index": int(parts[0]), "name": parts[1], "memory_mib": int(parts[2]), "uuid": parts[3]}
+                {
+                    "index": int(parts[0]),
+                    "name": parts[1],
+                    "memory_mib": int(parts[2]),
+                    "uuid": parts[3],
+                    "driver_version": parts[4],
+                    "compute_capability": parts[5],
+                }
             )
     if len(rows) != 8:
         raise RuntimeError(f"job requires exactly 8 visible GPUs; found {len(rows)}")
@@ -196,7 +205,10 @@ def main() -> int:
         label="RUN_DIR",
     )
     env_dir = require_absolute_safe_path(
-        os.environ.get("DEEPSEEK_ENV_DIR", str(project_root.parent / ".inference_runtime" / f"sglang-{SGLANG_VERSION}")),
+        os.environ.get(
+            "DEEPSEEK_ENV_DIR",
+            str(project_root.parent / ".inference_runtime" / SGLANG_RUNTIME_ID),
+        ),
         label="DEEPSEEK_ENV_DIR",
     )
     hf_home = require_absolute_safe_path(
@@ -227,6 +239,7 @@ def main() -> int:
         "population_root": str(population_root),
         "model": {"id": MODEL_ID, "revision": MODEL_REVISION},
         "sglang_version": SGLANG_VERSION,
+        "sglang_cuda_variant": SGLANG_CUDA_VARIANT,
         "config_name": config_name,
         "backbone": backbone,
         "max_generations": max_generations,
@@ -241,6 +254,7 @@ def main() -> int:
         {
             "DEEPSEEK_ENV_DIR": str(env_dir),
             "SGLANG_VERSION": SGLANG_VERSION,
+            "SGLANG_CUDA_VARIANT": SGLANG_CUDA_VARIANT,
             "HF_HOME": str(hf_home),
             "HF_XET_HIGH_PERFORMANCE": "1",
             "SGLANG_DSV4_COMPRESS_STATE_DTYPE": "bf16",

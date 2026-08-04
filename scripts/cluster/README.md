@@ -15,6 +15,14 @@ attention state, chunked prefill, and at most eight concurrent requests. On
 H100 the stock FP4 checkpoint must use SGLang's Hopper W4A16/Marlin path; never
 force a Blackwell-only MXFP4 backend.
 
+The persistent serving environment is `sglang-0.5.16-cu126`. This is
+intentional: SR008 allocations have exposed both R560/CUDA-12.6 and R580
+drivers. SGLang's PyPI metadata defaults to CUDA 13, which fails on the R560
+nodes. `bootstrap_deepseek_env.sh` follows SGLang 0.5.16's upstream CUDA-12
+Docker recipe (cu126 PyTorch, CUDA-12 FlashInfer/CUTLASS dependencies, Hopper
+kernels), verifies that CUDA initializes, and only then publishes the runtime
+ready marker. Never reuse the incompatible legacy `sglang-0.5.16` directory.
+
 ## Submit
 
 Run through the environment bridge documented in
