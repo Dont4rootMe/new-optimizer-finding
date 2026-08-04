@@ -708,10 +708,10 @@ fallback. Exact concrete override по-прежнему имеет приори�
   readiness; EvolutionLoop never started, no population was created, and token
   usage remained zero. This is a runtime diagnostic, not an experiment result.
 - The corrective path pins an isolated NVIDIA conda compiler prefix
-  `toolchains/cuda-nvcc-12.9.86`, selected only through
+  `toolchains/cuda-nvcc-12.9.86-curand-10.3.10.19`, selected only through
   `DG_JIT_NVCC_COMPILER`; it does not alter PyTorch cu126 or
   `LD_LIBRARY_PATH`. `bootstrap_cuda_toolchain.sh` requires an SM90a
-  128-bit-store cubin smoke, and the job runs a numerical
+  128-bit-store + cuRAND cubin smoke, and the job runs a numerical
   `tf32_hc_prenorm_gemm` smoke before loading the model. Compiled kernels use
   the persistent `kernel_cache/deep_gemm-sm90-cuda-nvcc-12.9.86` namespace.
   This design follows DeepGEMM's own `>=12.9` performance recommendation and
@@ -720,8 +720,11 @@ fallback. Exact concrete override по-прежнему имеет приори�
   acceptance `lm-mpi-job-87266755-ce54-4fe5-bce0-d3a5f732f7e0` completed:
   it reused the published compiler prefix, built the standalone SM90a cubin,
   compiled and executed the real MHC prenorm kernel, and persisted a passing
-  numerical artifact. The full TP=8 model-start acceptance remains required;
-  this 1-GPU gate proves the compiler/kernel boundary, not endpoint readiness.
+  numerical artifact. The expanded exact-SHA gate
+  `lm-mpi-job-f89ee2e4-a5ac-4c99-91e1-f28cae4588d9` also completed after
+  publishing the cuRAND-capable prefix and revalidating DeepGEMM plus all three
+  TVM-FFI modules. The full TP=8 model-start acceptance remains required; this
+  1-GPU gate proves the compiler/kernel boundary, not endpoint readiness.
 - SGLang's NVLink custom-all-reduce JIT is a second consumer of the isolated
   compiler. Its TVM-FFI build selects `nvcc` through `CUDA_HOME` and links
   `-lcudart`; the conda prefix exposes that library under
@@ -1075,6 +1078,7 @@ CUDA heterogeneity probe:
 | `lm-mpi-job-9025f0bf-80f1-4cb6-a32d-2b2fbbeecd1c` | Exact `2456f094ec57bc33845d04f87ebdb83ef30964d5` production retry sanitized the driver path, reused the validated cu126 runtime/model cache, initialized NCCL ranks 0–7, and loaded all 48 DeepSeek shards. It then failed before server readiness when `nvcc 12.6.85` rejected DeepGEMM's 128-bit PTX constraint during the 21-bucket MHC prenorm prewarm on every TP rank. No EvolutionLoop state or LLM usage exists. |
 | `lm-mpi-job-e28269e2-eaf1-4d42-8c67-cac66c0cedb3` | Exact `8f804a1e169b1be93a09493ef21225f167cc8f34` TP=8 production attempt used the isolated `nvcc 12.9.86`, activated NVLink custom all-reduce, loaded all 48 shards, and successfully advanced through DeepSeek-V4's DeepGEMM/MHC prewarm. CUDA-graph capture then exposed the next missing compiler-prefix dependency: FlashInfer sampling and renormalization JIT both stopped on `fatal error: curand.h: No such file or directory`. Scheduler `Failed`; endpoint/EvolutionLoop never started and usage remained zero. The fix pins NVIDIA `libcurand-dev 10.3.10.19`, gives the additive compiler contract a new immutable prefix, preserves the compatible DeepGEMM/TVM caches, and compiles an actual SM90a `curand_kernel.h` cubin before publishing readiness. This is a startup diagnostic, not a fitness result. |
 | `lm-mpi-job-dd050cdf-df57-4662-bb8d-ebdc679f1028` | Exact `11ce5ae4d673600d29c88802ae655a733b6340b8` 1×H100 acceptance successfully resolved NVIDIA `libcurand`/`libcurand-dev 10.3.10.19` and installed the new prefix, then failed silently at the repository's own pre-smoke header-location assertion. Package inspection proved the official conda layout is `targets/x86_64-linux/include/{curand.h,curand_kernel.h}`, not prefix-root `include/`. The corrected bootstrap validates the target layout and resumes a package-complete unpublished prefix instead of rebuilding it. No model or experiment ran. |
+| `lm-mpi-job-f89ee2e4-a5ac-4c99-91e1-f28cae4588d9` | Corrected exact `1a8d1c5b18e986b76f7adb08c7ec68c99cfc7ae7` 1×H100 acceptance scheduler-completed. It resumed the package-complete prefix, compiled the combined SM90a `st.shared.b128` + `curand_kernel.h` cubin, atomically published the ready marker, passed the real numerical DeepGEMM MHC path, and revalidated CUDA IPC, communicator and BF16 TP=8 custom-all-reduce modules. This closes the compile-toolchain regression found by the preceding TP=8 run; endpoint readiness still belongs to production acceptance. |
 
 Bootstrap smoke `lm-mpi-job-3c02e882-bc28-434f-9ed2-1a3841b66c2a` failed
 before workers became READY and emitted no user-code output. Its only new
@@ -1202,7 +1206,7 @@ Finalization live использует изолированный `.venv`. По�
 
 ```bash
 .venv/bin/pytest -q
-# 485 passed, 8 skipped in 162.70s
+# 486 passed, 8 skipped in 163.15s
 
 python -m compileall -q src experiments api_platforms scripts/cluster
 git diff --check
@@ -1247,7 +1251,10 @@ git diff --stat origin/master...origin/<branch>
   DeepGEMM/MHC and custom-all-reduce paths, then found missing `curand.h` in the
   compiler-only prefix during FlashInfer sampling JIT. Cluster bootstrap now
   pins `libcurand-dev 10.3.10.19`, validates a real cuRAND SM90a cubin and keeps
-  already valid JIT caches. Full regression suite: 485 passed, 8 skipped.
+  already valid JIT caches. Exact-SHA follow-up acceptance
+  `lm-mpi-job-f89ee2e4-a5ac-4c99-91e1-f28cae4588d9` scheduler-completed all
+  cuRAND, DeepGEMM and TVM-FFI gates. Full regression suite: 486 passed,
+  8 skipped.
 - **2026-08-04, `finalize/evolutionloop-deepseek-v4` (base `641777d`):**
   зафиксирован canonical EvolutionLoop protocol; добавлены backbone composition,
   generic OpenAI-compatible inference, exact DeepSeek/SGLang 8×H100 job,
