@@ -93,7 +93,7 @@ def test_sglang_runtime_rewrites_cuda13_metadata_to_audited_cuda126_wheels() -> 
     assert "flashinfer_python[cu12]==0.6.14" in requirements
     assert "humming-kernels==0.1.10" in requirements
     assert "nvidia-cutlass-dsl==4.6.0" in requirements
-    assert "sglang_kernel-0.4.5+cu124" in rendered
+    assert "sglang_kernel-0.4.5+cu129" in rendered
     assert "sgl_deep_gemm-0.1.4.post1+cu129" in rendered
     assert "cu13" not in rendered
     assert "ray" not in rendered

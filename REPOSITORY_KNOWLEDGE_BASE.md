@@ -676,8 +676,8 @@ fallback. Exact concrete override по-прежнему имеет приори�
   `580.105.08`. The default SGLang PyPI stack (`torch 2.11.0+cu130`) therefore
   fails nondeterministically by node. The bootstrap reproduces the official
   SGLang 0.5.16 CUDA-12 Docker substitutions (`cuda-python<13`,
-  `flashinfer[cu12]`, cu126 PyTorch, cu124 SGLang kernel and cu129 Hopper
-  DeepGEMM wheel), checks real `torch.cuda` initialization, and never reuses
+  `flashinfer[cu12]`, cu126 PyTorch, and published cu129 Hopper
+  SGLang-kernel/DeepGEMM wheels), checks real `torch.cuda` initialization, and never reuses
   the incompatible legacy `sglang-0.5.16` environment. Primary references:
   [SGLang v0.5.16 Dockerfile](https://github.com/sgl-project/sglang/blob/v0.5.16/docker/Dockerfile),
   [NVIDIA CUDA compatibility guide](https://docs.nvidia.com/deploy/cuda-compatibility/).

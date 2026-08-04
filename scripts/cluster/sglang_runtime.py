@@ -17,15 +17,9 @@ from typing import Iterable
 
 from scripts.cluster.common import SGLANG_VERSION
 
-PYTORCH_INDEX_URL = "https://download.pytorch.org/whl/cu126"
-TORCH_VERSION = "2.11.0"
-TORCHVISION_VERSION = "0.26.0"
-TORCHAUDIO_VERSION = "2.11.0"
-TORCH_CUDA_PREFIX = "12.6"
-
 _KERNEL_URL = (
     "https://github.com/sgl-project/whl/releases/download/v0.4.5/"
-    "sglang_kernel-0.4.5+cu124-cp310-abi3-manylinux2014_x86_64.whl"
+    "sglang_kernel-0.4.5+cu129-cp310-abi3-manylinux2014_x86_64.whl"
 )
 _DEEP_GEMM_URL = (
     "https://github.com/sgl-project/whl/releases/download/v0.1.4.post1/"
@@ -38,7 +32,10 @@ _CUDA12_REPLACEMENTS = {
     # Upstream removes CUDA-13 extras for its CUDA-12 Docker variants.
     "humming-kernels": "humming-kernels==0.1.10",
     "nvidia-cutlass-dsl": "nvidia-cutlass-dsl==4.6.0",
-    # These are the exact CUDA-12 wheels used by upstream's Docker recipe.
+    # These are the published CUDA-12 Hopper wheels.  Although upstream's
+    # generic Dockerfile still spells cu124 for its 12.6 branch, release 0.4.5
+    # publishes only cu129/cu130 assets; cu129 contains SM90 SASS and stays
+    # within CUDA 12 minor-version compatibility.
     "sglang-kernel": f"sglang-kernel @ {_KERNEL_URL}",
     "sgl-deep-gemm": f"sgl-deep-gemm @ {_DEEP_GEMM_URL}",
 }
