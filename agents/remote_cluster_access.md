@@ -77,10 +77,15 @@ Runtime layout:
 ```text
 /home/jovyan/evolutionloop-deepseek-v4/
   source/<full-git-commit>/
-  runtime/sglang-0.5.16/
+  runtime/sglang-0.5.16-cu126/
   model_cache/huggingface/
   runs/<run-id>/
 ```
+
+The runtime name is a compatibility boundary, not decoration. Never reuse the
+legacy `runtime/sglang-0.5.16/` CUDA-13 environment on the heterogeneous SR008
+driver pool. The cu126 runtime must pass its ready-marker/live-CUDA gate with
+CUDA `compat` paths removed as documented in `scripts/cluster/README.md`.
 
 The submitter uses the verified job-compatible image
 `cr.ai.cloud.ru/2754eb6e-ae19-4123-87ce-06ec3cc96500/job-latentdiffusion:flash-clear`,
