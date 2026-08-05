@@ -793,6 +793,20 @@ fallback. Exact concrete override по-прежнему имеет приори�
   credentials. Never derive/persist a profile from gateway environment values
   or inject secrets into jobs. Terminal logs plus the durable regional run and
   `result_summary.json` are the credential-free audit path.
+- Credential-free regional readback (audit 2026-08-05, branch
+  `finalize/evolutionloop-deepseek-v4`):
+  `scripts/cluster/run_population_readback.sh` starts no inference/evolution
+  process and reads an explicitly named existing run below `JOB_ROOT/runs`.
+  Its Python worker scans every canonical `organism.json`, preserves every
+  finite generation/score point, summarizes provider token telemetry, and
+  sends the compact JSON plus any existing `score_by_generation.png` and
+  `evolution_overview.png` as bounded gzip/base64 scheduler-log events with
+  SHA-256 integrity metadata. `decode_population_readback` reconstructs the
+  blobs and rejects incomplete, conflicting or corrupt chunks. This is the
+  no-credential fallback when direct SSH/NFS mounting and Data Transfer are
+  unavailable; use one same-region CPU job, a human-selected `--run-id`, and
+  `readback.source_run_id=<existing-run-id>`. Focused local verification:
+  20 passed.
 - На resource check 2026-08-04 обе 8-GPU H100 SKU показывали 0 свободных
   workers; это dynamic capacity, поэтому job допустимо ставить в очередь, но
   факт `Pending` не является подтверждением inference.
@@ -1296,6 +1310,12 @@ git diff --stat origin/master...origin/<branch>
 
 ## Change log этой базы
 
+- **2026-08-05, regional readback recovery:** added a read-only, CPU-safe
+  scheduler-log transport for an existing regional run and a strict local
+  decoder. The snapshot contains the complete canonical organism score series,
+  state stability markers, aggregated token usage and existing overview PNGs;
+  every blob is chunked and protected by byte counts plus SHA-256. Focused
+  cluster/readback contracts: 20 passed.
 - **2026-08-04, read-only live progress curve:** parsed the existing production
   scheduler log without submitting a job and captured finalized generation 57,
   generation 58 inflight, 10 active organisms, 1,018 usage events and best

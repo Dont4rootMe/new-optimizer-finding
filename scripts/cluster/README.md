@@ -135,6 +135,40 @@ namespaces differ. Completion is rejected unless the requested generation is
 reached, both inflight transactions are absent, and real token telemetry parses
 without errors.
 
+### Credential-free regional readback
+
+When the control-plane Jupyter server cannot mount the regional job NFS, a
+small same-region CPU job can read an existing run without modifying it and
+return a portable snapshot through scheduler logs. The human-selected readback
+label remains mandatory:
+
+```bash
+bash "$MLS_ENV" "$MLS_PY" -m scripts.cluster.submit \
+  --project-root /absolute/nfs/path/to/this-branch-clone \
+  --run-id <human-approved-readback-run-id> \
+  --entrypoint scripts/cluster/run_population_readback.sh \
+  --instance-type cpu.2C.8G \
+  --max-generations 1 \
+  --max-parallel-organisms 1 \
+  --override readback.source_run_id=<existing-regional-run-id>
+```
+
+The entrypoint validates that the source is a simple run identifier below
+`JOB_ROOT/runs`, opens only source-run files, scans every canonical
+`organism.json`, summarizes token usage, and emits bounded
+`EVOLUTIONLOOP_READBACK` gzip/base64 chunks with uncompressed SHA-256 hashes.
+It also returns `score_by_generation.png` and `evolution_overview.png` when
+they exist. It does not start EvolutionLoop or an inference server and should
+use a CPU instance.
+
+Pipe the completed scheduler log to the checked decoder; it rejects missing,
+conflicting, size-mismatched, or hash-mismatched chunks:
+
+```bash
+python -m scripts.cluster.decode_population_readback \
+  --output-dir reports/cluster_progress/<snapshot-id>
+```
+
 Do not use the repository's legacy `scripts.cluster.transfer` command on the
 current control plane: Cloud.ru has disabled the `client_lib.copy_from_nfs` and
 `copy_to_nfs` functions retained by client_lib 0.6.3, and its legacy logs route
