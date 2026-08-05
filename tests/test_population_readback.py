@@ -24,11 +24,17 @@ def _write_json(path: Path, payload: dict) -> None:
 def test_source_run_id_is_explicit_and_path_safe(tmp_path: Path) -> None:
     run_id = source_run_id_from_overrides(json.dumps(["readback.source_run_id=source-run_1"]))
     assert run_id == "source-run_1"
+    assert (
+        source_run_id_from_overrides("[readback.source_run_id=source-run_1]")
+        == "source-run_1"
+    )
     assert resolve_source_run_dir(tmp_path, run_id) == (tmp_path / "runs" / run_id).resolve()
     with pytest.raises(ValueError, match="exactly one"):
         source_run_id_from_overrides("[]")
     with pytest.raises(ValueError, match="invalid"):
         source_run_id_from_overrides(json.dumps(["readback.source_run_id=../escape"]))
+    with pytest.raises(ValueError, match="valid JSON"):
+        source_run_id_from_overrides("[readback.source_run_id=../escape]")
 
 
 def test_collect_curve_snapshot_preserves_all_finite_scores(tmp_path: Path) -> None:

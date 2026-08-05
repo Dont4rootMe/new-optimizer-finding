@@ -804,9 +804,26 @@ fallback. Exact concrete override по-прежнему имеет приори�
   SHA-256 integrity metadata. `decode_population_readback` reconstructs the
   blobs and rejects incomplete, conflicting or corrupt chunks. This is the
   no-credential fallback when direct SSH/NFS mounting and Data Transfer are
-  unavailable; use one same-region CPU job, a human-selected `--run-id`, and
-  `readback.source_run_id=<existing-run-id>`. Focused local verification:
-  20 passed.
+  unavailable; use one minimally available same-region worker, a
+  human-selected `--run-id`, and
+  `readback.source_run_id=<existing-run-id>`. Do not assume that an instance
+  type accepted by submission or present in local cluster config is actually
+  schedulable: at the 2026-08-05 audit SR008 advertised only `a100plus.*` H100
+  types and no CPU type. Consequently the readback submission
+  `lm-mpi-job-8a0a247c-20ef-4554-8813-ed578905c38d` (`echimbulatov |
+  hyperball_005_384_owt #ID0137 #rnd`) requested `cpu.2C.8G`, never entered
+  `Running`, and ultimately became `Failed`; `queue_name` and
+  `priority_class` were both unset and no readback code had started. This is a
+  verified resource/type mismatch, not a reader failure. The replacement
+  `lm-mpi-job-9f6872c6-a721-462d-a2dd-3ec81623a98a` requested the live
+  `a100plus.1gpu.80vG.12C.182G` type and started immediately after the 8-H100
+  production run released capacity at 10:13 UTC. Its first worker invocation
+  exposed another platform boundary: scheduler metadata retained the valid
+  JSON `HYDRA_OVERRIDES_JSON`, but the MPI worker received its sole list item
+  without JSON quotes and stopped before reading NFS. The readback parser now
+  accepts only that narrowly validated, quote-stripped single-source form; it
+  does not use `eval` or a general permissive parser. Focused local
+  verification: 20 passed.
 - На resource check 2026-08-04 обе 8-GPU H100 SKU показывали 0 свободных
   workers; это dynamic capacity, поэтому job допустимо ставить в очередь, но
   факт `Pending` не является подтверждением inference.
@@ -1310,6 +1327,16 @@ git diff --stat origin/master...origin/<branch>
 
 ## Change log этой базы
 
+- **2026-08-05, ML Space MPI environment normalization:** the first valid
+  1-H100 readback worker proved that ML Space can strip quotes inside a JSON
+  list environment value between scheduler metadata and MPI rank 0. Added a
+  regression-covered parser for only the safe single readback-source syntax;
+  the failed worker never reached or modified the source run.
+- **2026-08-05, SR008 readback scheduling audit:** the scheduler accepted the
+  `cpu.2C.8G` readback request but SR008's live resource inventory exposed only
+  H100-backed `a100plus.*` types. The job never ran and eventually failed with
+  default queue/priority; future readbacks must verify the live instance
+  inventory immediately before submission.
 - **2026-08-05, regional readback recovery:** added a read-only, CPU-safe
   scheduler-log transport for an existing regional run and a strict local
   decoder. The snapshot contains the complete canonical organism score series,

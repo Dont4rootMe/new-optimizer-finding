@@ -40,7 +40,18 @@ def source_run_id_from_overrides(raw: str) -> str:
     try:
         overrides = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError("HYDRA_OVERRIDES_JSON must be valid JSON") from exc
+        # ML Space preserves the JSON string in scheduler metadata but its MPI
+        # launcher can remove the quotes around the sole list item before it
+        # reaches the worker. Accept only the narrowly validated representation
+        # emitted for this readback override; do not fall back to eval or to a
+        # general comma-split parser.
+        runtime_match = re.fullmatch(
+            rf"\[\s*({re.escape(SOURCE_OVERRIDE)}[A-Za-z0-9][A-Za-z0-9._-]{{0,127}})\s*\]",
+            raw,
+        )
+        if runtime_match is None:
+            raise ValueError("HYDRA_OVERRIDES_JSON must be valid JSON") from exc
+        overrides = [runtime_match.group(1)]
     if not isinstance(overrides, list) or not all(isinstance(item, str) for item in overrides):
         raise ValueError("HYDRA_OVERRIDES_JSON must encode a list of strings")
     values = [item[len(SOURCE_OVERRIDE) :] for item in overrides if item.startswith(SOURCE_OVERRIDE)]
